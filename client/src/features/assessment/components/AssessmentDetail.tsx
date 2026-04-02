@@ -270,59 +270,107 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
       {/* === INDIVIDUAL REPORT TAB === */}
       {tab === 'individual' && (
         <div className="space-y-4">
-          {/* If viewing a specific report */}
           {individualReport ? (
             <IndividualReportView report={individualReport} assessmentTitle={assessment.title} onClose={() => setIndividualReport(null)} />
           ) : trendReport ? (
             <TrendReportView report={trendReport} onClose={() => setTrendReport(null)} />
-          ) : (
-            /* Result card list */
+          ) : !results || results.length === 0 ? (
+            <div className="text-center py-12 text-sm text-slate-400">暂无作答结果</div>
+          ) : assessmentType === 'tracking' ? (
+            /* Tracking: group by user, each row = one person */
             <>
-              {!results || results.length === 0 ? (
-                <div className="text-center py-12 text-sm text-slate-400">暂无作答结果</div>
-              ) : (
-                results.map((r) => {
-                  const userResults = r.userId ? userResultMap.get(r.userId) : undefined;
-                  const hasMultiple = (userResults?.length || 0) >= 2;
-                  return (
-                    <div key={r.id} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm transition">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <span className="text-sm font-medium text-slate-700">{r.userId ? `用户 ${r.userId.slice(0, 8)}...` : '匿名'}</span>
-                          <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString('zh-CN')}</span>
-                          {Object.keys(r.demographicData || {}).length > 0 && (
-                            <div className="flex gap-1">
-                              {Object.entries(r.demographicData).slice(0, 3).map(([k, v]) => (
-                                <span key={k} className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">{String(v)}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-mono text-slate-600">{r.totalScore} 分</span>
-                          {r.riskLevel && <RiskBadge level={r.riskLevel} />}
+              {[...userResultMap.entries()].map(([userId, userResults]) => {
+                const latest = userResults[0];
+                const latestDemo = latest?.demographicData as Record<string, string> | undefined;
+                return (
+                  <div key={userId} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm transition">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="text-sm font-medium text-slate-700">用户 {userId.slice(0, 8)}...</span>
+                        <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">{userResults.length} 次测评</span>
+                        {latestDemo && Object.keys(latestDemo).length > 0 && (
+                          <div className="flex gap-1">
+                            {Object.entries(latestDemo).slice(0, 3).map(([k, v]) => (
+                              <span key={k} className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">{String(v)}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400">最新:</span>
+                        <span className="text-sm font-mono text-slate-600">{latest?.totalScore} 分</span>
+                        {latest?.riskLevel && <RiskBadge level={latest.riskLevel} />}
+                        <button
+                          onClick={() => handleGenerateIndividual(latest.id)}
+                          className="px-3 py-1 text-xs text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition font-medium"
+                        >
+                          单次报告
+                        </button>
+                        {userResults.length >= 2 && (
                           <button
-                            onClick={() => handleGenerateIndividual(r.id)}
-                            className="px-3 py-1 text-xs text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition font-medium"
+                            onClick={() => handleGenerateTrend(userId)}
+                            disabled={generateReport.isPending && selectedUserId === userId}
+                            className="px-3 py-1 text-xs text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition font-medium flex items-center gap-1 disabled:opacity-50"
                           >
-                            查看报告
+                            <TrendingUp className="w-3 h-3" /> 趋势报告
                           </button>
-                          {hasMultiple && (
-                            <button
-                              onClick={() => handleGenerateTrend(r.userId!)}
-                              disabled={generateReport.isPending && selectedUserId === r.userId}
-                              className="px-3 py-1 text-xs text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition font-medium flex items-center gap-1 disabled:opacity-50"
-                            >
-                              <TrendingUp className="w-3 h-3" /> 趋势
-                            </button>
-                          )}
-                        </div>
+                        )}
                       </div>
                     </div>
-                  );
-                })
-              )}
+                  </div>
+                );
+              })}
+              {/* Anonymous results without userId */}
+              {results.filter((r) => !r.userId).map((r) => (
+                <div key={r.id} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm transition">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-slate-700">匿名</span>
+                      <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString('zh-CN')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-mono text-slate-600">{r.totalScore} 分</span>
+                      {r.riskLevel && <RiskBadge level={r.riskLevel} />}
+                      <button onClick={() => handleGenerateIndividual(r.id)} className="px-3 py-1 text-xs text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition font-medium">查看报告</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
             </>
+          ) : (
+            /* Other types: one row per result */
+            results.map((r) => {
+              const userResults = r.userId ? userResultMap.get(r.userId) : undefined;
+              const hasMultiple = (userResults?.length || 0) >= 2;
+              return (
+                <div key={r.id} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm transition">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-medium text-slate-700">{r.userId ? `用户 ${r.userId.slice(0, 8)}...` : '匿名'}</span>
+                      <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString('zh-CN')}</span>
+                      {Object.keys(r.demographicData || {}).length > 0 && (
+                        <div className="flex gap-1">
+                          {Object.entries(r.demographicData).slice(0, 3).map(([k, v]) => (
+                            <span key={k} className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">{String(v)}</span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-mono text-slate-600">{r.totalScore} 分</span>
+                      {r.riskLevel && <RiskBadge level={r.riskLevel} />}
+                      <button onClick={() => handleGenerateIndividual(r.id)} className="px-3 py-1 text-xs text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition font-medium">查看报告</button>
+                      {hasMultiple && (
+                        <button onClick={() => handleGenerateTrend(r.userId!)} disabled={generateReport.isPending && selectedUserId === r.userId}
+                          className="px-3 py-1 text-xs text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition font-medium flex items-center gap-1 disabled:opacity-50">
+                          <TrendingUp className="w-3 h-3" /> 趋势
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
           )}
         </div>
       )}
@@ -397,11 +445,27 @@ function IndividualReportView({ report, assessmentTitle, onClose }: { report: As
     });
   };
 
+  const demographics = content.demographics as Record<string, unknown> | undefined;
+
   return (
     <ReportShell title={`${assessmentTitle} — 个人报告`} date={new Date().toLocaleDateString('zh-CN')}>
       <div className="flex justify-end">
-        <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">关闭报告</button>
+        <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">返回列表</button>
       </div>
+
+      {/* Basic info */}
+      {demographics && Object.keys(demographics).length > 0 && (
+        <ReportSection title="基本信息">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {Object.entries(demographics).map(([key, val]) => (
+              <div key={key} className="bg-slate-50 rounded-lg px-3 py-2">
+                <span className="text-xs text-slate-400">{key}</span>
+                <p className="text-sm font-medium text-slate-700">{String(val)}</p>
+              </div>
+            ))}
+          </div>
+        </ReportSection>
+      )}
 
       <ReportSection title="评估结果">
         <div className="grid grid-cols-2 gap-3">
