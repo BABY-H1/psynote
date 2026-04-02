@@ -480,6 +480,10 @@ function TrendReportView({ report, onClose }: { report: AssessmentReport; onClos
     timeline?: { index: number; date: string; totalScore: string; riskLevel?: string; dimensionScores: Record<string, number> }[];
     trends?: Record<string, 'improving' | 'worsening' | 'stable'>;
   };
+  const updateNarrative = useUpdateReportNarrative();
+  const interpretMutation = useInterpretResult();
+  const { toast } = useToast();
+  const [advice, setAdvice] = useState(report.aiNarrative || '');
 
   const timeline = content.timeline || [];
   const trends = content.trends || {};
@@ -493,10 +497,31 @@ function TrendReportView({ report, onClose }: { report: AssessmentReport; onClos
   const dimKeys = timeline.length > 0 ? Object.keys(timeline[0].dimensionScores) : [];
   const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
+  const handleAIGenerate = () => {
+    const trendSummary = Object.entries(trends).map(([dim, t]) => `${dim}: ${t === 'improving' ? '改善' : t === 'worsening' ? '恶化' : '稳定'}`).join(', ');
+    const latest = timeline[timeline.length - 1];
+    interpretMutation.mutate({
+      scaleName: '追踪评估',
+      dimensions: latest ? Object.entries(latest.dimensionScores).map(([name, score]) => ({ name, score, label: trends[name] === 'improving' ? '改善' : trends[name] === 'worsening' ? '恶化' : '稳定' })) : [],
+      totalScore: latest ? Number(latest.totalScore) : 0,
+      riskLevel: latest?.riskLevel,
+    }, {
+      onSuccess: (data) => setAdvice(data.interpretation),
+      onError: () => toast('AI 生成失败', 'error'),
+    });
+  };
+
+  const handleSave = () => {
+    updateNarrative.mutate({ reportId: report.id, narrative: advice }, {
+      onSuccess: () => toast('综合建议已保存', 'success'),
+      onError: () => toast('保存失败', 'error'),
+    });
+  };
+
   return (
     <ReportShell title="追踪评估趋势报告" subtitle={`共 ${content.assessmentCount || 0} 次测评`}>
       <div className="flex justify-end">
-        <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">关闭</button>
+        <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">返回列表</button>
       </div>
 
       <ReportSection title="总分变化趋势">
@@ -527,6 +552,17 @@ function TrendReportView({ report, onClose }: { report: AssessmentReport; onClos
           </div>
         </ReportSection>
       )}
+
+      <ReportSection title="综合建议">
+        <AdviceEditor
+          value={advice}
+          onChange={setAdvice}
+          onSave={handleSave}
+          onAIGenerate={handleAIGenerate}
+          saving={updateNarrative.isPending}
+          generating={interpretMutation.isPending}
+        />
+      </ReportSection>
     </ReportShell>
   );
 }
