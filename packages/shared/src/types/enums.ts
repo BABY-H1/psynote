@@ -116,7 +116,7 @@ export type ScoringMode = 'sum' | 'average';
 export type CollectMode = 'anonymous' | 'optional_register' | 'require_register';
 
 /** Assessment type */
-export type AssessmentType = 'screening' | 'intake' | 'survey';
+export type AssessmentType = 'screening' | 'intake' | 'survey' | 'tracking';
 
 /** Assessment status */
 export type AssessmentStatus = 'draft' | 'active' | 'archived';

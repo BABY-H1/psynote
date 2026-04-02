@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
-import { useAssessment, useResults, useUpdateAssessment, useGenerateReport, useResult } from '../../../api/useAssessments';
-import { useScale } from '../../../api/useScales';
-import type { AssessmentResult, AssessmentBlock, AssessmentReport } from '@psynote/shared';
+import { useAssessment, useResults, useUpdateAssessment, useGenerateReport, useDistributions, useCreateDistribution } from '../../../api/useAssessments';
+import type { AssessmentResult, AssessmentBlock, AssessmentReport, Distribution } from '@psynote/shared';
 import {
-  ArrowLeft, Users, BarChart3, Download, FileText,
+  ArrowLeft, Users, BarChart3, Download, FileText, Send, TrendingUp, Plus,
   ToggleLeft, ToggleRight, ChevronDown, ChevronUp, Loader2,
 } from 'lucide-react';
 import { PageLoading, RiskBadge, useToast } from '../../../shared/components';
@@ -27,11 +26,15 @@ const collectModeLabels: Record<string, string> = {
 export function AssessmentDetail({ assessmentId, onClose }: Props) {
   const { data: assessment, isLoading } = useAssessment(assessmentId);
   const { data: results } = useResults({ assessmentId });
+  const { data: dists } = useDistributions(assessmentId);
   const updateAssessment = useUpdateAssessment();
+  const createDistribution = useCreateDistribution();
   const generateReport = useGenerateReport();
   const { toast } = useToast();
-  const [tab, setTab] = useState<'overview' | 'results'>('overview');
+  const [tab, setTab] = useState<'overview' | 'results' | 'distributions' | 'trend'>('overview');
   const [groupReport, setGroupReport] = useState<AssessmentReport | null>(null);
+  const [trendReport, setTrendReport] = useState<AssessmentReport | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
 
   if (isLoading || !assessment) return <PageLoading text="加载测评详情..." />;
 
@@ -83,10 +86,12 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-4">
+      <div className="flex gap-1 mb-4 flex-wrap">
         {[
           { key: 'overview' as const, label: '概览', icon: BarChart3 },
           { key: 'results' as const, label: `作答结果 (${results?.length || 0})`, icon: Users },
+          { key: 'distributions' as const, label: `发放记录 (${dists?.length || 0})`, icon: Send },
+          ...((assessment as any).assessmentType === 'tracking' ? [{ key: 'trend' as const, label: '纵向对比', icon: TrendingUp }] : []),
         ].map(({ key, label, icon: Icon }) => (
           <button key={key} onClick={() => setTab(key)} className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition ${tab === key ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100'}`}>
             <Icon className="w-4 h-4" /> {label}
@@ -152,6 +157,177 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
               <ResultCard key={r.id} result={r} assessmentTitle={assessment.title} />
             ))
           )}
+        </div>
+      )}
+
+      {tab === 'distributions' && (
+        <div className="space-y-4">
+          <div className="flex justify-end">
+            <button
+              onClick={() => {
+                const count = (dists?.length || 0) + 1;
+                createDistribution.mutate({
+                  assessmentId: assessment.id,
+                  batchLabel: `第 ${count} 次发放`,
+                  mode: 'public',
+                }, {
+                  onSuccess: () => toast(`第 ${count} 次发放已创建`, 'success'),
+                  onError: () => toast('创建失败', 'error'),
+                });
+              }}
+              disabled={createDistribution.isPending}
+              className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <Plus className="w-4 h-4" /> 发起第 {(dists?.length || 0) + 1} 次测评
+            </button>
+          </div>
+          {!dists || dists.length === 0 ? (
+            <div className="text-center py-12 text-sm text-slate-400">暂无发放记录</div>
+          ) : (
+            dists.map((d: Distribution, i: number) => (
+              <div key={d.id} className="bg-white rounded-lg border border-slate-200 p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-sm font-medium text-slate-900">{d.batchLabel || `第 ${dists.length - i} 次`}</span>
+                    <span className="text-xs text-slate-400 ml-3">{new Date(d.createdAt).toLocaleString('zh-CN')}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs text-slate-500">已完成: {d.completedCount}</span>
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${d.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-slate-100 text-slate-500'}`}>
+                      {d.status === 'active' ? '进行中' : d.status === 'completed' ? '已结束' : d.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
+
+      {tab === 'trend' && (
+        <div className="space-y-4">
+          <p className="text-sm text-slate-500">选择一位用户查看其多次测评结果的变化趋势。</p>
+          {/* User selector from results */}
+          {(() => {
+            const userIds = [...new Set((results || []).filter((r) => r.userId).map((r) => r.userId!))];
+            const userResultCounts = userIds.map((uid) => ({
+              userId: uid,
+              count: (results || []).filter((r) => r.userId === uid).length,
+            })).filter((u) => u.count >= 2);
+
+            if (userResultCounts.length === 0) {
+              return <div className="text-center py-12 text-sm text-slate-400">需要同一用户至少 2 次作答结果才能生成纵向对比</div>;
+            }
+
+            return (
+              <div className="space-y-4">
+                <div className="flex flex-wrap gap-2">
+                  {userResultCounts.map((u) => (
+                    <button
+                      key={u.userId}
+                      onClick={() => {
+                        setSelectedUserId(u.userId);
+                        setTrendReport(null);
+                        generateReport.mutate({
+                          reportType: 'individual_trend',
+                          assessmentId: assessment.id,
+                          userId: u.userId,
+                        } as any, {
+                          onSuccess: (report) => setTrendReport(report),
+                          onError: () => toast('趋势报告生成失败', 'error'),
+                        });
+                      }}
+                      disabled={generateReport.isPending && selectedUserId === u.userId}
+                      className={`px-3 py-1.5 rounded-lg text-sm border transition ${
+                        selectedUserId === u.userId ? 'border-brand-500 bg-brand-50 text-brand-700' : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      {u.userId.slice(0, 8)}... ({u.count} 次)
+                    </button>
+                  ))}
+                </div>
+
+                {generateReport.isPending && (
+                  <div className="flex items-center gap-2 text-sm text-slate-400"><Loader2 className="w-4 h-4 animate-spin" /> 生成中...</div>
+                )}
+
+                {trendReport && <TrendReportView report={trendReport} />}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TrendReportView({ report }: { report: AssessmentReport }) {
+  const content = report.content as {
+    assessmentCount?: number;
+    timeline?: { index: number; date: string; totalScore: string; riskLevel?: string; dimensionScores: Record<string, number> }[];
+    trends?: Record<string, 'improving' | 'worsening' | 'stable'>;
+  };
+
+  const timeline = content.timeline || [];
+  const trends = content.trends || {};
+  const trendLabels: Record<string, { label: string; color: string }> = {
+    improving: { label: '改善', color: 'text-green-600' },
+    worsening: { label: '恶化', color: 'text-red-600' },
+    stable: { label: '稳定', color: 'text-slate-500' },
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
+      <div className="flex items-center gap-2">
+        <TrendingUp className="w-4 h-4 text-brand-600" />
+        <h3 className="text-sm font-medium text-slate-900">纵向对比 ({content.assessmentCount} 次测评)</h3>
+      </div>
+
+      {/* Score timeline */}
+      <div>
+        <span className="text-xs font-medium text-slate-500">总分变化</span>
+        <div className="flex gap-3 mt-2 overflow-x-auto">
+          {timeline.map((t, i) => (
+            <div key={i} className="text-center shrink-0">
+              <div className="text-lg font-bold text-slate-900">{t.totalScore}</div>
+              <div className="text-xs text-slate-400">第 {t.index} 次</div>
+              <div className="text-xs text-slate-400">{new Date(t.date).toLocaleDateString('zh-CN')}</div>
+              {t.riskLevel && <RiskBadge level={t.riskLevel} />}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Dimension comparison table */}
+      {timeline.length > 0 && Object.keys(timeline[0].dimensionScores).length > 0 && (
+        <div>
+          <span className="text-xs font-medium text-slate-500">维度得分对比</span>
+          <div className="mt-2 overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-100">
+                  <th className="text-left text-xs text-slate-400 pb-2 pr-4">维度</th>
+                  {timeline.map((t) => (
+                    <th key={t.index} className="text-center text-xs text-slate-400 pb-2 px-2">第 {t.index} 次</th>
+                  ))}
+                  <th className="text-center text-xs text-slate-400 pb-2 px-2">趋势</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.keys(timeline[0].dimensionScores).map((dim) => (
+                  <tr key={dim} className="border-b border-slate-50">
+                    <td className="py-2 pr-4 text-slate-700 text-xs">{dim}</td>
+                    {timeline.map((t) => (
+                      <td key={t.index} className="py-2 px-2 text-center font-mono text-xs text-slate-600">{t.dimensionScores[dim] ?? '-'}</td>
+                    ))}
+                    <td className={`py-2 px-2 text-center text-xs font-medium ${trendLabels[trends[dim]]?.color || 'text-slate-400'}`}>
+                      {trendLabels[trends[dim]]?.label || '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
     </div>

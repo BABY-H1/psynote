@@ -29,6 +29,8 @@ export async function reportRoutes(app: FastifyInstance) {
       reportType: string;
       resultId?: string;
       resultIds?: string[];
+      assessmentId?: string;
+      userId?: string;
       title?: string;
     };
 
@@ -54,6 +56,18 @@ export async function reportRoutes(app: FastifyInstance) {
           orgId: request.org!.orgId,
           resultIds: body.resultIds,
           title: body.title || '团体测评报告',
+          generatedBy: request.user!.id,
+        });
+        break;
+      }
+      case 'individual_trend': {
+        if (!body.assessmentId || !body.userId) {
+          throw new ValidationError('assessmentId and userId are required for individual_trend');
+        }
+        report = await reportService.generateTrendReport({
+          orgId: request.org!.orgId,
+          assessmentId: body.assessmentId,
+          userId: body.userId,
           generatedBy: request.user!.id,
         });
         break;

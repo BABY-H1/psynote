@@ -47,7 +47,8 @@
       "Bash(npm install:*)",
       "Bash(curl -s -w \"\\\\n%{http_code}\" -X POST \"http://localhost:4000/api/orgs/3241cbd8-5582-24f1-d9dd-ebbba95cb673/ai/configure-screening-rules\" -H \"Authorization: Bearer demo-token-not-real\" -H \"X-Dev-User-Id: bef00ee4-8365-d97a-43e6-5524af5f19b4\" -H \"X-Dev-User-Email: counselor@demo.psynote.cn\" -H \"X-Dev-Role: counselor\" -H \"Content-Type: application/json\" --data-raw '{\"\"messages\"\":[{\"\"role\"\":\"\"user\"\",\"\"content\"\":\"\"总分超过15标记高风险\"\"}],\"\"context\"\":{\"\"assessmentType\"\":\"\"screening\"\",\"\"scales\"\":[{\"\"id\"\":\"\"test\"\",\"\"title\"\":\"\"PHQ-9\"\",\"\"dimensions\"\":[],\"\"items\"\":[]}]}}')",
       "Bash(curl -s -w \"\\\\n%{http_code}\" -X POST \"http://localhost:4000/api/orgs/3241cbd8-5582-24f1-d9dd-ebbba95cb673/ai/configure-screening-rules\" -H \"Authorization: Bearer demo-token-not-real\" -H \"X-Dev-User-Id: bef00ee4-8365-d97a-43e6-5524af5f19b4\" -H \"X-Dev-User-Email: counselor@demo.psynote.cn\" -H \"X-Dev-Role: counselor\" -H \"Content-Type: application/json; charset=utf-8\" -d @- 2)",
-      "Bash(1:*)"
+      "Bash(1:*)",
+      "Bash(curl -s -w \"\\\\n%{http_code}\" -X POST \"http://localhost:4000/api/orgs/3241cbd8-5582-24f1-d9dd-ebbba95cb673/ai/create-scale-chat\" -H \"Authorization: Bearer demo-token-not-real\" -H \"X-Dev-User-Id: bef00ee4-8365-d97a-43e6-5524af5f19b4\" -H \"X-Dev-User-Email: counselor@demo.psynote.cn\" -H \"X-Dev-Role: counselor\" -H \"Content-Type: application/json; charset=utf-8\" -d @- 2)"
     ]
   }
 }

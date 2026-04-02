@@ -163,3 +163,85 @@ export async function generateGroupSingleReport(input: {
 
   return report;
 }
+
+/** Generate a trend report for a user across multiple assessment results */
+export async function generateTrendReport(input: {
+  orgId: string;
+  assessmentId: string;
+  userId: string;
+  generatedBy: string;
+}) {
+  const userResults = await db
+    .select()
+    .from(assessmentResults)
+    .where(
+      and(
+        eq(assessmentResults.assessmentId, input.assessmentId),
+        eq(assessmentResults.userId, input.userId),
+      ),
+    )
+    .orderBy(desc(assessmentResults.createdAt));
+
+  if (userResults.length < 2) {
+    throw new Error('At least 2 results are required for a trend report');
+  }
+
+  // Load dimension names
+  const allDimIds = new Set<string>();
+  for (const r of userResults) {
+    const scores = r.dimensionScores as Record<string, number>;
+    Object.keys(scores).forEach((id) => allDimIds.add(id));
+  }
+
+  const dims = allDimIds.size > 0
+    ? await db.select().from(scaleDimensions)
+        .where(or(...[...allDimIds].map((id) => eq(scaleDimensions.id, id))))
+    : [];
+
+  const dimNameMap: Record<string, string> = {};
+  for (const d of dims) dimNameMap[d.id] = d.name;
+
+  const timeline = userResults.map((r, idx) => {
+    const scores = r.dimensionScores as Record<string, number>;
+    return {
+      index: userResults.length - idx,
+      date: r.createdAt,
+      totalScore: r.totalScore,
+      riskLevel: r.riskLevel,
+      dimensionScores: Object.fromEntries(
+        Object.entries(scores).map(([id, score]) => [dimNameMap[id] || id, score]),
+      ),
+    };
+  }).reverse();
+
+  const trends: Record<string, 'improving' | 'worsening' | 'stable'> = {};
+  if (timeline.length >= 2) {
+    const first = timeline[0].dimensionScores;
+    const last = timeline[timeline.length - 1].dimensionScores;
+    for (const key of Object.keys(last)) {
+      const diff = (last[key] || 0) - (first[key] || 0);
+      if (Math.abs(diff) < 1) trends[key] = 'stable';
+      else if (diff < 0) trends[key] = 'improving';
+      else trends[key] = 'worsening';
+    }
+  }
+
+  const content = {
+    userId: input.userId,
+    assessmentCount: userResults.length,
+    timeline,
+    trends,
+  };
+
+  const [report] = await db.insert(assessmentReports).values({
+    orgId: input.orgId,
+    title: `追踪评估趋势报告`,
+    reportType: 'individual_trend',
+    resultIds: userResults.map((r) => r.id),
+    assessmentId: input.assessmentId,
+    content,
+    generatedBy: input.generatedBy,
+  }).returning();
+
+  return report;
+}

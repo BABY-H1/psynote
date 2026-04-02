@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { AssessmentBlock, CustomQuestion, DemographicField, ResultDisplayConfig, ResultDisplayItem, ScreeningRules } from '@psynote/shared';
+import type { AssessmentBlock, CustomQuestion, DemographicField, ResultDisplayConfig, ResultDisplayItem, ScreeningRules, TrackingConfig } from '@psynote/shared';
 import { useScales, useScale } from '../../../api/useScales';
 import { useAssessment, useCreateAssessment, useUpdateAssessment } from '../../../api/useAssessments';
 import { useConfigureScreeningRules } from '../../../api/useAI';
@@ -32,6 +32,7 @@ interface Props {
 const ASSESSMENT_TYPES = [
   { value: 'screening', label: '心理筛查', desc: '初步筛查和风险识别' },
   { value: 'intake', label: '入组筛选', desc: '判断是否符合入组/参与条件' },
+  { value: 'tracking', label: '追踪评估', desc: '多次施测，追踪变化（前后测/随访）' },
   { value: 'survey', label: '调查问卷', desc: '收集意见、满意度等信息' },
 ];
 
@@ -72,9 +73,12 @@ export function AssessmentWizard({ onClose, onCreated, editAssessmentId, draft }
   // Step 2
   const [blocks, setBlocks] = useState<AssessmentBlock[]>((init as any)?.blocks || []);
 
-  // Step 3 — rules (only for screening/intake)
+  // Step 3 — rules (screening/intake) or tracking config
   const [screeningRules, setScreeningRules] = useState<ScreeningRules>(
     (init as any)?.screeningRules || { enabled: false, conditions: [], logic: 'OR' },
+  );
+  const [trackingConfig, setTrackingConfig] = useState<TrackingConfig>(
+    (init as any)?.trackingConfig || { scheduleType: 'manual' },
   );
 
   // Step 4
@@ -298,8 +302,8 @@ export function AssessmentWizard({ onClose, onCreated, editAssessmentId, draft }
               </div>
             </div>
 
-            {/* Rules config based on type */}
-            {needsRules ? (
+            {/* Config based on type */}
+            {needsRules && (
               <ScreeningRulesStep
                 assessmentType={assessmentType}
                 blocks={blocks}
@@ -307,9 +311,13 @@ export function AssessmentWizard({ onClose, onCreated, editAssessmentId, draft }
                 rules={screeningRules}
                 onRulesChange={setScreeningRules}
               />
-            ) : (
+            )}
+            {assessmentType === 'tracking' && (
+              <TrackingConfigStep config={trackingConfig} onChange={setTrackingConfig} />
+            )}
+            {assessmentType === 'survey' && (
               <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-500 max-w-xl">
-                调查问卷无需配置筛查规则，可直接进入下一步。
+                调查问卷无需额外配置，可直接进入下一步。
               </div>
             )}
           </div>
@@ -399,6 +407,76 @@ export function AssessmentWizard({ onClose, onCreated, editAssessmentId, draft }
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+// ─── Screening Rules Step (AI Chat) ─────────────────────────────
+
+// ─── Tracking Config Step ────────────────────────────────────────
+
+function TrackingConfigStep({ config, onChange }: { config: TrackingConfig; onChange: (c: TrackingConfig) => void }) {
+  return (
+    <div className="max-w-xl space-y-4">
+      <div className="flex items-center gap-2 mb-2">
+        <h3 className="font-semibold text-slate-900">发放计划</h3>
+      </div>
+      <p className="text-sm text-slate-500">追踪评估支持对同一人多次施测。选择发放方式：</p>
+
+      <div className="space-y-2">
+        <label className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition ${config.scheduleType === 'manual' ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:border-slate-300'}`}>
+          <input type="radio" name="scheduleType" checked={config.scheduleType === 'manual'} onChange={() => onChange({ scheduleType: 'manual' })} className="mt-0.5" />
+          <div>
+            <span className="text-sm font-medium text-slate-900">手动发放</span>
+            <p className="text-xs text-slate-500 mt-0.5">每次在详情页手动点击「发起测评」，系统自动编号为第N次</p>
+          </div>
+        </label>
+        <label className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition ${config.scheduleType === 'recurring' ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:border-slate-300'}`}>
+          <input type="radio" name="scheduleType" checked={config.scheduleType === 'recurring'} onChange={() => onChange({ scheduleType: 'recurring', recurring: config.recurring || { frequency: 'monthly' } })} className="mt-0.5" />
+          <div>
+            <span className="text-sm font-medium text-slate-900">定期自动发放</span>
+            <p className="text-xs text-slate-500 mt-0.5">按设定周期自动发放给指定人员</p>
+          </div>
+        </label>
+      </div>
+
+      {config.scheduleType === 'recurring' && config.recurring && (
+        <div className="bg-slate-50 rounded-lg p-4 space-y-3">
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">发放频率</label>
+            <select
+              value={config.recurring.frequency}
+              onChange={(e) => onChange({ ...config, recurring: { ...config.recurring!, frequency: e.target.value as any } })}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option value="weekly">每周</option>
+              <option value="biweekly">每两周</option>
+              <option value="monthly">每月</option>
+              <option value="quarterly">每季度</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">总次数（留空为不限）</label>
+            <input
+              type="number"
+              min="1"
+              value={config.recurring.count || ''}
+              onChange={(e) => onChange({ ...config, recurring: { ...config.recurring!, count: e.target.value ? Number(e.target.value) : undefined } })}
+              placeholder="如：8"
+              className="w-32 px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">开始日期</label>
+            <input
+              type="date"
+              value={config.recurring.startDate || ''}
+              onChange={(e) => onChange({ ...config, recurring: { ...config.recurring!, startDate: e.target.value || undefined } })}
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -10,6 +10,7 @@ import { assessmentRoutes } from './modules/assessment/assessment.routes.js';
 import { resultRoutes, publicResultRoutes } from './modules/assessment/result.routes.js';
 import { batchRoutes } from './modules/assessment/batch.routes.js';
 import { reportRoutes } from './modules/assessment/report.routes.js';
+import { distributionRoutes } from './modules/assessment/distribution.routes.js';
 import { episodeRoutes } from './modules/counseling/episode.routes.js';
 import { appointmentRoutes } from './modules/counseling/appointment.routes.js';
 import { sessionNoteRoutes } from './modules/counseling/session-note.routes.js';
@@ -51,6 +52,7 @@ await app.register(assessmentRoutes, { prefix: '/api/orgs/:orgId/assessments' })
 await app.register(resultRoutes, { prefix: '/api/orgs/:orgId/results' });
 await app.register(batchRoutes, { prefix: '/api/orgs/:orgId/assessment-batches' });
 await app.register(reportRoutes, { prefix: '/api/orgs/:orgId/reports' });
+await app.register(distributionRoutes, { prefix: '/api/orgs/:orgId/assessments/:assessmentId/distributions' });
 
 // Public assessment submission (no auth)
 await app.register(publicResultRoutes, { prefix: '/api/public/assessments' });

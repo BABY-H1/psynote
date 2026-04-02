@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Assessment, AssessmentResult, AssessmentBatch, AssessmentReport, AssessmentBlock } from '@psynote/shared';
+import type { Assessment, AssessmentResult, AssessmentBatch, AssessmentReport, AssessmentBlock, Distribution } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
 
@@ -146,6 +146,33 @@ export function usePublicSubmit() {
         customAnswers: data.customAnswers,
       },
     ),
+  });
+}
+
+// ─── Distributions ──────────────────────────────────────────────
+
+export function useDistributions(assessmentId: string | undefined) {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['distributions', orgId, assessmentId],
+    queryFn: () => api.get<Distribution[]>(`${orgPrefix()}/assessments/${assessmentId}/distributions`),
+    enabled: !!orgId && !!assessmentId,
+  });
+}
+
+export function useCreateDistribution() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ assessmentId, ...data }: {
+      assessmentId: string;
+      mode?: string;
+      batchLabel?: string;
+      targets?: unknown[];
+      schedule?: unknown;
+    }) => api.post<Distribution>(`${orgPrefix()}/assessments/${assessmentId}/distributions`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['distributions'] });
+    },
   });
 }
 

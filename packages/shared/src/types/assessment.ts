@@ -95,6 +95,16 @@ export interface ResultDisplayConfig {
 
 export type ResultDisplayItem = 'totalScore' | 'riskLevel' | 'dimensionScores' | 'interpretation' | 'advice' | 'aiInterpret';
 
+/** Tracking assessment config */
+export interface TrackingConfig {
+  scheduleType: 'manual' | 'recurring';
+  recurring?: {
+    frequency: 'weekly' | 'biweekly' | 'monthly' | 'quarterly';
+    count?: number;
+    startDate?: string;
+  };
+}
+
 /** Screening rules — supports multi-condition combinations */
 export interface ScreeningRules {
   enabled: boolean;
