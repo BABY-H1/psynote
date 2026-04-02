@@ -233,6 +233,15 @@ export function useReport(reportId: string | undefined) {
   });
 }
 
+export function useUpdateReportNarrative() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ reportId, narrative }: { reportId: string; narrative: string }) =>
+      api.patch<AssessmentReport>(`${orgPrefix()}/reports/${reportId}/narrative`, { narrative }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['reports'] }); },
+  });
+}
+
 export function useGenerateReport() {
   const qc = useQueryClient();
   return useMutation({

@@ -47,23 +47,46 @@ export function ReportSection({ title, children }: { title: string; children: Re
   );
 }
 
-/** AI narrative block */
-export function AINarrative({ content, loading }: { content?: string; loading?: boolean }) {
-  if (loading) {
-    return (
-      <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 animate-pulse">
-        <div className="h-4 bg-blue-100 rounded w-3/4 mb-2" />
-        <div className="h-4 bg-blue-100 rounded w-1/2" />
-      </div>
-    );
-  }
-  if (!content) return null;
+/** Editable advice box with optional AI assist */
+export function AdviceEditor({ value, onChange, onSave, onAIGenerate, saving, generating }: {
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  onAIGenerate: () => void;
+  saving?: boolean;
+  generating?: boolean;
+}) {
   return (
-    <div className="bg-blue-50 border border-blue-100 rounded-lg p-4">
-      <div className="flex items-center gap-1.5 mb-2">
-        <span className="text-xs font-medium text-blue-700">AI 分析</span>
+    <div className="border border-slate-200 rounded-lg p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="text-sm font-medium text-slate-700">综合建议</span>
+        <div className="flex gap-2">
+          <button
+            onClick={onAIGenerate}
+            disabled={generating}
+            className="px-3 py-1 bg-blue-50 text-blue-600 rounded-lg text-xs font-medium hover:bg-blue-100 transition disabled:opacity-50 flex items-center gap-1"
+          >
+            {generating ? 'AI 生成中...' : 'AI 辅助生成'}
+          </button>
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="px-3 py-1 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-500 transition disabled:opacity-50"
+          >
+            {saving ? '保存中...' : '保存'}
+          </button>
+        </div>
       </div>
-      <p className="text-sm text-blue-800 leading-relaxed whitespace-pre-line">{content}</p>
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="输入综合建议，或点击「AI 辅助生成」自动填充后编辑..."
+        rows={4}
+        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-700 resize-none focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
+      />
+      {value && (
+        <p className="text-xs text-slate-400">内容将保存到报告记录中，下次打开时可查看。</p>
+      )}
     </div>
   );
 }

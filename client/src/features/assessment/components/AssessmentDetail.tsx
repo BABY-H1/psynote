@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { useAssessment, useResults, useUpdateAssessment, useGenerateReport, useDistributions, useCreateDistribution } from '../../../api/useAssessments';
+import { useAssessment, useResults, useUpdateAssessment, useGenerateReport, useUpdateReportNarrative, useDistributions, useCreateDistribution } from '../../../api/useAssessments';
+import { useInterpretResult } from '../../../api/useAI';
 import type { AssessmentResult, AssessmentBlock, AssessmentReport, Distribution } from '@psynote/shared';
 import {
   ArrowLeft, BarChart3, Users, FileText, Send, Plus,
@@ -12,7 +13,7 @@ import { DimensionBarChart } from './charts/DimensionBarChart';
 import { TrendLineChart } from './charts/TrendLineChart';
 import { CrossAnalysisChart } from './charts/CrossAnalysisChart';
 import { DistributionChart } from './charts/DistributionChart';
-import { ReportShell, ReportSection, AINarrative, ScoreCard, DimensionRow, RiskTag, TrendTag } from './reports/ReportShell';
+import { ReportShell, ReportSection, AdviceEditor, ScoreCard, DimensionRow, RiskTag, TrendTag } from './reports/ReportShell';
 
 interface Props {
   assessmentId: string;
@@ -374,8 +375,30 @@ function IndividualReportView({ report, assessmentTitle, onClose }: { report: As
     demographics?: Record<string, unknown>;
     interpretationPerDimension?: { dimension: string; score: number; label: string; riskLevel?: string; advice?: string }[];
   };
-
   const interps = content.interpretationPerDimension || [];
+  const updateNarrative = useUpdateReportNarrative();
+  const interpretMutation = useInterpretResult();
+  const { toast } = useToast();
+  const [advice, setAdvice] = useState(report.aiNarrative || '');
+
+  const handleAIGenerate = () => {
+    interpretMutation.mutate({
+      scaleName: assessmentTitle,
+      dimensions: interps.map((d) => ({ name: d.dimension, score: d.score, label: d.label, riskLevel: d.riskLevel, advice: d.advice })),
+      totalScore: Number(content.totalScore) || 0,
+      riskLevel: content.riskLevel,
+    }, {
+      onSuccess: (data) => { setAdvice(data.interpretation); },
+      onError: () => toast('AI 生成失败', 'error'),
+    });
+  };
+
+  const handleSave = () => {
+    updateNarrative.mutate({ reportId: report.id, narrative: advice }, {
+      onSuccess: () => toast('综合建议已保存', 'success'),
+      onError: () => toast('保存失败', 'error'),
+    });
+  };
 
   return (
     <ReportShell title={`${assessmentTitle} — 个人报告`} date={new Date().toLocaleDateString('zh-CN')}>
@@ -383,7 +406,6 @@ function IndividualReportView({ report, assessmentTitle, onClose }: { report: As
         <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">关闭报告</button>
       </div>
 
-      {/* Score summary */}
       <ReportSection title="评估结果">
         <div className="grid grid-cols-2 gap-3">
           <ScoreCard label="总分" value={content.totalScore || '-'} />
@@ -391,7 +413,6 @@ function IndividualReportView({ report, assessmentTitle, onClose }: { report: As
         </div>
       </ReportSection>
 
-      {/* Dimension interpretations */}
       {interps.length > 0 && (
         <ReportSection title="维度评估">
           <div className="space-y-2">
@@ -407,12 +428,16 @@ function IndividualReportView({ report, assessmentTitle, onClose }: { report: As
         </ReportSection>
       )}
 
-      {/* AI narrative */}
-      {report.aiNarrative && (
-        <ReportSection title="专业分析">
-          <AINarrative content={report.aiNarrative} />
-        </ReportSection>
-      )}
+      <ReportSection title="综合建议">
+        <AdviceEditor
+          value={advice}
+          onChange={setAdvice}
+          onSave={handleSave}
+          onAIGenerate={handleAIGenerate}
+          saving={updateNarrative.isPending}
+          generating={interpretMutation.isPending}
+        />
+      </ReportSection>
     </ReportShell>
   );
 }
@@ -586,12 +611,30 @@ function GroupReportView({ report, results, assessmentTitle, assessmentType, cro
         </ReportSection>
       )}
 
-      {/* AI narrative */}
-      {report.aiNarrative && (
-        <ReportSection title="AI 综合分析">
-          <AINarrative content={report.aiNarrative} />
-        </ReportSection>
-      )}
+      <ReportSection title="综合建议">
+        <GroupAdviceEditor report={report} />
+      </ReportSection>
     </ReportShell>
+  );
+}
+
+function GroupAdviceEditor({ report }: { report: AssessmentReport }) {
+  const updateNarrative = useUpdateReportNarrative();
+  const { toast } = useToast();
+  const [advice, setAdvice] = useState(report.aiNarrative || '');
+
+  return (
+    <AdviceEditor
+      value={advice}
+      onChange={setAdvice}
+      onSave={() => {
+        updateNarrative.mutate({ reportId: report.id, narrative: advice }, {
+          onSuccess: () => toast('综合建议已保存', 'success'),
+          onError: () => toast('保存失败', 'error'),
+        });
+      }}
+      onAIGenerate={() => toast('团体 AI 建议功能开发中', 'success')}
+      saving={updateNarrative.isPending}
+    />
   );
 }

@@ -26,6 +26,17 @@ export async function getReportById(reportId: string) {
   return report;
 }
 
+export async function updateReportNarrative(reportId: string, narrative: string) {
+  const [updated] = await db
+    .update(assessmentReports)
+    .set({ aiNarrative: narrative })
+    .where(eq(assessmentReports.id, reportId))
+    .returning();
+
+  if (!updated) throw new NotFoundError('AssessmentReport', reportId);
+  return updated;
+}
+
 /** Generate an individual single-assessment report */
 export async function generateIndividualSingleReport(input: {
   orgId: string;
@@ -80,25 +91,6 @@ export async function generateIndividualSingleReport(input: {
     interpretationPerDimension: interpretations,
   };
 
-  // Generate AI narrative if AI is configured
-  let aiNarrative: string | null = null;
-  if (aiClient.isConfigured) {
-    try {
-      aiNarrative = await generateIndividualNarrative({
-        assessmentType: 'screening',
-        totalScore: result.totalScore || 0,
-        riskLevel: result.riskLevel || undefined,
-        dimensions: interpretations.map((d) => ({
-          name: d.dimension,
-          score: d.score,
-          label: d.label,
-          riskLevel: d.riskLevel || undefined,
-          advice: d.advice || undefined,
-        })),
-      });
-    } catch { /* AI failure is non-blocking */ }
-  }
-
   const [report] = await db.insert(assessmentReports).values({
     orgId: input.orgId,
     title: `个人测评报告`,
@@ -106,7 +98,6 @@ export async function generateIndividualSingleReport(input: {
     resultIds: [input.resultId],
     assessmentId: result.assessmentId,
     content,
-    aiNarrative,
     generatedBy: input.generatedBy,
   }).returning();
 
@@ -173,18 +164,6 @@ export async function generateGroupSingleReport(input: {
 
   const assessmentId = results[0].assessmentId;
 
-  let aiNarrative: string | null = null;
-  if (aiClient.isConfigured) {
-    try {
-      aiNarrative = await generateGroupNarrative({
-        assessmentType: 'screening',
-        participantCount: results.length,
-        riskDistribution,
-        dimensionStats,
-      });
-    } catch { /* AI failure is non-blocking */ }
-  }
-
   const [report] = await db.insert(assessmentReports).values({
     orgId: input.orgId,
     title: input.title,
@@ -192,7 +171,6 @@ export async function generateGroupSingleReport(input: {
     resultIds: input.resultIds,
     assessmentId,
     content,
-    aiNarrative,
     generatedBy: input.generatedBy,
   }).returning();
 
@@ -268,21 +246,6 @@ export async function generateTrendReport(input: {
     trends,
   };
 
-  let aiNarrative: string | null = null;
-  if (aiClient.isConfigured) {
-    try {
-      aiNarrative = await generateTrendNarrative({
-        timeline: timeline.map((t) => ({
-          index: t.index,
-          totalScore: t.totalScore || '0',
-          riskLevel: t.riskLevel || undefined,
-          dimensionScores: t.dimensionScores,
-        })),
-        trends,
-      });
-    } catch { /* AI failure is non-blocking */ }
-  }
-
   const [report] = await db.insert(assessmentReports).values({
     orgId: input.orgId,
     title: `追踪评估趋势报告`,
@@ -290,7 +253,6 @@ export async function generateTrendReport(input: {
     resultIds: userResults.map((r) => r.id),
     assessmentId: input.assessmentId,
     content,
-    aiNarrative,
     generatedBy: input.generatedBy,
   }).returning();
 

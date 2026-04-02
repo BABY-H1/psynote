@@ -79,4 +79,16 @@ export async function reportRoutes(app: FastifyInstance) {
     await logAudit(request, 'create', 'assessment_reports', report.id);
     return reply.status(201).send(report);
   });
+
+  /** Update report narrative (comprehensive advice) */
+  app.patch('/:reportId/narrative', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const { reportId } = request.params as { reportId: string };
+    const body = request.body as { narrative: string };
+
+    const updated = await reportService.updateReportNarrative(reportId, body.narrative);
+    await logAudit(request, 'update', 'assessment_reports', reportId);
+    return updated;
+  });
 }
