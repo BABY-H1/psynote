@@ -181,11 +181,17 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               <h3 className="text-sm font-medium text-slate-900 mb-3">作答统计</h3>
-              <div className="grid grid-cols-3 gap-3">
+              <div className={`grid gap-3 ${assessmentType === 'screening' ? 'grid-cols-5' : 'grid-cols-3'}`}>
                 <ScoreCard label="已提交" value={results?.length || 0} />
-                {Object.entries(riskDist).slice(0, 2).map(([level, count]) => (
-                  <ScoreCard key={level} label={riskLabels[level] || '无风险'} value={count} />
-                ))}
+                {assessmentType === 'screening' ? (
+                  ['level_1', 'level_2', 'level_3', 'level_4'].map((level) => (
+                    <ScoreCard key={level} label={riskLabels[level]} value={riskDist[level] || 0} />
+                  ))
+                ) : (
+                  Object.entries(riskDist).slice(0, 2).map(([level, count]) => (
+                    <ScoreCard key={level} label={riskLabels[level] || '无风险'} value={count} />
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -194,8 +200,14 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
           {results && results.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <h3 className="text-sm font-medium text-slate-900 mb-3">风险等级分布</h3>
-                <RiskPieChart distribution={riskDist} />
+                <h3 className="text-sm font-medium text-slate-900 mb-3">
+                  {assessmentType === 'screening' ? '四级风险分布' : '风险等级分布'}
+                </h3>
+                <RiskPieChart distribution={
+                  assessmentType === 'screening'
+                    ? { level_1: riskDist.level_1 || 0, level_2: riskDist.level_2 || 0, level_3: riskDist.level_3 || 0, level_4: riskDist.level_4 || 0 }
+                    : riskDist
+                } />
               </div>
               {dimAverages.length > 0 && (
                 <div className="bg-white rounded-xl border border-slate-200 p-5">
@@ -258,72 +270,59 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
       {/* === INDIVIDUAL REPORT TAB === */}
       {tab === 'individual' && (
         <div className="space-y-4">
-          {!results || results.length === 0 ? (
-            <div className="text-center py-12 text-sm text-slate-400">暂无作答结果</div>
-          ) : (
-            results.map((r) => {
-              const userResults = r.userId ? userResultMap.get(r.userId) : undefined;
-              const hasMultiple = (userResults?.length || 0) >= 2;
-              return (
-                <div key={r.id} className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-                  {/* Result header */}
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium text-slate-700">{r.userId ? `用户 ${r.userId.slice(0, 8)}...` : '匿名'}</span>
-                      <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString('zh-CN')}</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-mono text-slate-600">{r.totalScore} 分</span>
-                      {r.riskLevel && <RiskBadge level={r.riskLevel} />}
-                      <button
-                        onClick={() => handleGenerateIndividual(r.id)}
-                        disabled={generateReport.isPending}
-                        className="px-2 py-1 text-xs text-brand-600 hover:bg-brand-50 rounded transition disabled:opacity-50"
-                      >
-                        {generateReport.isPending ? '生成中...' : '生成报告'}
-                      </button>
-                      {hasMultiple && (
-                        <button
-                          onClick={() => handleGenerateTrend(r.userId!)}
-                          disabled={generateReport.isPending && selectedUserId === r.userId}
-                          className="px-2 py-1 text-xs text-amber-600 hover:bg-amber-50 rounded transition disabled:opacity-50 flex items-center gap-1"
-                        >
-                          <TrendingUp className="w-3 h-3" /> 趋势
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Dimension scores preview */}
-                  {Object.entries(r.dimensionScores).length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(r.dimensionScores).map(([dimId, score]) => (
-                        <span key={dimId} className="text-xs px-2 py-1 bg-slate-50 text-slate-600 rounded">{dimId.slice(0, 8)}: {score}</span>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* Demographics */}
-                  {Object.keys(r.demographicData || {}).length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                      {Object.entries(r.demographicData).map(([k, v]) => (
-                        <span key={k} className="text-xs px-2 py-1 bg-blue-50 text-blue-600 rounded">{k}: {String(v)}</span>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })
-          )}
-
-          {/* Individual report modal-like display */}
-          {individualReport && (
+          {/* If viewing a specific report */}
+          {individualReport ? (
             <IndividualReportView report={individualReport} assessmentTitle={assessment.title} onClose={() => setIndividualReport(null)} />
-          )}
-
-          {/* Trend report */}
-          {trendReport && selectedUserId && (
+          ) : trendReport ? (
             <TrendReportView report={trendReport} onClose={() => setTrendReport(null)} />
+          ) : (
+            /* Result card list */
+            <>
+              {!results || results.length === 0 ? (
+                <div className="text-center py-12 text-sm text-slate-400">暂无作答结果</div>
+              ) : (
+                results.map((r) => {
+                  const userResults = r.userId ? userResultMap.get(r.userId) : undefined;
+                  const hasMultiple = (userResults?.length || 0) >= 2;
+                  return (
+                    <div key={r.id} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm transition">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className="text-sm font-medium text-slate-700">{r.userId ? `用户 ${r.userId.slice(0, 8)}...` : '匿名'}</span>
+                          <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString('zh-CN')}</span>
+                          {Object.keys(r.demographicData || {}).length > 0 && (
+                            <div className="flex gap-1">
+                              {Object.entries(r.demographicData).slice(0, 3).map(([k, v]) => (
+                                <span key={k} className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">{String(v)}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-mono text-slate-600">{r.totalScore} 分</span>
+                          {r.riskLevel && <RiskBadge level={r.riskLevel} />}
+                          <button
+                            onClick={() => handleGenerateIndividual(r.id)}
+                            className="px-3 py-1 text-xs text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition font-medium"
+                          >
+                            查看报告
+                          </button>
+                          {hasMultiple && (
+                            <button
+                              onClick={() => handleGenerateTrend(r.userId!)}
+                              disabled={generateReport.isPending && selectedUserId === r.userId}
+                              className="px-3 py-1 text-xs text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition font-medium flex items-center gap-1 disabled:opacity-50"
+                            >
+                              <TrendingUp className="w-3 h-3" /> 趋势
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </>
           )}
         </div>
       )}
@@ -332,33 +331,31 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
       {tab === 'group' && (
         <div className="space-y-4">
           {!results || results.length < 2 ? (
-            <div className="text-center py-12 text-sm text-slate-400">需要至少 2 条结果才能生成团体报告</div>
+            <div className="text-center py-12 text-sm text-slate-400">需要至少 2 条结果才能查看团体报告</div>
+          ) : groupReport ? (
+            <GroupReportView
+              report={groupReport}
+              results={results}
+              assessmentTitle={assessment.title}
+              assessmentType={assessmentType}
+              crossData={crossData}
+              dimAverages={dimAverages}
+            />
           ) : (
-            <>
-              {!groupReport && (
-                <div className="text-center py-8">
-                  <button
-                    onClick={handleGenerateGroupReport}
-                    disabled={generateReport.isPending}
-                    className="px-6 py-3 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition disabled:opacity-50 flex items-center gap-2 mx-auto"
-                  >
-                    {generateReport.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
-                    生成团体报告
-                  </button>
+            <div className="text-center py-8 space-y-3">
+              {generateReport.isPending ? (
+                <div className="flex items-center gap-2 justify-center text-sm text-slate-500">
+                  <Loader2 className="w-4 h-4 animate-spin" /> 正在生成团体报告...
                 </div>
+              ) : (
+                <button
+                  onClick={handleGenerateGroupReport}
+                  className="px-6 py-3 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition flex items-center gap-2 mx-auto"
+                >
+                  <FileText className="w-4 h-4" /> 查看团体报告
+                </button>
               )}
-
-              {groupReport && (
-                <GroupReportView
-                  report={groupReport}
-                  results={results}
-                  assessmentTitle={assessment.title}
-                  assessmentType={assessmentType}
-                  crossData={crossData}
-                  dimAverages={dimAverages}
-                />
-              )}
-            </>
+            </div>
           )}
         </div>
       )}

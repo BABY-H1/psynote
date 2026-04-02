@@ -5,6 +5,7 @@ import {
   scales, scaleDimensions, dimensionRules, scaleItems,
 } from '../../db/schema.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
+import { generateIndividualSingleReport } from './report.service.js';
 
 /** List results for an org, optionally filtered */
 export async function listResults(
@@ -197,6 +198,15 @@ export async function submitResult(input: {
     riskLevel: highestRiskLevel,
     createdBy: input.createdBy || null,
   }).returning();
+
+  // Auto-generate individual report (non-blocking)
+  try {
+    await generateIndividualSingleReport({
+      orgId,
+      resultId: result.id,
+      generatedBy: input.createdBy || 'system',
+    });
+  } catch { /* report generation failure shouldn't block submission */ }
 
   return result;
 }
