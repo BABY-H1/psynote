@@ -277,49 +277,18 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
           ) : !results || results.length === 0 ? (
             <div className="text-center py-12 text-sm text-slate-400">暂无作答结果</div>
           ) : assessmentType === 'tracking' ? (
-            /* Tracking: group by user, each row = one person */
+            /* Tracking: group by user, expandable to see each round */
             <>
-              {[...userResultMap.entries()].map(([userId, userResults]) => {
-                const latest = userResults[0];
-                const latestDemo = latest?.demographicData as Record<string, string> | undefined;
-                return (
-                  <div key={userId} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm transition">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <span className="text-sm font-medium text-slate-700">用户 {userId.slice(0, 8)}...</span>
-                        <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">{userResults.length} 次测评</span>
-                        {latestDemo && Object.keys(latestDemo).length > 0 && (
-                          <div className="flex gap-1">
-                            {Object.entries(latestDemo).slice(0, 3).map(([k, v]) => (
-                              <span key={k} className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">{String(v)}</span>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-slate-400">最新:</span>
-                        <span className="text-sm font-mono text-slate-600">{latest?.totalScore} 分</span>
-                        {latest?.riskLevel && <RiskBadge level={latest.riskLevel} />}
-                        <button
-                          onClick={() => handleGenerateIndividual(latest.id)}
-                          className="px-3 py-1 text-xs text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition font-medium"
-                        >
-                          单次报告
-                        </button>
-                        {userResults.length >= 2 && (
-                          <button
-                            onClick={() => handleGenerateTrend(userId)}
-                            disabled={generateReport.isPending && selectedUserId === userId}
-                            className="px-3 py-1 text-xs text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition font-medium flex items-center gap-1 disabled:opacity-50"
-                          >
-                            <TrendingUp className="w-3 h-3" /> 趋势报告
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+              {[...userResultMap.entries()].map(([userId, userResults]) => (
+                <TrackingUserCard
+                  key={userId}
+                  userId={userId}
+                  userResults={userResults}
+                  onViewReport={(resultId) => handleGenerateIndividual(resultId)}
+                  onViewTrend={() => handleGenerateTrend(userId)}
+                  trendLoading={generateReport.isPending && selectedUserId === userId}
+                />
+              ))}
               {/* Anonymous results without userId */}
               {results.filter((r) => !r.userId).map((r) => (
                 <div key={r.id} className="bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm transition">
@@ -676,6 +645,77 @@ function GroupReportView({ report, results, assessmentTitle, assessmentType, cro
         <GroupAdviceEditor report={report} />
       </ReportSection>
     </ReportShell>
+  );
+}
+
+function TrackingUserCard({ userId, userResults, onViewReport, onViewTrend, trendLoading }: {
+  userId: string;
+  userResults: AssessmentResult[];
+  onViewReport: (resultId: string) => void;
+  onViewTrend: () => void;
+  trendLoading: boolean;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const latest = userResults[0];
+  const latestDemo = latest?.demographicData as Record<string, string> | undefined;
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      {/* User header — click to expand */}
+      <button onClick={() => setExpanded(!expanded)} className="w-full p-4 text-left hover:bg-slate-50 transition">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium text-slate-700">用户 {userId.slice(0, 8)}...</span>
+            <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">{userResults.length} 次测评</span>
+            {latestDemo && Object.keys(latestDemo).length > 0 && (
+              <div className="flex gap-1">
+                {Object.entries(latestDemo).slice(0, 3).map(([k, v]) => (
+                  <span key={k} className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded">{String(v)}</span>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-slate-400">最新:</span>
+            <span className="text-sm font-mono text-slate-600">{latest?.totalScore} 分</span>
+            {latest?.riskLevel && <RiskBadge level={latest.riskLevel} />}
+            {userResults.length >= 2 && (
+              <span
+                onClick={(e) => { e.stopPropagation(); onViewTrend(); }}
+                className={`px-3 py-1 text-xs text-amber-600 bg-amber-50 hover:bg-amber-100 rounded-lg transition font-medium flex items-center gap-1 cursor-pointer ${trendLoading ? 'opacity-50' : ''}`}
+              >
+                <TrendingUp className="w-3 h-3" /> 趋势报告
+              </span>
+            )}
+            <span className="text-xs text-slate-400">{expanded ? '收起' : '展开'}</span>
+          </div>
+        </div>
+      </button>
+
+      {/* Expanded: show each round */}
+      {expanded && (
+        <div className="border-t border-slate-100 px-4 pb-4 space-y-2 pt-3">
+          {userResults.map((r, idx) => (
+            <div key={r.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-medium text-slate-500">第 {userResults.length - idx} 次</span>
+                <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString('zh-CN')}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-mono text-slate-600">{r.totalScore} 分</span>
+                {r.riskLevel && <RiskBadge level={r.riskLevel} />}
+                <button
+                  onClick={() => onViewReport(r.id)}
+                  className="px-2.5 py-1 text-xs text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition font-medium"
+                >
+                  查看报告
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
