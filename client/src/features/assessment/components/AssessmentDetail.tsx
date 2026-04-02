@@ -38,19 +38,7 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
   const [groupReport, setGroupReport] = useState<AssessmentReport | null>(null);
   const [trendReport, setTrendReport] = useState<AssessmentReport | null>(null);
 
-  if (isLoading || !assessment) return <PageLoading text="加载测评详情..." />;
-
-  const blocks = (assessment.blocks || []) as AssessmentBlock[];
-  const assessmentType = (assessment as any).assessmentType || 'screening';
-  const isTracking = assessmentType === 'tracking';
-
-  // Compute stats
-  const riskDist = (results || []).reduce<Record<string, number>>((acc, r) => {
-    acc[r.riskLevel || 'none'] = (acc[r.riskLevel || 'none'] || 0) + 1;
-    return acc;
-  }, {});
-
-  // Dimension averages across all results
+  // All useMemo hooks must be before any early return
   const dimAverages = useMemo(() => {
     if (!results || results.length === 0) return [];
     const dimTotals: Record<string, { sum: number; count: number }> = {};
@@ -95,6 +83,17 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
     }
     return map;
   }, [results]);
+
+  // Early return AFTER all hooks
+  if (isLoading || !assessment) return <PageLoading text="加载测评详情..." />;
+
+  const blocks = (assessment.blocks || []) as AssessmentBlock[];
+  const assessmentType = (assessment as any).assessmentType || 'screening';
+
+  const riskDist = (results || []).reduce<Record<string, number>>((acc, r) => {
+    acc[r.riskLevel || 'none'] = (acc[r.riskLevel || 'none'] || 0) + 1;
+    return acc;
+  }, {});
 
   const toggleActive = () => {
     updateAssessment.mutate({ assessmentId: assessment.id, isActive: !assessment.isActive }, {
