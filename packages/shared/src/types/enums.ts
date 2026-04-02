@@ -112,6 +112,15 @@ export type BatchStatus = 'draft' | 'active' | 'closed';
 /** Scoring mode */
 export type ScoringMode = 'sum' | 'average';
 
+/** Assessment collect mode */
+export type CollectMode = 'anonymous' | 'optional_register' | 'require_register';
+
+/** Custom question type */
+export type CustomQuestionType = 'radio' | 'checkbox' | 'text' | 'textarea';
+
+/** Assessment block type */
+export type AssessmentBlockType = 'scale' | 'demographics' | 'custom_questions';
+
 /** Subscription plan */
 export type OrgPlan = 'free' | 'pro' | 'enterprise';
 

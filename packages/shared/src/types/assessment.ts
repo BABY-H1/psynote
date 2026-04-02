@@ -1,4 +1,4 @@
-import type { RiskLevel, ScoringMode, BatchTargetType, BatchStatus, ReportType } from './enums';
+import type { RiskLevel, ScoringMode, BatchTargetType, BatchStatus, ReportType, CollectMode, CustomQuestionType, AssessmentBlockType } from './enums';
 
 export interface Scale {
   id: string;
@@ -57,11 +57,39 @@ export interface Assessment {
   title: string;
   description?: string;
   demographics: DemographicField[];
+  blocks: AssessmentBlock[];
+  collectMode: CollectMode;
+  resultDisplay: ResultDisplayConfig;
+  shareToken?: string;
   isActive: boolean;
   createdBy?: string;
   deletedAt?: string;
   createdAt: string;
 }
+
+export interface AssessmentBlock {
+  id: string;
+  type: AssessmentBlockType;
+  sortOrder: number;
+  scaleId?: string;
+  fields?: DemographicField[];
+  questions?: CustomQuestion[];
+}
+
+export interface CustomQuestion {
+  id: string;
+  type: CustomQuestionType;
+  text: string;
+  required: boolean;
+  options?: string[];
+}
+
+export interface ResultDisplayConfig {
+  mode: 'none' | 'custom';
+  show: ResultDisplayItem[];
+}
+
+export type ResultDisplayItem = 'totalScore' | 'riskLevel' | 'dimensionScores' | 'interpretation' | 'advice' | 'aiInterpret';
 
 export interface DemographicField {
   id: string;
@@ -79,6 +107,7 @@ export interface AssessmentResult {
   careEpisodeId?: string;
   demographicData: Record<string, unknown>;
   answers: Record<string, number>;
+  customAnswers: Record<string, unknown>;
   dimensionScores: Record<string, number>;
   totalScore: number;
   riskLevel?: RiskLevel;

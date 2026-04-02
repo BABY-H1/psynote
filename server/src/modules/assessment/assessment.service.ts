@@ -1,7 +1,8 @@
-import { eq, and, isNull, asc, desc, inArray } from 'drizzle-orm';
+import { eq, and, isNull, asc, desc } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { assessments, assessmentScales, scales } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
+import crypto from 'crypto';
 
 export async function listAssessments(orgId: string, includeDeleted = false) {
   const conditions = [eq(assessments.orgId, orgId)];
@@ -25,7 +26,7 @@ export async function getAssessmentById(assessmentId: string) {
 
   if (!assessment) throw new NotFoundError('Assessment', assessmentId);
 
-  // Get associated scales
+  // Get associated scales (for backward compatibility and runner)
   const assocScales = await db
     .select({
       scaleId: assessmentScales.scaleId,
@@ -53,21 +54,41 @@ export async function createAssessment(input: {
   title: string;
   description?: string;
   demographics?: unknown[];
-  scaleIds: string[];
+  blocks?: unknown[];
+  collectMode?: string;
+  resultDisplay?: unknown;
+  scaleIds?: string[];
   createdBy: string;
 }) {
+  // Generate a unique share token
+  const shareToken = crypto.randomBytes(8).toString('hex');
+
+  // Extract scale IDs from blocks if blocks are provided
+  const blocks = (input.blocks || []) as { type: string; scaleId?: string; sortOrder: number }[];
+  const scaleIdsFromBlocks = blocks
+    .filter((b) => b.type === 'scale' && b.scaleId)
+    .map((b) => b.scaleId!);
+  const scaleIds = input.scaleIds || scaleIdsFromBlocks;
+
   const [assessment] = await db.insert(assessments).values({
     orgId: input.orgId,
     title: input.title,
     description: input.description,
     demographics: input.demographics || [],
+    blocks: input.blocks || [],
+    collectMode: input.collectMode || 'anonymous',
+    resultDisplay: input.resultDisplay || {
+      mode: 'custom',
+      show: ['totalScore', 'riskLevel', 'dimensionScores', 'interpretation', 'advice', 'aiInterpret'],
+    },
+    shareToken,
     createdBy: input.createdBy,
   }).returning();
 
-  // Link scales
-  if (input.scaleIds.length > 0) {
+  // Link scales via junction table (for scoring engine compatibility)
+  if (scaleIds.length > 0) {
     await db.insert(assessmentScales).values(
-      input.scaleIds.map((scaleId, idx) => ({
+      scaleIds.map((scaleId, idx) => ({
         assessmentId: assessment.id,
         scaleId,
         sortOrder: idx,
@@ -84,11 +105,23 @@ export async function updateAssessment(
     title: string;
     description: string;
     demographics: unknown[];
+    blocks: unknown[];
+    collectMode: string;
+    resultDisplay: unknown;
     isActive: boolean;
     scaleIds: string[];
   }>,
 ) {
   const { scaleIds, ...fields } = updates;
+
+  // If blocks are updated, also update scaleIds from blocks
+  let resolvedScaleIds = scaleIds;
+  if (updates.blocks && !scaleIds) {
+    const blocks = updates.blocks as { type: string; scaleId?: string }[];
+    resolvedScaleIds = blocks
+      .filter((b) => b.type === 'scale' && b.scaleId)
+      .map((b) => b.scaleId!);
+  }
 
   if (Object.keys(fields).length > 0) {
     const [updated] = await db
@@ -101,14 +134,14 @@ export async function updateAssessment(
   }
 
   // Replace scale associations if provided
-  if (scaleIds) {
+  if (resolvedScaleIds) {
     await db
       .delete(assessmentScales)
       .where(eq(assessmentScales.assessmentId, assessmentId));
 
-    if (scaleIds.length > 0) {
+    if (resolvedScaleIds.length > 0) {
       await db.insert(assessmentScales).values(
-        scaleIds.map((scaleId, idx) => ({
+        resolvedScaleIds.map((scaleId, idx) => ({
           assessmentId,
           scaleId,
           sortOrder: idx,

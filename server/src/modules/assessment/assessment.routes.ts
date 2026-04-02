@@ -31,12 +31,19 @@ export async function assessmentRoutes(app: FastifyInstance) {
       title: string;
       description?: string;
       demographics?: unknown[];
-      scaleIds: string[];
+      blocks?: unknown[];
+      collectMode?: string;
+      resultDisplay?: unknown;
+      scaleIds?: string[];
     };
 
     if (!body.title) throw new ValidationError('title is required');
-    if (!body.scaleIds || body.scaleIds.length === 0) {
-      throw new ValidationError('At least one scale is required');
+
+    // Require at least one scale — either via scaleIds or via blocks
+    const blocks = (body.blocks || []) as { type: string; scaleId?: string }[];
+    const hasScaleInBlocks = blocks.some((b) => b.type === 'scale' && b.scaleId);
+    if (!hasScaleInBlocks && (!body.scaleIds || body.scaleIds.length === 0)) {
+      throw new ValidationError('At least one scale is required (via blocks or scaleIds)');
     }
 
     const assessment = await assessmentService.createAssessment({
@@ -44,6 +51,9 @@ export async function assessmentRoutes(app: FastifyInstance) {
       title: body.title,
       description: body.description,
       demographics: body.demographics,
+      blocks: body.blocks,
+      collectMode: body.collectMode,
+      resultDisplay: body.resultDisplay,
       scaleIds: body.scaleIds,
       createdBy: request.user!.id,
     });
@@ -61,6 +71,9 @@ export async function assessmentRoutes(app: FastifyInstance) {
       title: string;
       description: string;
       demographics: unknown[];
+      blocks: unknown[];
+      collectMode: string;
+      resultDisplay: unknown;
       isActive: boolean;
       scaleIds: string[];
     }>;
@@ -72,7 +85,7 @@ export async function assessmentRoutes(app: FastifyInstance) {
 
   /** Soft delete an assessment */
   app.delete('/:assessmentId', {
-    preHandler: [requireRole('org_admin')],
+    preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request, reply) => {
     const { assessmentId } = request.params as { assessmentId: string };
     await assessmentService.softDeleteAssessment(assessmentId);

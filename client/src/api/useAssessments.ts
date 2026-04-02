@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { Assessment, AssessmentResult, AssessmentBatch, AssessmentReport } from '@psynote/shared';
+import type { Assessment, AssessmentResult, AssessmentBatch, AssessmentReport, AssessmentBlock } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
 
@@ -37,7 +37,10 @@ export function useCreateAssessment() {
       title: string;
       description?: string;
       demographics?: unknown[];
-      scaleIds: string[];
+      blocks?: AssessmentBlock[];
+      collectMode?: string;
+      resultDisplay?: { mode: string; show: string[] };
+      scaleIds?: string[];
     }) => api.post<Assessment>(`${orgPrefix()}/assessments`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['assessments'] });
@@ -52,6 +55,9 @@ export function useUpdateAssessment() {
       title: string;
       description: string;
       demographics: unknown[];
+      blocks: AssessmentBlock[];
+      collectMode: string;
+      resultDisplay: { mode: string; show: string[] };
       isActive: boolean;
       scaleIds: string[];
     }>) => api.patch<Assessment>(`${orgPrefix()}/assessments/${assessmentId}`, data),
@@ -128,9 +134,14 @@ export function usePublicSubmit() {
       assessmentId: string;
       demographicData?: Record<string, unknown>;
       answers: Record<string, number>;
+      customAnswers?: Record<string, unknown>;
     }) => api.post<AssessmentResult>(
       `/public/assessments/${data.assessmentId}/submit`,
-      { demographicData: data.demographicData, answers: data.answers },
+      {
+        demographicData: data.demographicData,
+        answers: data.answers,
+        customAnswers: data.customAnswers,
+      },
     ),
   });
 }
