@@ -53,10 +53,13 @@ export async function createAssessment(input: {
   orgId: string;
   title: string;
   description?: string;
+  assessmentType?: string;
   demographics?: unknown[];
   blocks?: unknown[];
+  screeningRules?: unknown;
   collectMode?: string;
   resultDisplay?: unknown;
+  status?: string;
   scaleIds?: string[];
   createdBy: string;
 }) {
@@ -74,9 +77,12 @@ export async function createAssessment(input: {
     orgId: input.orgId,
     title: input.title,
     description: input.description,
+    assessmentType: input.assessmentType || 'screening',
     demographics: input.demographics || [],
     blocks: input.blocks || [],
+    screeningRules: input.screeningRules || {},
     collectMode: input.collectMode || 'anonymous',
+    status: input.status || 'active',
     resultDisplay: input.resultDisplay || {
       mode: 'custom',
       show: ['totalScore', 'riskLevel', 'dimensionScores', 'interpretation', 'advice', 'aiInterpret'],

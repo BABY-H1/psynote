@@ -90,15 +90,19 @@ export const assessments = pgTable('assessments', {
   orgId: uuid('org_id').notNull().references(() => organizations.id),
   title: text('title').notNull(),
   description: text('description'),
+  assessmentType: text('assessment_type').notNull().default('screening'),
   demographics: jsonb('demographics').notNull().default([]),
   blocks: jsonb('blocks').notNull().default([]),
+  screeningRules: jsonb('screening_rules').notNull().default({}),
   collectMode: text('collect_mode').notNull().default('anonymous'),
-  resultDisplay: jsonb('result_display').notNull().default({ mode: 'custom', show: ['totalScore', 'riskLevel', 'dimensionScores', 'interpretation', 'advice', 'aiInterpret'] }),
+  resultDisplay: jsonb('result_display').notNull().default({ mode: 'custom', show: ['totalScore', 'riskLevel', 'dimensionScores', 'interpretation', 'advice'] }),
   shareToken: text('share_token'),
+  status: text('status').notNull().default('draft'),
   isActive: boolean('is_active').notNull().default(true),
   createdBy: uuid('created_by').references(() => users.id),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const assessmentScales = pgTable('assessment_scales', {
@@ -161,6 +165,22 @@ export const assessmentReports = pgTable('assessment_reports', {
   generatedBy: uuid('generated_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const distributions = pgTable('distributions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  assessmentId: uuid('assessment_id').notNull().references(() => assessments.id, { onDelete: 'cascade' }),
+  mode: text('mode').notNull().default('public'),
+  batchLabel: text('batch_label'),
+  targets: jsonb('targets').notNull().default([]),
+  schedule: jsonb('schedule').notNull().default({}),
+  status: text('status').notNull().default('active'),
+  completedCount: integer('completed_count').notNull().default(0),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_distributions_assessment').on(t.assessmentId),
+]);
 
 // ─── Counseling Domain ────────────────────────────────────────────
 

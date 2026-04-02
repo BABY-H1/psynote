@@ -14,6 +14,7 @@ import { generateReferralSummary } from './pipelines/referral-summary.js';
 import { generateRecommendations } from './pipelines/recommendation.js';
 import { extractScale } from './pipelines/extract-scale.js';
 import { chatCreateScale } from './pipelines/create-scale-chat.js';
+import { chatConfigureScreeningRules } from './pipelines/create-screening-rules.js';
 import {
   generateGroupScheme,
   generateGroupSchemeOverall,
@@ -374,6 +375,32 @@ export async function aiRoutes(app: FastifyInstance) {
     const content = await refineLessonBlock(body as any);
     await logAudit(request, 'ai_call', 'refine-lesson-block');
     return { content };
+  });
+
+  /** AI-guided screening rules configuration */
+  app.post('/configure-screening-rules', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as {
+      messages: { role: 'user' | 'assistant'; content: string }[];
+      context: {
+        assessmentType: string;
+        scales: {
+          id: string;
+          title: string;
+          dimensions: { id: string; name: string; rules?: { minScore: number; maxScore: number; label: string; riskLevel?: string }[] }[];
+          items: { id: string; text: string; options: { label: string; value: number }[] }[];
+        }[];
+      };
+    };
+    if (!body.messages || body.messages.length === 0) {
+      throw new ValidationError('messages array is required');
+    }
+    if (!body.context) throw new ValidationError('context is required');
+
+    const result = await chatConfigureScreeningRules(body.messages, body.context);
+    await logAudit(request, 'ai_call', 'configure-screening-rules');
+    return result;
   });
 
   /** General-purpose content refinement */

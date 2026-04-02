@@ -30,10 +30,13 @@ export async function assessmentRoutes(app: FastifyInstance) {
     const body = request.body as {
       title: string;
       description?: string;
+      assessmentType?: string;
       demographics?: unknown[];
       blocks?: unknown[];
+      screeningRules?: unknown;
       collectMode?: string;
       resultDisplay?: unknown;
+      status?: string;
       scaleIds?: string[];
     };
 
@@ -50,10 +53,13 @@ export async function assessmentRoutes(app: FastifyInstance) {
       orgId: request.org!.orgId,
       title: body.title,
       description: body.description,
+      assessmentType: body.assessmentType,
       demographics: body.demographics,
       blocks: body.blocks,
+      screeningRules: body.screeningRules,
       collectMode: body.collectMode,
       resultDisplay: body.resultDisplay,
+      status: body.status,
       scaleIds: body.scaleIds,
       createdBy: request.user!.id,
     });
@@ -70,10 +76,13 @@ export async function assessmentRoutes(app: FastifyInstance) {
     const body = request.body as Partial<{
       title: string;
       description: string;
+      assessmentType: string;
       demographics: unknown[];
       blocks: unknown[];
+      screeningRules: unknown;
       collectMode: string;
       resultDisplay: unknown;
+      status: string;
       isActive: boolean;
       scaleIds: string[];
     }>;

@@ -36,10 +36,13 @@ export function useCreateAssessment() {
     mutationFn: (data: {
       title: string;
       description?: string;
+      assessmentType?: string;
       demographics?: unknown[];
       blocks?: AssessmentBlock[];
+      screeningRules?: unknown;
       collectMode?: string;
       resultDisplay?: { mode: string; show: string[] };
+      status?: string;
       scaleIds?: string[];
     }) => api.post<Assessment>(`${orgPrefix()}/assessments`, data),
     onSuccess: () => {

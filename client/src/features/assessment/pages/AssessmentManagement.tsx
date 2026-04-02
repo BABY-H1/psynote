@@ -105,10 +105,14 @@ export function AssessmentManagement() {
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <h3 className="font-semibold text-slate-900 truncate">{assessment.title}</h3>
-                    <StatusBadge
-                      label={assessment.isActive ? '进行中' : '已停用'}
-                      variant={assessment.isActive ? 'green' : 'slate'}
-                    />
+                    {assessment.status === 'draft' ? (
+                      <StatusBadge label="草稿" variant="yellow" />
+                    ) : (
+                      <StatusBadge
+                        label={assessment.isActive ? '进行中' : '已停用'}
+                        variant={assessment.isActive ? 'green' : 'slate'}
+                      />
+                    )}
                   </div>
                   {assessment.description && (
                     <p className="text-sm text-slate-500 mt-1 line-clamp-2">{assessment.description}</p>

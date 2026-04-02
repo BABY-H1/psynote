@@ -115,6 +115,18 @@ export type ScoringMode = 'sum' | 'average';
 /** Assessment collect mode */
 export type CollectMode = 'anonymous' | 'optional_register' | 'require_register';
 
+/** Assessment type */
+export type AssessmentType = 'screening' | 'intake' | 'survey';
+
+/** Assessment status */
+export type AssessmentStatus = 'draft' | 'active' | 'archived';
+
+/** Distribution mode */
+export type DistributionMode = 'public' | 'internal' | 'both';
+
+/** Distribution status */
+export type DistributionStatus = 'draft' | 'active' | 'paused' | 'completed';
+
 /** Custom question type */
 export type CustomQuestionType = 'radio' | 'checkbox' | 'text' | 'textarea';
 

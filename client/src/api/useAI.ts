@@ -157,6 +157,28 @@ export function useCreateScaleChat() {
   });
 }
 
+/** AI-guided screening rules configuration */
+export function useConfigureScreeningRules() {
+  return useMutation({
+    mutationFn: (data: {
+      messages: { role: 'user' | 'assistant'; content: string }[];
+      context: {
+        assessmentType: string;
+        scales: {
+          id: string;
+          title: string;
+          dimensions: { id: string; name: string; rules?: { minScore: number; maxScore: number; label: string; riskLevel?: string }[] }[];
+          items: { id: string; text: string; options: { label: string; value: number }[] }[];
+        }[];
+      };
+    }) =>
+      api.post<
+        | { type: 'message'; content: string }
+        | { type: 'rules'; summary: string; rules: { enabled: boolean; conditions: unknown[]; logic: 'AND' | 'OR' } }
+      >(`${orgPrefix()}/ai/configure-screening-rules`, data),
+  });
+}
+
 /** Extract scale from text (AI import) */
 export function useExtractScale() {
   return useMutation({
