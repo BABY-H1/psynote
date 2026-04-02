@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import type { AssessmentBlock, CustomQuestion, DemographicField, ResultDisplayConfig, ResultDisplayItem, ScreeningRules } from '@psynote/shared';
 import { useScales, useScale } from '../../../api/useScales';
-import { useCreateAssessment, useUpdateAssessment } from '../../../api/useAssessments';
+import { useAssessment, useCreateAssessment, useUpdateAssessment } from '../../../api/useAssessments';
 import { useConfigureScreeningRules } from '../../../api/useAI';
 import {
   ArrowLeft, ArrowRight, Check, Plus, Trash2, GripVertical,
@@ -12,6 +12,8 @@ import { useToast } from '../../../shared/components';
 interface Props {
   onClose: () => void;
   onCreated: (assessmentId: string) => void;
+  /** If editing an existing assessment, pass its ID */
+  editAssessmentId?: string;
   /** If editing a draft, pass its data */
   draft?: {
     id: string;
@@ -50,39 +52,55 @@ const RESULT_DISPLAY_OPTIONS: { key: ResultDisplayItem; label: string }[] = [
   { key: 'advice', label: '建议' },
 ];
 
-export function AssessmentWizard({ onClose, onCreated, draft }: Props) {
+export function AssessmentWizard({ onClose, onCreated, editAssessmentId, draft }: Props) {
   const { data: scales } = useScales();
+  const { data: editData } = useAssessment(editAssessmentId);
   const createAssessment = useCreateAssessment();
   const updateAssessment = useUpdateAssessment();
   const { toast } = useToast();
 
+  // Resolve initial data from editData or draft
+  const init = editData || draft;
   const [step, setStep] = useState(draft?.step || 0);
-  const [draftId, setDraftId] = useState<string | null>(draft?.id || null);
+  const [draftId, setDraftId] = useState<string | null>(editAssessmentId || draft?.id || null);
 
   // Step 1
-  const [title, setTitle] = useState(draft?.title || '');
-  const [description, setDescription] = useState(draft?.description || '');
-  const [assessmentType, setAssessmentType] = useState(draft?.assessmentType || 'screening');
+  const [title, setTitle] = useState(init?.title || '');
+  const [description, setDescription] = useState(init?.description || '');
+  const [assessmentType, setAssessmentType] = useState((init as any)?.assessmentType || 'screening');
 
   // Step 2
-  const [blocks, setBlocks] = useState<AssessmentBlock[]>(draft?.blocks || []);
+  const [blocks, setBlocks] = useState<AssessmentBlock[]>((init as any)?.blocks || []);
 
   // Step 3 — rules (only for screening/intake)
   const [screeningRules, setScreeningRules] = useState<ScreeningRules>(
-    draft?.screeningRules || { enabled: false, conditions: [], logic: 'OR' },
+    (init as any)?.screeningRules || { enabled: false, conditions: [], logic: 'OR' },
   );
 
   // Step 4
-  const [distributionMode, setDistributionMode] = useState(draft?.distributionMode || 'both');
-  const [collectMode, setCollectMode] = useState(draft?.collectMode || 'anonymous');
+  const [distributionMode, setDistributionMode] = useState((init as any)?.distributionMode || 'both');
+  const [collectMode, setCollectMode] = useState((init as any)?.collectMode || 'anonymous');
   const [resultDisplay, setResultDisplay] = useState<ResultDisplayConfig>(
-    draft?.resultDisplay || { mode: 'custom', show: ['totalScore', 'riskLevel', 'dimensionScores', 'interpretation', 'advice'] },
+    (init as any)?.resultDisplay || { mode: 'custom', show: ['totalScore', 'riskLevel', 'dimensionScores', 'interpretation', 'advice'] },
   );
 
+  // Populate state when editData loads
+  const [loaded, setLoaded] = useState(!editAssessmentId);
+  useEffect(() => {
+    if (editData && !loaded) {
+      setTitle(editData.title || '');
+      setDescription(editData.description || '');
+      setAssessmentType((editData as any).assessmentType || 'screening');
+      setBlocks((editData as any).blocks || []);
+      setScreeningRules((editData as any).screeningRules || { enabled: false, conditions: [], logic: 'OR' });
+      setCollectMode((editData as any).collectMode || 'anonymous');
+      setResultDisplay((editData as any).resultDisplay || { mode: 'custom', show: ['totalScore', 'riskLevel', 'dimensionScores', 'interpretation', 'advice'] });
+      setLoaded(true);
+    }
+  }, [editData, loaded]);
+
   const needsRules = assessmentType === 'screening' || assessmentType === 'intake';
-  const steps = needsRules
-    ? ['基本信息', '内容编排', '规则配置', '发放与结果']
-    : ['基本信息', '内容编排', '发放与结果'];
+  const steps = ['基本信息', '内容编排', '规则配置', '发放与结果'];
 
   const nextId = () => crypto.randomUUID();
 
@@ -223,20 +241,6 @@ export function AssessmentWizard({ onClose, onCreated, draft }: Props) {
               <label className="block text-sm font-medium text-slate-700 mb-1">描述（可选）</label>
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="简要描述测评目的和对象" rows={3} className="w-full px-4 py-2.5 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-slate-700 mb-2">测评类型</label>
-              <div className="grid grid-cols-3 gap-2">
-                {ASSESSMENT_TYPES.map((t) => (
-                  <label key={t.value} className={`flex items-start gap-2 p-3 rounded-lg border cursor-pointer transition ${assessmentType === t.value ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:border-slate-300'}`}>
-                    <input type="radio" name="assessmentType" value={t.value} checked={assessmentType === t.value} onChange={() => setAssessmentType(t.value)} className="mt-0.5" />
-                    <div>
-                      <span className="text-sm font-medium text-slate-900">{t.label}</span>
-                      <p className="text-xs text-slate-500 mt-0.5">{t.desc}</p>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
@@ -275,15 +279,40 @@ export function AssessmentWizard({ onClose, onCreated, draft }: Props) {
           </div>
         )}
 
-        {/* Step 3 (conditional): Screening rules OR distribution */}
-        {needsRules && step === 2 && (
-          <ScreeningRulesStep
-            assessmentType={assessmentType}
-            blocks={blocks}
-            scales={scales || []}
-            rules={screeningRules}
-            onRulesChange={setScreeningRules}
-          />
+        {/* Step 3: Type selection + Rules configuration */}
+        {step === 2 && (
+          <div className="space-y-6">
+            {/* Type selection */}
+            <div className="max-w-xl">
+              <label className="block text-sm font-medium text-slate-700 mb-2">测评类型</label>
+              <div className="space-y-2">
+                {ASSESSMENT_TYPES.map((t) => (
+                  <label key={t.value} className={`flex items-start gap-3 p-4 rounded-lg border cursor-pointer transition ${assessmentType === t.value ? 'border-brand-500 bg-brand-50' : 'border-slate-200 hover:border-slate-300'}`}>
+                    <input type="radio" name="assessmentType" value={t.value} checked={assessmentType === t.value} onChange={() => setAssessmentType(t.value)} className="mt-0.5" />
+                    <div>
+                      <span className="text-sm font-medium text-slate-900">{t.label}</span>
+                      <p className="text-xs text-slate-500 mt-0.5">{t.desc}</p>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Rules config based on type */}
+            {needsRules ? (
+              <ScreeningRulesStep
+                assessmentType={assessmentType}
+                blocks={blocks}
+                scales={scales || []}
+                rules={screeningRules}
+                onRulesChange={setScreeningRules}
+              />
+            ) : (
+              <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-500 max-w-xl">
+                调查问卷无需配置筛查规则，可直接进入下一步。
+              </div>
+            )}
+          </div>
         )}
 
         {/* Last step: Distribution + Result display */}
@@ -552,31 +581,99 @@ function BlockCard({ block, index, total, scales, onMove, onRemove, onUpdate }: 
 // ─── Demographics Config ────────────────────────────────────────
 
 function DemographicsConfig({ fields, onChange }: { fields: DemographicField[]; onChange: (f: DemographicField[]) => void }) {
+  const [showCustom, setShowCustom] = useState(false);
+  const [customLabel, setCustomLabel] = useState('');
+  const [customType, setCustomType] = useState<'text' | 'number' | 'select' | 'date'>('text');
+  const [customOptions, setCustomOptions] = useState('');
+
+  const addCustomField = () => {
+    if (!customLabel.trim()) return;
+    const newField: DemographicField = {
+      id: `custom_${crypto.randomUUID().slice(0, 8)}`,
+      label: customLabel.trim(),
+      type: customType,
+      required: false,
+      options: customType === 'select' ? customOptions.split(/[,，]/).map((s) => s.trim()).filter(Boolean) : undefined,
+    };
+    onChange([...fields, newField]);
+    setCustomLabel('');
+    setCustomOptions('');
+    setShowCustom(false);
+  };
+
+  const removeField = (id: string) => onChange(fields.filter((f) => f.id !== id));
+  const isPreset = (id: string) => DEMOGRAPHIC_PRESETS.some((p) => p.id === id);
+
   return (
-    <div className="mt-3 pt-3 border-t border-slate-100 space-y-2">
-      <span className="text-xs text-slate-500">选择字段：</span>
-      <div className="flex flex-wrap gap-2">
-        {DEMOGRAPHIC_PRESETS.map((p) => {
-          const active = fields.some((f) => f.id === p.id);
-          return (
-            <button key={p.id} onClick={() => onChange(active ? fields.filter((f) => f.id !== p.id) : [...fields, { ...p }])}
-              className={`px-2.5 py-1 rounded-full text-xs transition ${active ? 'bg-brand-100 text-brand-700 border border-brand-300' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
-              {p.label}
-            </button>
-          );
-        })}
+    <div className="mt-3 pt-3 border-t border-slate-100 space-y-3">
+      {/* Preset fields */}
+      <div>
+        <span className="text-xs text-slate-500">预设字段：</span>
+        <div className="flex flex-wrap gap-2 mt-1">
+          {DEMOGRAPHIC_PRESETS.map((p) => {
+            const active = fields.some((f) => f.id === p.id);
+            return (
+              <button key={p.id} onClick={() => onChange(active ? fields.filter((f) => f.id !== p.id) : [...fields, { ...p }])}
+                className={`px-2.5 py-1 rounded-full text-xs transition ${active ? 'bg-brand-100 text-brand-700 border border-brand-300' : 'bg-slate-50 text-slate-500 border border-slate-200'}`}>
+                {p.label}
+              </button>
+            );
+          })}
+        </div>
       </div>
+
+      {/* Selected fields with required toggle and delete */}
       {fields.length > 0 && (
-        <div className="space-y-1 mt-2">
+        <div className="space-y-1">
+          <span className="text-xs text-slate-500">已选字段：</span>
           {fields.map((f) => (
-            <div key={f.id} className="flex items-center justify-between text-xs px-2 py-1">
-              <span className="text-slate-600">{f.label}</span>
-              <label className="flex items-center gap-1 text-slate-400 cursor-pointer">
-                <input type="checkbox" checked={f.required} onChange={() => onChange(fields.map((x) => x.id === f.id ? { ...x, required: !x.required } : x))} className="rounded" />
-                必填
-              </label>
+            <div key={f.id} className="flex items-center justify-between text-xs px-2 py-1.5 bg-slate-50 rounded">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-700 font-medium">{f.label}</span>
+                <span className="text-slate-400">
+                  {f.type === 'text' ? '文本' : f.type === 'number' ? '数字' : f.type === 'select' ? '下拉' : '日期'}
+                </span>
+                {f.type === 'select' && f.options && (
+                  <span className="text-slate-400">({f.options.join('/')})</span>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <label className="flex items-center gap-1 text-slate-400 cursor-pointer">
+                  <input type="checkbox" checked={f.required} onChange={() => onChange(fields.map((x) => x.id === f.id ? { ...x, required: !x.required } : x))} className="rounded" />
+                  必填
+                </label>
+                <button onClick={() => removeField(f.id)} className="text-slate-300 hover:text-red-500">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Add custom field */}
+      {!showCustom ? (
+        <button onClick={() => setShowCustom(true)} className="text-xs text-brand-600 hover:underline flex items-center gap-1">
+          <Plus className="w-3 h-3" /> 自定义字段
+        </button>
+      ) : (
+        <div className="bg-slate-50 rounded-lg p-3 space-y-2">
+          <div className="flex gap-2">
+            <input value={customLabel} onChange={(e) => setCustomLabel(e.target.value)} placeholder="字段名称" className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" />
+            <select value={customType} onChange={(e) => setCustomType(e.target.value as any)} className="px-2 py-1.5 border border-slate-200 rounded text-xs">
+              <option value="text">文本</option>
+              <option value="number">数字</option>
+              <option value="select">下拉选择</option>
+              <option value="date">日期</option>
+            </select>
+          </div>
+          {customType === 'select' && (
+            <input value={customOptions} onChange={(e) => setCustomOptions(e.target.value)} placeholder="选项（用逗号分隔，如：选项1，选项2）" className="w-full px-2 py-1.5 border border-slate-200 rounded text-xs focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          )}
+          <div className="flex gap-2 justify-end">
+            <button onClick={() => setShowCustom(false)} className="text-xs text-slate-400 hover:text-slate-600">取消</button>
+            <button onClick={addCustomField} disabled={!customLabel.trim()} className="text-xs text-brand-600 hover:underline disabled:opacity-50">添加</button>
+          </div>
         </div>
       )}
     </div>

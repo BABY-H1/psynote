@@ -1,17 +1,16 @@
 import React, { useState } from 'react';
 import { useAssessments, useDeleteAssessment, useUpdateAssessment, useAssessment } from '../../../api/useAssessments';
-import { useOrgMembers } from '../../../api/useCounseling';
 import { AssessmentWizard } from '../components/AssessmentWizard';
 import { AssessmentDetail } from '../components/AssessmentDetail';
-import { Eye, Trash2, Search, Plus, Send, ArrowLeft, PauseCircle, PlayCircle } from 'lucide-react';
+import { Eye, Trash2, Search, Plus, Edit3, PauseCircle, PlayCircle, Send, X, Copy, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { PageLoading, EmptyState, StatusBadge, PageHeader, useToast } from '../../../shared/components';
 
 type View =
   | { type: 'list' }
   | { type: 'create' }
-  | { type: 'detail'; assessmentId: string }
-  | { type: 'distribute'; assessmentId: string };
+  | { type: 'edit'; assessmentId: string }
+  | { type: 'detail'; assessmentId: string };
 
 export function AssessmentManagement() {
   const { data: assessments, isLoading } = useAssessments();
@@ -20,6 +19,7 @@ export function AssessmentManagement() {
   const { toast } = useToast();
   const [view, setView] = useState<View>({ type: 'list' });
   const [search, setSearch] = useState('');
+  const [shareModalId, setShareModalId] = useState<string | null>(null);
 
   if (isLoading) {
     return <PageLoading text="加载测评列表中..." />;
@@ -43,11 +43,12 @@ export function AssessmentManagement() {
     );
   }
 
-  if (view.type === 'distribute') {
+  if (view.type === 'edit') {
     return (
-      <DistributeView
-        assessmentId={view.assessmentId}
+      <AssessmentWizard
         onClose={() => setView({ type: 'list' })}
+        onCreated={(id) => setView({ type: 'detail', assessmentId: id })}
+        editAssessmentId={view.assessmentId}
       />
     );
   }
@@ -137,9 +138,16 @@ export function AssessmentManagement() {
                     {assessment.isActive ? <PauseCircle className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}
                   </button>
                   <button
-                    onClick={() => setView({ type: 'distribute', assessmentId: assessment.id })}
+                    onClick={() => setView({ type: 'edit', assessmentId: assessment.id })}
                     className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                    title="发放测评"
+                    title="编辑"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setShareModalId(assessment.id)}
+                    className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                    title="发放链接"
                   >
                     <Send className="w-4 h-4" />
                   </button>
@@ -170,20 +178,19 @@ export function AssessmentManagement() {
           ))}
         </div>
       )}
+
+      {/* Share modal */}
+      {shareModalId && (
+        <ShareModal assessmentId={shareModalId} onClose={() => setShareModalId(null)} />
+      )}
     </div>
   );
 }
 
-function DistributeView({ assessmentId, onClose }: { assessmentId: string; onClose: () => void }) {
-  const { data: assessment } = useAssessment(assessmentId);
-  const { data: members } = useOrgMembers();
-  const { toast } = useToast();
-  const [mode, setMode] = useState<'public' | 'internal'>('public');
-  const [copied, setCopied] = useState(false);
-  const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
-
+function ShareModal({ assessmentId, onClose }: { assessmentId: string; onClose: () => void }) {
   const shareUrl = `${window.location.origin}/assess/${assessmentId}`;
-  const clients = members?.filter((m) => m.role === 'client') || [];
+  const [copied, setCopied] = useState(false);
+  const { toast } = useToast();
 
   const copyLink = () => {
     navigator.clipboard.writeText(shareUrl);
@@ -192,122 +199,37 @@ function DistributeView({ assessmentId, onClose }: { assessmentId: string; onClo
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const toggleMember = (userId: string) => {
-    setSelectedMemberIds((prev) =>
-      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId],
-    );
-  };
-
   return (
-    <div>
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <h2 className="text-xl font-bold text-slate-900">
-          发放测评 — {assessment?.title || '加载中...'}
-        </h2>
-      </div>
-
-      {/* Mode selector */}
-      <div className="flex gap-2 mb-6">
-        <button
-          onClick={() => setMode('public')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            mode === 'public' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          公开发放
-        </button>
-        <button
-          onClick={() => setMode('internal')}
-          className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
-            mode === 'internal' ? 'bg-brand-600 text-white' : 'text-slate-600 hover:bg-slate-100'
-          }`}
-        >
-          指定人员
-        </button>
-      </div>
-
-      {mode === 'public' && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="text-sm font-medium text-slate-900 mb-3">公开链接</h3>
-            <p className="text-xs text-slate-500 mb-3">任何人都可以通过此链接打开并作答测评。</p>
-            <div className="flex gap-2">
-              <input
-                value={shareUrl}
-                readOnly
-                className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 select-all"
-              />
-              <button
-                onClick={copyLink}
-                className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition flex items-center gap-1.5"
-              >
-                {copied ? '已复制' : '复制链接'}
-              </button>
-            </div>
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="text-sm font-medium text-slate-900 mb-3">二维码</h3>
-            <div className="bg-white p-4 inline-block rounded-lg border border-slate-100">
-              <QRCodeSVG value={shareUrl} size={192} level="M" />
-            </div>
-            <p className="text-xs text-slate-400 mt-2">可截图或打印二维码用于线下场景</p>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
+      <div className="relative bg-white rounded-xl border border-slate-200 shadow-xl w-full max-w-md mx-4 p-6 space-y-5">
+        <div className="flex items-center justify-between">
+          <h3 className="text-lg font-semibold text-slate-900">发放测评</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5" /></button>
         </div>
-      )}
 
-      {mode === 'internal' && (
-        <div className="space-y-4">
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="text-sm font-medium text-slate-900 mb-3">从机构成员选择</h3>
-            {clients.length === 0 ? (
-              <p className="text-sm text-slate-400">暂无来访者成员，请先在机构中添加。</p>
-            ) : (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {clients.map((c) => (
-                  <label
-                    key={c.userId}
-                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedMemberIds.includes(c.userId)}
-                      onChange={() => toggleMember(c.userId)}
-                      className="rounded"
-                    />
-                    <span className="text-sm text-slate-700">{c.name || c.email}</span>
-                    <span className="text-xs text-slate-400">{c.email}</span>
-                  </label>
-                ))}
-              </div>
-            )}
-            {selectedMemberIds.length > 0 && (
-              <div className="mt-3 pt-3 border-t border-slate-100">
-                <button
-                  className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition"
-                  onClick={() => toast(`已选择 ${selectedMemberIds.length} 人，下发功能开发中`, 'success')}
-                >
-                  下发给 {selectedMemberIds.length} 人
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-200 p-5">
-            <h3 className="text-sm font-medium text-slate-900 mb-3">导入名单</h3>
-            <p className="text-xs text-slate-500 mb-3">上传 Excel/CSV 文件批量导入人员并下发测评。</p>
-            <button
-              className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition"
-              onClick={() => toast('Excel 导入功能开发中', 'success')}
-            >
-              上传文件
+        {/* Link */}
+        <div>
+          <span className="text-sm font-medium text-slate-700 block mb-2">公开链接</span>
+          <div className="flex gap-2">
+            <input value={shareUrl} readOnly className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 select-all" />
+            <button onClick={copyLink} className="px-3 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition flex items-center gap-1.5">
+              {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+              {copied ? '已复制' : '复制'}
             </button>
           </div>
         </div>
-      )}
+
+        {/* QR code */}
+        <div>
+          <span className="text-sm font-medium text-slate-700 block mb-2">二维码</span>
+          <div className="flex justify-center bg-white p-4 border border-slate-100 rounded-lg">
+            <QRCodeSVG value={shareUrl} size={180} level="M" />
+          </div>
+          <p className="text-xs text-slate-400 mt-2 text-center">可截图或打印用于线下场景</p>
+        </div>
+      </div>
     </div>
   );
 }
+
