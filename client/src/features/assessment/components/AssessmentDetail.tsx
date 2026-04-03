@@ -169,32 +169,25 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
       {/* === OVERVIEW TAB === */}
       {tab === 'overview' && (
         <div className="space-y-4">
-          {/* Config + Stats row */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
-              <h3 className="text-sm font-medium text-slate-900">测评配置</h3>
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-slate-400">类型</span><p className="text-slate-700 font-medium">{ASSESSMENT_TYPE_LABELS[assessmentType]}</p></div>
-                <div><span className="text-slate-400">收集方式</span><p className="text-slate-700 font-medium">{COLLECT_MODE_LABELS[assessment.collectMode] || assessment.collectMode}</p></div>
-                <div><span className="text-slate-400">区块</span><p className="text-slate-700 font-medium">{blocks.length} 个</p></div>
-                <div><span className="text-slate-400">量表</span><p className="text-slate-700 font-medium">{blocks.filter((b) => b.type === 'scale').length} 个</p></div>
-              </div>
+          {/* Config */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
+            <h3 className="text-sm font-medium text-slate-900">测评配置</h3>
+            <div className="grid grid-cols-4 gap-3 text-sm">
+              <div><span className="text-slate-400">类型</span><p className="text-slate-700 font-medium">{ASSESSMENT_TYPE_LABELS[assessmentType]}</p></div>
+              <div><span className="text-slate-400">收集方式</span><p className="text-slate-700 font-medium">{COLLECT_MODE_LABELS[assessment.collectMode] || assessment.collectMode}</p></div>
+              <div><span className="text-slate-400">区块</span><p className="text-slate-700 font-medium">{blocks.length} 个</p></div>
+              <div><span className="text-slate-400">量表</span><p className="text-slate-700 font-medium">{blocks.filter((b) => b.type === 'scale').length} 个</p></div>
             </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-5">
-              <h3 className="text-sm font-medium text-slate-900 mb-3">作答统计</h3>
-              <div className={`grid gap-3 ${hasRiskData && assessmentType === 'screening' ? 'grid-cols-5' : hasRiskData ? 'grid-cols-3' : 'grid-cols-1'}`}>
-                <ScoreCard label="已提交" value={results?.length || 0} />
-                {hasRiskData && assessmentType === 'screening' && (
-                  ['level_1', 'level_2', 'level_3', 'level_4'].map((level) => (
-                    <ScoreCard key={level} label={RISK_LABELS[level]} value={riskDist[level] || 0} />
-                  ))
-                )}
-                {hasRiskData && assessmentType !== 'screening' && (
-                  Object.entries(riskDist).filter(([k]) => k !== 'none').map(([level, count]) => (
-                    <ScoreCard key={level} label={RISK_LABELS[level] || level} value={count} />
-                  ))
-                )}
-              </div>
+          </div>
+
+          {/* Stats */}
+          <div className="bg-white rounded-xl border border-slate-200 p-5">
+            <h3 className="text-sm font-medium text-slate-900 mb-3">作答统计</h3>
+            <div className="grid grid-cols-5 gap-3">
+              <ScoreCard label="已提交" value={results?.length || 0} />
+              {['level_1', 'level_2', 'level_3', 'level_4'].map((level) => (
+                <ScoreCard key={level} label={RISK_LABELS[level]} value={riskDist[level] || 0} />
+              ))}
             </div>
           </div>
 
