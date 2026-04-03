@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
-import { useAssessment, useResults, useUpdateAssessment, useGenerateReport, useUpdateReportNarrative, useDistributions, useCreateDistribution } from '../../../api/useAssessments';
-import { useInterpretResult } from '../../../api/useAI';
+import { useAssessment, useResults, useUpdateAssessment, useGenerateReport, useDistributions, useCreateDistribution } from '../../../api/useAssessments';
+import { useReportAdvice } from '../hooks/useReportAdvice';
 import type { AssessmentResult, AssessmentBlock, AssessmentReport, Distribution } from '@psynote/shared';
 import {
   ArrowLeft, BarChart3, Users, FileText, Send, Plus,
@@ -20,9 +20,7 @@ interface Props {
   onClose: () => void;
 }
 
-const riskLabels: Record<string, string> = { level_1: '一级', level_2: '二级', level_3: '三级', level_4: '四级' };
-const collectModeLabels: Record<string, string> = { anonymous: '完全匿名', optional_register: '可选注册', require_register: '必须登录' };
-const typeLabels: Record<string, string> = { screening: '心理筛查', intake: '入组筛选', tracking: '追踪评估', survey: '调查问卷' };
+import { RISK_LABELS, RISK_COLORS, ASSESSMENT_TYPE_LABELS, COLLECT_MODE_LABELS } from '../constants';
 
 export function AssessmentDetail({ assessmentId, onClose }: Props) {
   const { data: assessment, isLoading } = useAssessment(assessmentId);
@@ -89,7 +87,7 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
   if (isLoading || !assessment) return <PageLoading text="加载测评详情..." />;
 
   const blocks = (assessment.blocks || []) as AssessmentBlock[];
-  const assessmentType = (assessment as any).assessmentType || 'screening';
+  const assessmentType = assessment.assessmentType || 'screening';
 
   const riskDist = (results || []).reduce<Record<string, number>>((acc, r) => {
     acc[r.riskLevel || 'none'] = (acc[r.riskLevel || 'none'] || 0) + 1;
@@ -142,7 +140,7 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold text-slate-900 truncate">{assessment.title}</h2>
-            <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">{typeLabels[assessmentType]}</span>
+            <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">{ASSESSMENT_TYPE_LABELS[assessmentType]}</span>
           </div>
           {assessment.description && <p className="text-sm text-slate-500 mt-0.5">{assessment.description}</p>}
         </div>
@@ -173,8 +171,8 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
             <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-3">
               <h3 className="text-sm font-medium text-slate-900">测评配置</h3>
               <div className="grid grid-cols-2 gap-3 text-sm">
-                <div><span className="text-slate-400">类型</span><p className="text-slate-700 font-medium">{typeLabels[assessmentType]}</p></div>
-                <div><span className="text-slate-400">收集方式</span><p className="text-slate-700 font-medium">{collectModeLabels[assessment.collectMode] || assessment.collectMode}</p></div>
+                <div><span className="text-slate-400">类型</span><p className="text-slate-700 font-medium">{ASSESSMENT_TYPE_LABELS[assessmentType]}</p></div>
+                <div><span className="text-slate-400">收集方式</span><p className="text-slate-700 font-medium">{COLLECT_MODE_LABELS[assessment.collectMode] || assessment.collectMode}</p></div>
                 <div><span className="text-slate-400">区块</span><p className="text-slate-700 font-medium">{blocks.length} 个</p></div>
                 <div><span className="text-slate-400">量表</span><p className="text-slate-700 font-medium">{blocks.filter((b) => b.type === 'scale').length} 个</p></div>
               </div>
@@ -185,11 +183,11 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
                 <ScoreCard label="已提交" value={results?.length || 0} />
                 {assessmentType === 'screening' ? (
                   ['level_1', 'level_2', 'level_3', 'level_4'].map((level) => (
-                    <ScoreCard key={level} label={riskLabels[level]} value={riskDist[level] || 0} />
+                    <ScoreCard key={level} label={RISK_LABELS[level]} value={riskDist[level] || 0} />
                   ))
                 ) : (
                   Object.entries(riskDist).slice(0, 2).map(([level, count]) => (
-                    <ScoreCard key={level} label={riskLabels[level] || '无风险'} value={count} />
+                    <ScoreCard key={level} label={RISK_LABELS[level] || '无风险'} value={count} />
                   ))
                 )}
               </div>
@@ -390,27 +388,14 @@ function IndividualReportView({ report, assessmentTitle, onClose }: { report: As
     interpretationPerDimension?: { dimension: string; score: number; label: string; riskLevel?: string; advice?: string }[];
   };
   const interps = content.interpretationPerDimension || [];
-  const updateNarrative = useUpdateReportNarrative();
-  const interpretMutation = useInterpretResult();
-  const { toast } = useToast();
-  const [advice, setAdvice] = useState(report.aiNarrative || '');
+  const { advice, setAdvice, save, generateAI, saving, generating } = useReportAdvice(report.id, report.aiNarrative || undefined);
 
   const handleAIGenerate = () => {
-    interpretMutation.mutate({
+    generateAI({
       scaleName: assessmentTitle,
       dimensions: interps.map((d) => ({ name: d.dimension, score: d.score, label: d.label, riskLevel: d.riskLevel, advice: d.advice })),
       totalScore: Number(content.totalScore) || 0,
       riskLevel: content.riskLevel,
-    }, {
-      onSuccess: (data) => { setAdvice(data.interpretation); },
-      onError: () => toast('AI 生成失败', 'error'),
-    });
-  };
-
-  const handleSave = () => {
-    updateNarrative.mutate({ reportId: report.id, narrative: advice }, {
-      onSuccess: () => toast('综合建议已保存', 'success'),
-      onError: () => toast('保存失败', 'error'),
     });
   };
 
@@ -439,7 +424,7 @@ function IndividualReportView({ report, assessmentTitle, onClose }: { report: As
       <ReportSection title="评估结果">
         <div className="grid grid-cols-2 gap-3">
           <ScoreCard label="总分" value={content.totalScore || '-'} />
-          {content.riskLevel && <ScoreCard label="风险等级" value={riskLabels[content.riskLevel] || content.riskLevel} color={content.riskLevel === 'level_3' || content.riskLevel === 'level_4' ? 'text-red-600' : undefined} />}
+          {content.riskLevel && <ScoreCard label="风险等级" value={RISK_LABELS[content.riskLevel] || content.riskLevel} color={content.riskLevel === 'level_3' || content.riskLevel === 'level_4' ? 'text-red-600' : undefined} />}
         </div>
       </ReportSection>
 
@@ -462,10 +447,10 @@ function IndividualReportView({ report, assessmentTitle, onClose }: { report: As
         <AdviceEditor
           value={advice}
           onChange={setAdvice}
-          onSave={handleSave}
+          onSave={save}
           onAIGenerate={handleAIGenerate}
-          saving={updateNarrative.isPending}
-          generating={interpretMutation.isPending}
+          saving={saving}
+          generating={generating}
         />
       </ReportSection>
     </ReportShell>
@@ -480,10 +465,7 @@ function TrendReportView({ report, onClose }: { report: AssessmentReport; onClos
     timeline?: { index: number; date: string; totalScore: string; riskLevel?: string; dimensionScores: Record<string, number> }[];
     trends?: Record<string, 'improving' | 'worsening' | 'stable'>;
   };
-  const updateNarrative = useUpdateReportNarrative();
-  const interpretMutation = useInterpretResult();
-  const { toast } = useToast();
-  const [advice, setAdvice] = useState(report.aiNarrative || '');
+  const { advice, setAdvice, save, generateAI, saving, generating } = useReportAdvice(report.id, report.aiNarrative || undefined);
 
   const timeline = content.timeline || [];
   const trends = content.trends || {};
@@ -498,23 +480,12 @@ function TrendReportView({ report, onClose }: { report: AssessmentReport; onClos
   const colors = ['#6366f1', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6'];
 
   const handleAIGenerate = () => {
-    const trendSummary = Object.entries(trends).map(([dim, t]) => `${dim}: ${t === 'improving' ? '改善' : t === 'worsening' ? '恶化' : '稳定'}`).join(', ');
     const latest = timeline[timeline.length - 1];
-    interpretMutation.mutate({
+    generateAI({
       scaleName: '追踪评估',
       dimensions: latest ? Object.entries(latest.dimensionScores).map(([name, score]) => ({ name, score, label: trends[name] === 'improving' ? '改善' : trends[name] === 'worsening' ? '恶化' : '稳定' })) : [],
       totalScore: latest ? Number(latest.totalScore) : 0,
       riskLevel: latest?.riskLevel,
-    }, {
-      onSuccess: (data) => setAdvice(data.interpretation),
-      onError: () => toast('AI 生成失败', 'error'),
-    });
-  };
-
-  const handleSave = () => {
-    updateNarrative.mutate({ reportId: report.id, narrative: advice }, {
-      onSuccess: () => toast('综合建议已保存', 'success'),
-      onError: () => toast('保存失败', 'error'),
     });
   };
 
@@ -557,10 +528,10 @@ function TrendReportView({ report, onClose }: { report: AssessmentReport; onClos
         <AdviceEditor
           value={advice}
           onChange={setAdvice}
-          onSave={handleSave}
+          onSave={save}
           onAIGenerate={handleAIGenerate}
-          saving={updateNarrative.isPending}
-          generating={interpretMutation.isPending}
+          saving={saving}
+          generating={generating}
         />
       </ReportSection>
     </ReportShell>
@@ -612,7 +583,7 @@ function GroupReportView({ report, results, assessmentTitle, assessmentType, cro
       <div className="grid grid-cols-3 gap-3">
         <ScoreCard label="参与人数" value={content.participantCount || results.length} />
         {content.riskDistribution && Object.entries(content.riskDistribution).slice(0, 2).map(([level, count]) => (
-          <ScoreCard key={level} label={riskLabels[level] || level} value={count} />
+          <ScoreCard key={level} label={RISK_LABELS[level] || level} value={count} />
         ))}
       </div>
 
@@ -756,22 +727,16 @@ function TrackingUserCard({ userId, userResults, onViewReport, onViewTrend, tren
 }
 
 function GroupAdviceEditor({ report }: { report: AssessmentReport }) {
-  const updateNarrative = useUpdateReportNarrative();
+  const { advice, setAdvice, save, saving } = useReportAdvice(report.id, report.aiNarrative || undefined);
   const { toast } = useToast();
-  const [advice, setAdvice] = useState(report.aiNarrative || '');
 
   return (
     <AdviceEditor
       value={advice}
       onChange={setAdvice}
-      onSave={() => {
-        updateNarrative.mutate({ reportId: report.id, narrative: advice }, {
-          onSuccess: () => toast('综合建议已保存', 'success'),
-          onError: () => toast('保存失败', 'error'),
-        });
-      }}
+      onSave={save}
       onAIGenerate={() => toast('团体 AI 建议功能开发中', 'success')}
-      saving={updateNarrative.isPending}
+      saving={saving}
     />
   );
 }

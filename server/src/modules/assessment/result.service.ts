@@ -199,14 +199,12 @@ export async function submitResult(input: {
     createdBy: input.createdBy || null,
   }).returning();
 
-  // Auto-generate individual report (non-blocking)
-  try {
-    await generateIndividualSingleReport({
-      orgId,
-      resultId: result.id,
-      generatedBy: input.createdBy || 'system',
-    });
-  } catch { /* report generation failure shouldn't block submission */ }
+  // Fire-and-forget: generate report without blocking the submission response
+  void generateIndividualSingleReport({
+    orgId,
+    resultId: result.id,
+    generatedBy: input.createdBy || 'system',
+  }).catch(() => { /* report generation failure is non-blocking */ });
 
   return result;
 }

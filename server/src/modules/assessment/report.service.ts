@@ -4,8 +4,6 @@ import {
   assessmentReports, assessmentResults, scaleDimensions, dimensionRules,
 } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
-import { generateIndividualNarrative, generateGroupNarrative, generateTrendNarrative } from '../ai/pipelines/report-narrative.js';
-import { aiClient } from '../ai/providers/openai-compatible.js';
 
 export async function listReports(orgId: string) {
   return db
