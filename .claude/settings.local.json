@@ -53,7 +53,14 @@
       "Bash(curl -s -w \"\\\\n%{http_code}\" -X POST \"http://localhost:4000/api/orgs/3241cbd8-5582-24f1-d9dd-ebbba95cb673/assessments/53f7d601-c6fa-4d49-a0cf-1deadbb47448/distributions\" -H \"Authorization: Bearer demo-token-not-real\" -H \"X-Dev-User-Id: bef00ee4-8365-d97a-43e6-5524af5f19b4\" -H \"X-Dev-User-Email: counselor@demo.psynote.cn\" -H \"X-Dev-Role: counselor\" -H \"Content-Type: application/json; charset=utf-8\" -d '{\"\"batchLabel\"\":\"\"Round 1\"\",\"\"mode\"\":\"\"internal\"\"}')",
       "Bash(curl -s -w \"\\\\n%{http_code}\" -X POST \"http://localhost:4000/api/orgs/3241cbd8-5582-24f1-d9dd-ebbba95cb673/assessments/53f7d601-c6fa-4d49-a0cf-1deadbb47448/distributions\" -H \"Authorization: Bearer demo-token-not-real\" -H \"X-Dev-User-Id: bef00ee4-8365-d97a-43e6-5524af5f19b4\" -H \"X-Dev-User-Email: counselor@demo.psynote.cn\" -H \"X-Dev-Role: counselor\" -H \"Content-Type: application/json; charset=utf-8\" -d '{\"\"batchLabel\"\":\"\"Round 1 - Baseline\"\",\"\"mode\"\":\"\"internal\"\"}')",
       "Bash(PGPASSWORD=psynote123 \"D:/PostgreSQL/bin/psql.exe\" -h localhost -U postgres -d psynote -c \"SET client_encoding TO ''UTF8'';\" -c \":*)",
-      "Bash(curl -s:*)"
+      "Bash(curl -s:*)",
+      "Bash(npx ngrok:*)",
+      "Bash(where ngrok:*)",
+      "Bash(powershell -Command \"\\(Get-Command ngrok\\).Source\")",
+      "Read(//c/Users/psyli/AppData/Local/ngrok/**)",
+      "Read(//c/ngrok/**)",
+      "Read(//c/Users/psyli/**)",
+      "Bash(powershell -Command \"Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch ''Loopback'' -and $_.IPAddress -notmatch ''^169'' } | Select IPAddress -First 3\")"
     ]
   }
 }

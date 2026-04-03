@@ -93,6 +93,9 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
     acc[r.riskLevel || 'none'] = (acc[r.riskLevel || 'none'] || 0) + 1;
     return acc;
   }, {});
+  const hasRiskData = Object.keys(riskDist).some((k) => k !== 'none');
+  const hasDimData = dimAverages.length > 0;
+  const hasDemoData = Object.keys(crossData).length > 1;
 
   const toggleActive = () => {
     updateAssessment.mutate({ assessmentId: assessment.id, isActive: !assessment.isActive }, {
@@ -179,35 +182,38 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
             </div>
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               <h3 className="text-sm font-medium text-slate-900 mb-3">作答统计</h3>
-              <div className={`grid gap-3 ${assessmentType === 'screening' ? 'grid-cols-5' : 'grid-cols-3'}`}>
+              <div className={`grid gap-3 ${hasRiskData && assessmentType === 'screening' ? 'grid-cols-5' : hasRiskData ? 'grid-cols-3' : 'grid-cols-1'}`}>
                 <ScoreCard label="已提交" value={results?.length || 0} />
-                {assessmentType === 'screening' ? (
+                {hasRiskData && assessmentType === 'screening' && (
                   ['level_1', 'level_2', 'level_3', 'level_4'].map((level) => (
                     <ScoreCard key={level} label={RISK_LABELS[level]} value={riskDist[level] || 0} />
                   ))
-                ) : (
-                  Object.entries(riskDist).slice(0, 2).map(([level, count]) => (
-                    <ScoreCard key={level} label={RISK_LABELS[level] || '无风险'} value={count} />
+                )}
+                {hasRiskData && assessmentType !== 'screening' && (
+                  Object.entries(riskDist).filter(([k]) => k !== 'none').map(([level, count]) => (
+                    <ScoreCard key={level} label={RISK_LABELS[level] || level} value={count} />
                   ))
                 )}
               </div>
             </div>
           </div>
 
-          {/* Charts */}
-          {results && results.length > 0 && (
+          {/* Charts — only render when relevant data exists */}
+          {(hasRiskData || hasDimData) && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white rounded-xl border border-slate-200 p-5">
-                <h3 className="text-sm font-medium text-slate-900 mb-3">
-                  {assessmentType === 'screening' ? '四级风险分布' : '风险等级分布'}
-                </h3>
-                <RiskPieChart distribution={
-                  assessmentType === 'screening'
-                    ? { level_1: riskDist.level_1 || 0, level_2: riskDist.level_2 || 0, level_3: riskDist.level_3 || 0, level_4: riskDist.level_4 || 0 }
-                    : riskDist
-                } />
-              </div>
-              {dimAverages.length > 0 && (
+              {hasRiskData && (
+                <div className="bg-white rounded-xl border border-slate-200 p-5">
+                  <h3 className="text-sm font-medium text-slate-900 mb-3">
+                    {assessmentType === 'screening' ? '四级风险分布' : '风险等级分布'}
+                  </h3>
+                  <RiskPieChart distribution={
+                    assessmentType === 'screening'
+                      ? { level_1: riskDist.level_1 || 0, level_2: riskDist.level_2 || 0, level_3: riskDist.level_3 || 0, level_4: riskDist.level_4 || 0 }
+                      : riskDist
+                  } />
+                </div>
+              )}
+              {hasDimData && (
                 <div className="bg-white rounded-xl border border-slate-200 p-5">
                   <h3 className="text-sm font-medium text-slate-900 mb-3">维度均分</h3>
                   <DimensionRadar dimensions={dimAverages} />
@@ -216,8 +222,8 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
             </div>
           )}
 
-          {/* Cross analysis */}
-          {Object.keys(crossData).length > 1 && (
+          {/* Cross analysis — only when demographics have 2+ groups */}
+          {hasDemoData && (
             <div className="bg-white rounded-xl border border-slate-200 p-5">
               <h3 className="text-sm font-medium text-slate-900 mb-3">人口学交叉分析</h3>
               <CrossAnalysisChart data={crossData} groupLabel="分组" />
