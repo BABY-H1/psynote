@@ -84,6 +84,7 @@ export function AssessmentWizard({ onClose, onCreated, editAssessmentId, draft }
   // Step 4
   const [distributionMode, setDistributionMode] = useState((init as any)?.distributionMode || 'both');
   const [collectMode, setCollectMode] = useState((init as any)?.collectMode || 'anonymous');
+  const [allowClientReport, setAllowClientReport] = useState((init as any)?.allowClientReport || false);
   const [resultDisplay, setResultDisplay] = useState<ResultDisplayConfig>(
     (init as any)?.resultDisplay || { mode: 'custom', show: ['totalScore', 'riskLevel', 'dimensionScores', 'interpretation', 'advice'] },
   );
@@ -170,6 +171,7 @@ export function AssessmentWizard({ onClose, onCreated, editAssessmentId, draft }
       blocks,
       collectMode,
       resultDisplay,
+      allowClientReport,
       screeningRules: needsRules ? screeningRules : undefined,
     };
 
@@ -387,6 +389,22 @@ export function AssessmentWizard({ onClose, onCreated, editAssessmentId, draft }
                   ))}
                 </div>
               )}
+            </div>
+
+            {/* Client report access */}
+            <div>
+              <label className="flex items-center justify-between p-4 rounded-lg border border-slate-200 cursor-pointer hover:border-slate-300 transition">
+                <div>
+                  <span className="text-sm font-medium text-slate-900">允许来访者查看报告</span>
+                  <p className="text-xs text-slate-500 mt-0.5">开启后，来访者可在个人门户中查看自己的测评报告</p>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={allowClientReport}
+                  onChange={(e) => setAllowClientReport(e.target.checked)}
+                  className="w-5 h-5 rounded text-brand-600 focus:ring-brand-500"
+                />
+              </label>
             </div>
           </div>
         )}

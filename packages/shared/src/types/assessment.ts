@@ -63,6 +63,7 @@ export interface Assessment {
   collectMode: CollectMode;
   resultDisplay: ResultDisplayConfig;
   shareToken?: string;
+  allowClientReport: boolean;
   status: AssessmentStatus;
   isActive: boolean;
   createdBy?: string;

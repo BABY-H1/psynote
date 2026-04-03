@@ -4,6 +4,7 @@ import { useAuthStore } from '../../stores/authStore';
 
 const clientNav = [
   { to: '/portal', label: '健康概览', end: true },
+  { to: '/portal/reports', label: '我的报告' },
   { to: '/portal/services', label: '服务大厅' },
   { to: '/portal/appointments', label: '我的预约' },
 ];

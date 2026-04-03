@@ -60,7 +60,8 @@
       "Read(//c/Users/psyli/AppData/Local/ngrok/**)",
       "Read(//c/ngrok/**)",
       "Read(//c/Users/psyli/**)",
-      "Bash(powershell -Command \"Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch ''Loopback'' -and $_.IPAddress -notmatch ''^169'' } | Select IPAddress -First 3\")"
+      "Bash(powershell -Command \"Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch ''Loopback'' -and $_.IPAddress -notmatch ''^169'' } | Select IPAddress -First 3\")",
+      "Bash(PGPASSWORD=psynote123 \"D:/PostgreSQL/bin/psql.exe\" -h localhost -U postgres -d psynote -c \"ALTER TABLE assessments ADD COLUMN IF NOT EXISTS allow_client_report boolean NOT NULL DEFAULT false;\")"
     ]
   }
 }

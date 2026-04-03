@@ -21,7 +21,12 @@ interface Props {
 }
 
 import { RISK_LABELS, RISK_COLORS, ASSESSMENT_TYPE_LABELS, COLLECT_MODE_LABELS } from '../constants';
-import { downloadReportAsText, buildIndividualReportText, buildGroupReportText, buildTrendReportText } from '../utils/downloadReport';
+import { useAuthStore } from '../../../stores/authStore';
+
+function downloadPDF(reportId: string) {
+  const orgId = useAuthStore.getState().currentOrgId;
+  window.open(`/api/orgs/${orgId}/reports/${reportId}/pdf`, '_blank');
+}
 
 export function AssessmentDetail({ assessmentId, onClose }: Props) {
   const { data: assessment, isLoading } = useAssessment(assessmentId);
@@ -268,6 +273,34 @@ export function AssessmentDetail({ assessmentId, onClose }: Props) {
       {/* === INDIVIDUAL REPORT TAB === */}
       {tab === 'individual' && (
         <div className="space-y-4">
+          {/* Batch download */}
+          {!individualReport && !trendReport && results && results.length > 1 && (
+            <div className="flex justify-end">
+              <button
+                onClick={() => {
+                  const orgId = useAuthStore.getState().currentOrgId;
+                  // For batch, we need report IDs. Use result IDs to generate reports first, then batch.
+                  toast('正在准备批量下载...', 'success');
+                  // Simple approach: open batch endpoint
+                  fetch(`/api/orgs/${orgId}/reports/batch-pdf`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${useAuthStore.getState().accessToken}` },
+                    body: JSON.stringify({ reportIds: results.map((r) => r.id) }),
+                  }).then((res) => res.blob()).then((blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'reports.zip';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }).catch(() => toast('批量下载失败', 'error'));
+                }}
+                className="px-3 py-1.5 bg-white border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 transition flex items-center gap-1.5"
+              >
+                <Download className="w-3.5 h-3.5" /> 批量下载 PDF
+              </button>
+            </div>
+          )}
           {individualReport ? (
             <IndividualReportView report={individualReport} assessmentTitle={assessment.title} onClose={() => setIndividualReport(null)} />
           ) : trendReport ? (
@@ -402,7 +435,7 @@ function IndividualReportView({ report, assessmentTitle, onClose }: { report: As
   const demographics = content.demographics as Record<string, unknown> | undefined;
 
   return (
-    <ReportShell title={`${assessmentTitle} — 个人报告`} date={new Date().toLocaleDateString('zh-CN')} onDownload={() => downloadReportAsText(`个人报告_${new Date().toLocaleDateString('zh-CN')}`, buildIndividualReportText(`${assessmentTitle} — 个人报告`, content, advice))}>
+    <ReportShell title={`${assessmentTitle} — 个人报告`} date={new Date().toLocaleDateString('zh-CN')} onDownload={() => downloadPDF(report.id)}>
       <div className="flex justify-end">
         <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">返回列表</button>
       </div>
@@ -490,7 +523,7 @@ function TrendReportView({ report, onClose }: { report: AssessmentReport; onClos
   };
 
   return (
-    <ReportShell title="追踪评估趋势报告" subtitle={`共 ${content.assessmentCount || 0} 次测评`} onDownload={() => downloadReportAsText(`趋势报告_${new Date().toLocaleDateString('zh-CN')}`, buildTrendReportText(content, advice))}>
+    <ReportShell title="追踪评估趋势报告" subtitle={`共 ${content.assessmentCount || 0} 次测评`} onDownload={() => downloadPDF(report.id)}>
       <div className="flex justify-end">
         <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">返回列表</button>
       </div>
@@ -578,7 +611,7 @@ function GroupReportView({ report, results, assessmentTitle, assessmentType, cro
   }, [results, assessmentType]);
 
   return (
-    <ReportShell title={`${assessmentTitle} — 团体报告`} subtitle={`${content.participantCount || results.length} 人参与`} date={new Date().toLocaleDateString('zh-CN')} onDownload={() => downloadReportAsText(`团体报告_${new Date().toLocaleDateString('zh-CN')}`, buildGroupReportText(`${assessmentTitle} — 团体报告`, content, report.aiNarrative || undefined))}>
+    <ReportShell title={`${assessmentTitle} — 团体报告`} subtitle={`${content.participantCount || results.length} 人参与`} date={new Date().toLocaleDateString('zh-CN')} onDownload={() => downloadPDF(report.id)}>
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3">
         <ScoreCard label="参与人数" value={content.participantCount || results.length} />

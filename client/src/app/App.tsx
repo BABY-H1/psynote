@@ -16,6 +16,7 @@ import { ClientPortalLayout } from '../features/client-portal/ClientPortalLayout
 import { ClientDashboard } from '../features/client-portal/pages/ClientDashboard';
 import { ServiceHall } from '../features/client-portal/pages/ServiceHall';
 import { MyAppointments } from '../features/client-portal/pages/MyAppointments';
+import { MyReports } from '../features/client-portal/pages/MyReports';
 import { CourseReader } from '../features/client-portal/pages/CourseReader';
 import { DashboardHome } from '../features/dashboard/pages/DashboardHome';
 
@@ -42,6 +43,7 @@ function AppRoutes() {
         <>
           <Route path="/portal" element={<ClientPortalLayout />}>
             <Route index element={<ClientDashboard />} />
+            <Route path="reports" element={<MyReports />} />
             <Route path="services" element={<ServiceHall />} />
             <Route path="appointments" element={<MyAppointments />} />
             <Route path="courses/:courseId" element={<CourseReader />} />

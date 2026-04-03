@@ -97,6 +97,7 @@ export const assessments = pgTable('assessments', {
   collectMode: text('collect_mode').notNull().default('anonymous'),
   resultDisplay: jsonb('result_display').notNull().default({ mode: 'custom', show: ['totalScore', 'riskLevel', 'dimensionScores', 'interpretation', 'advice'] }),
   shareToken: text('share_token'),
+  allowClientReport: boolean('allow_client_report').notNull().default(false),
   status: text('status').notNull().default('draft'),
   isActive: boolean('is_active').notNull().default(true),
   createdBy: uuid('created_by').references(() => users.id),

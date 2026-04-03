@@ -5,6 +5,7 @@ import { requireRole } from '../../middleware/rbac.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as reportService from './report.service.js';
+import { generateReportPDF, generateBatchPDFZip } from './pdf.service.js';
 
 export async function reportRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
@@ -90,5 +91,30 @@ export async function reportRoutes(app: FastifyInstance) {
     const updated = await reportService.updateReportNarrative(reportId, body.narrative);
     await logAudit(request, 'update', 'assessment_reports', reportId);
     return updated;
+  });
+
+  /** Download a single report as PDF */
+  app.get('/:reportId/pdf', async (request, reply) => {
+    const { reportId } = request.params as { reportId: string };
+    const pdf = await generateReportPDF(reportId);
+    return reply
+      .header('Content-Type', 'application/pdf')
+      .header('Content-Disposition', `attachment; filename="report_${reportId.slice(0, 8)}.pdf"`)
+      .send(pdf);
+  });
+
+  /** Batch download multiple reports as ZIP */
+  app.post('/batch-pdf', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request, reply) => {
+    const body = request.body as { reportIds: string[] };
+    if (!body.reportIds || body.reportIds.length === 0) {
+      throw new ValidationError('reportIds array is required');
+    }
+    const zip = await generateBatchPDFZip(body.reportIds);
+    return reply
+      .header('Content-Type', 'application/zip')
+      .header('Content-Disposition', 'attachment; filename="reports.zip"')
+      .send(zip);
   });
 }
