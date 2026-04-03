@@ -40,6 +40,28 @@ export const orgMembers = pgTable('org_members', {
   index('idx_org_members_user').on(t.userId),
 ]);
 
+export const clientProfiles = pgTable('client_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  phone: text('phone'),
+  gender: text('gender'),
+  dateOfBirth: date('date_of_birth'),
+  address: text('address'),
+  occupation: text('occupation'),
+  education: text('education'),
+  maritalStatus: text('marital_status'),
+  emergencyContact: jsonb('emergency_contact'), // { name, phone, relationship }
+  medicalHistory: text('medical_history'),
+  familyBackground: text('family_background'),
+  presentingIssues: jsonb('presenting_issues').default([]), // string[]
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_client_profile_org_user').on(t.orgId, t.userId),
+]);
+
 // ─── Assessment Domain ────────────────────────────────────────────
 
 export const scales = pgTable('scales', {
@@ -216,6 +238,21 @@ export const careTimeline = pgTable('care_timeline', {
   index('idx_care_timeline_episode').on(t.careEpisodeId, t.createdAt),
 ]);
 
+export const counselorAvailability = pgTable('counselor_availability', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  counselorId: uuid('counselor_id').notNull().references(() => users.id),
+  dayOfWeek: integer('day_of_week').notNull(), // 0=Sunday ... 6=Saturday
+  startTime: text('start_time').notNull(), // "HH:mm"
+  endTime: text('end_time').notNull(), // "HH:mm"
+  sessionType: text('session_type'), // online | offline | phone | null=any
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_availability_counselor').on(t.orgId, t.counselorId, t.dayOfWeek),
+  uniqueIndex('uq_availability_slot').on(t.orgId, t.counselorId, t.dayOfWeek, t.startTime),
+]);
+
 export const appointments = pgTable('appointments', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => organizations.id),
@@ -228,10 +265,42 @@ export const appointments = pgTable('appointments', {
   type: text('type'),
   source: text('source'),
   notes: text('notes'),
+  reminderSent24h: boolean('reminder_sent_24h').notNull().default(false),
+  reminderSent1h: boolean('reminder_sent_1h').notNull().default(false),
+  clientConfirmedAt: timestamp('client_confirmed_at', { withTimezone: true }),
+  confirmToken: text('confirm_token'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('idx_appointments_counselor').on(t.counselorId, t.startTime),
   index('idx_appointments_client').on(t.clientId, t.startTime),
+]);
+
+export const reminderSettings = pgTable('reminder_settings', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id).unique(),
+  enabled: boolean('enabled').notNull().default(true),
+  channels: jsonb('channels').notNull().default(['email']), // ['email', 'sms']
+  remindBefore: jsonb('remind_before').notNull().default([1440, 60]), // minutes before
+  emailConfig: jsonb('email_config').default({}), // SMTP config
+  smsConfig: jsonb('sms_config').default({}),
+  messageTemplate: jsonb('message_template').default({}), // {subject, body} with placeholders
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const noteTemplates = pgTable('note_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').references(() => organizations.id),
+  title: text('title').notNull(),
+  format: text('format').notNull(), // soap | dap | birp | custom
+  fieldDefinitions: jsonb('field_definitions').notNull().default([]), // [{key, label, placeholder, required, order}]
+  isDefault: boolean('is_default').notNull().default(false),
+  visibility: text('visibility').notNull().default('personal'), // personal | organization | public
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_note_templates_org').on(t.orgId, t.format),
 ]);
 
 export const sessionNotes = pgTable('session_notes', {
@@ -241,6 +310,8 @@ export const sessionNotes = pgTable('session_notes', {
   appointmentId: uuid('appointment_id').references(() => appointments.id),
   clientId: uuid('client_id').notNull().references(() => users.id),
   counselorId: uuid('counselor_id').notNull().references(() => users.id),
+  noteFormat: text('note_format').notNull().default('soap'), // soap | dap | birp | custom
+  templateId: uuid('template_id').references(() => noteTemplates.id),
   sessionDate: date('session_date').notNull(),
   duration: integer('duration'),
   sessionType: text('session_type'),
@@ -248,23 +319,81 @@ export const sessionNotes = pgTable('session_notes', {
   objective: text('objective'),
   assessment: text('assessment'),
   plan: text('plan'),
+  fields: jsonb('fields').notNull().default({}), // for non-SOAP formats: {key: value}
   summary: text('summary'),
   tags: jsonb('tags').default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const noteAttachments = pgTable('note_attachments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  noteId: uuid('note_id').references(() => sessionNotes.id, { onDelete: 'cascade' }),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  fileName: text('file_name').notNull(),
+  fileType: text('file_type').notNull(), // text | audio | image | pdf
+  filePath: text('file_path').notNull(),
+  fileSize: integer('file_size'),
+  transcription: text('transcription'),
+  uploadedBy: uuid('uploaded_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const treatmentPlans = pgTable('treatment_plans', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  careEpisodeId: uuid('care_episode_id').notNull().references(() => careEpisodes.id),
+  counselorId: uuid('counselor_id').notNull().references(() => users.id),
+  status: text('status').notNull().default('draft'), // draft | active | completed | archived
+  title: text('title'),
+  approach: text('approach'), // free text: CBT, 人本主义, 整合取向, etc.
+  goals: jsonb('goals').notNull().default([]), // TreatmentGoal[]
+  interventions: jsonb('interventions').notNull().default([]), // TreatmentIntervention[]
+  sessionPlan: text('session_plan'), // free text: 每周一次，预计12-16次
+  progressNotes: text('progress_notes'),
+  reviewDate: date('review_date'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_treatment_plans_episode').on(t.careEpisodeId, t.status),
+]);
+
+export const treatmentGoalLibrary = pgTable('treatment_goal_library', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').references(() => organizations.id),
+  title: text('title').notNull(),
+  description: text('description'),
+  problemArea: text('problem_area').notNull(), // anxiety | depression | relationship | trauma | self_esteem | grief | anger | substance | other
+  category: text('category'), // short_term | long_term
+  objectivesTemplate: jsonb('objectives_template').notNull().default([]), // suggested measurable objectives
+  interventionSuggestions: jsonb('intervention_suggestions').notNull().default([]), // suggested interventions
+  visibility: text('visibility').notNull().default('personal'), // personal | organization | public
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_goal_library_org').on(t.orgId, t.problemArea),
+]);
+
 export const clientDocuments = pgTable('client_documents', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => organizations.id),
   clientId: uuid('client_id').notNull().references(() => users.id),
+  careEpisodeId: uuid('care_episode_id').references(() => careEpisodes.id),
+  templateId: uuid('template_id'), // FK added after consentTemplates table is created
   title: text('title').notNull(),
+  content: text('content'), // full document text (copied from template at send time)
   docType: text('doc_type'),
+  consentType: text('consent_type'), // treatment | data_collection | ai_processing | ...
   status: text('status').notNull().default('pending'),
   signedAt: timestamp('signed_at', { withTimezone: true }),
+  signatureData: jsonb('signature_data'), // { name, ip, userAgent, timestamp }
   filePath: text('file_path'),
+  createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index('idx_client_documents_client').on(t.orgId, t.clientId, t.status),
+]);
 
 export const referrals = pgTable('referrals', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -460,6 +589,24 @@ export const courseTemplateTags = pgTable('course_template_tags', {
 
 // ─── Notification & Compliance ────────────────────────────────────
 
+export const complianceReviews = pgTable('compliance_reviews', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  careEpisodeId: uuid('care_episode_id').notNull().references(() => careEpisodes.id),
+  noteId: uuid('note_id').references(() => sessionNotes.id),
+  counselorId: uuid('counselor_id').references(() => users.id),
+  reviewType: text('review_type').notNull(), // note_compliance | treatment_quality | golden_thread
+  score: integer('score'), // 0-100
+  findings: jsonb('findings').notNull().default([]), // [{category, severity, description, suggestion}]
+  goldenThreadScore: integer('golden_thread_score'),
+  qualityIndicators: jsonb('quality_indicators').default({}), // {empathy, clinicalJudgment, interventionSpecificity, documentationCompleteness}
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }).notNull().defaultNow(),
+  reviewedBy: text('reviewed_by').notNull().default('ai'),
+}, (t) => [
+  index('idx_compliance_reviews_episode').on(t.careEpisodeId),
+  index('idx_compliance_reviews_note').on(t.noteId),
+]);
+
 export const notifications = pgTable('notifications', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => organizations.id),
@@ -500,6 +647,20 @@ export const phiAccessLogs = pgTable('phi_access_logs', {
   userAgent: text('user_agent'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const consentTemplates = pgTable('consent_templates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  title: text('title').notNull(),
+  consentType: text('consent_type').notNull(), // treatment | data_collection | ai_processing | data_sharing | research
+  content: text('content').notNull(), // full text of the consent document
+  isDefault: boolean('is_default').notNull().default(false),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_consent_templates_org').on(t.orgId, t.consentType),
+]);
 
 export const consentRecords = pgTable('consent_records', {
   id: uuid('id').primaryKey().defaultRandom(),

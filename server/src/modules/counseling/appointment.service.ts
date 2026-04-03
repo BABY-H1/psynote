@@ -1,7 +1,8 @@
-import { eq, and, desc, gte, lte } from 'drizzle-orm';
+import { eq, and, desc, gte, lte, lt, gt, ne, inArray } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { appointments, careTimeline, users } from '../../db/schema.js';
-import { NotFoundError } from '../../lib/errors.js';
+import { NotFoundError, ConflictError, ValidationError } from '../../lib/errors.js';
+import { getAvailableTimeSlots } from './availability.service.js';
 
 export async function listAppointments(
   orgId: string,
@@ -112,4 +113,72 @@ export async function updateAppointmentStatus(
   }
 
   return updated;
+}
+
+/** Check if a counselor has conflicting appointments in the given time range */
+export async function checkConflict(
+  counselorId: string,
+  startTime: Date,
+  endTime: Date,
+  excludeId?: string,
+) {
+  const conditions = [
+    eq(appointments.counselorId, counselorId),
+    lt(appointments.startTime, endTime),
+    gt(appointments.endTime, startTime),
+    inArray(appointments.status, ['pending', 'confirmed']),
+  ];
+  if (excludeId) conditions.push(ne(appointments.id, excludeId));
+
+  const [conflict] = await db
+    .select()
+    .from(appointments)
+    .where(and(...conditions))
+    .limit(1);
+
+  return conflict || null;
+}
+
+/** Create an appointment request from a client (C-end) */
+export async function createClientRequest(input: {
+  orgId: string;
+  clientId: string;
+  counselorId: string;
+  startTime: Date;
+  endTime: Date;
+  type?: string;
+  notes?: string;
+}) {
+  // Validate the requested time falls within an available slot
+  const dateStr = input.startTime.toISOString().slice(0, 10);
+  const freeSlots = await getAvailableTimeSlots(input.orgId, input.counselorId, dateStr);
+
+  const reqStart = `${String(input.startTime.getHours()).padStart(2, '0')}:${String(input.startTime.getMinutes()).padStart(2, '0')}`;
+  const reqEnd = `${String(input.endTime.getHours()).padStart(2, '0')}:${String(input.endTime.getMinutes()).padStart(2, '0')}`;
+
+  const fits = freeSlots.some((s) => s.start <= reqStart && s.end >= reqEnd);
+  if (!fits) {
+    throw new ValidationError('所选时段不在咨询师可用时间范围内');
+  }
+
+  // Check conflict
+  const conflict = await checkConflict(input.counselorId, input.startTime, input.endTime);
+  if (conflict) {
+    throw new ConflictError('该时段已被预约');
+  }
+
+  // Create appointment
+  const [appointment] = await db.insert(appointments).values({
+    orgId: input.orgId,
+    clientId: input.clientId,
+    counselorId: input.counselorId,
+    startTime: input.startTime,
+    endTime: input.endTime,
+    type: input.type,
+    source: 'client_request',
+    status: 'pending',
+    notes: input.notes,
+  }).returning();
+
+  return appointment;
 }

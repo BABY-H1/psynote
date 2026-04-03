@@ -122,6 +122,90 @@ export function useRecommendations() {
   });
 }
 
+/** Suggest treatment plan goals and interventions */
+export function useSuggestTreatmentPlan() {
+  return useMutation({
+    mutationFn: (data: {
+      chiefComplaint?: string;
+      riskLevel: string;
+      assessmentSummary?: string;
+      sessionNotes?: string;
+    }) => api.post<{
+      suggestedGoals: { description: string; rationale: string }[];
+      suggestedInterventions: { description: string; frequency?: string; rationale: string }[];
+      sessionPlanSuggestion: string;
+      rationale: string;
+    }>(`${orgPrefix()}/suggest-treatment-plan`, data),
+  });
+}
+
+/** AI client summary / risk profile */
+export function useClientAISummary() {
+  return useMutation({
+    mutationFn: (data: { clientId: string; episodeId: string }) =>
+      api.post<{
+        overview: string;
+        keyThemes: string[];
+        riskProfile: {
+          currentLevel: string;
+          trend: 'improving' | 'stable' | 'worsening';
+          factors: string[];
+          protectiveFactors: string[];
+        };
+        treatmentProgress: string;
+        recommendations: string[];
+      }>(`${orgPrefix()}/client-summary`, data),
+  });
+}
+
+/** AI case progress report */
+export function useCaseProgressReport() {
+  return useMutation({
+    mutationFn: (data: { episodeId: string }) =>
+      api.post<{
+        reportPeriod: { from: string; to: string };
+        sessionSummary: { totalSessions: number; keyProgressPoints: string[] };
+        assessmentChanges: { trend: 'improving' | 'stable' | 'worsening'; details: string };
+        goalProgress: { goalDescription: string; status: string; notes: string }[];
+        riskAssessment: { currentLevel: string; trend: string };
+        narrative: string;
+        recommendations: string[];
+      }>(`${orgPrefix()}/case-progress-report`, data),
+  });
+}
+
+/** Format-aware material analysis */
+export function useAnalyzeMaterialFormatted() {
+  return useMutation({
+    mutationFn: (data: {
+      content: string;
+      format: string;
+      fieldDefinitions: { key: string; label: string }[];
+      inputType?: string;
+    }) => api.post<Record<string, string>>(`${orgPrefix()}/analyze-material-formatted`, data),
+  });
+}
+
+/** Conversational note guidance chat */
+export function useNoteGuidanceChat() {
+  return useMutation({
+    mutationFn: (data: {
+      messages: { role: 'user' | 'assistant'; content: string }[];
+      context: {
+        format: string;
+        fieldDefinitions: { key: string; label: string }[];
+        clientContext?: { chiefComplaint?: string; treatmentGoals?: string[]; previousNoteSummary?: string };
+        currentFields?: Record<string, string>;
+        attachmentTexts?: string[];
+      };
+    }) => api.post<
+      | { type: 'message'; content: string }
+      | { type: 'suggestion'; field: string; fieldLabel: string; content: string; rationale: string }
+      | { type: 'complete'; fields: Record<string, string>; summary: string }
+    >(`${orgPrefix()}/note-guidance-chat`, data),
+  });
+}
+
 /** AI-guided scale creation via multi-turn conversation */
 export function useCreateScaleChat() {
   return useMutation({

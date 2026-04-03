@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useMyAppointments } from '../../../api/useClientPortal';
 import { PageLoading, EmptyState, StatusBadge } from '../../../shared/components';
 
@@ -18,6 +19,7 @@ const typeMap: Record<string, string> = {
 
 export function MyAppointments() {
   const { data: appointments, isLoading } = useMyAppointments();
+  const navigate = useNavigate();
 
   if (isLoading) {
     return <PageLoading />;
@@ -25,7 +27,15 @@ export function MyAppointments() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-bold text-slate-900">我的预约</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-slate-900">我的预约</h2>
+        <button
+          onClick={() => navigate('/portal/book')}
+          className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500"
+        >
+          预约咨询
+        </button>
+      </div>
 
       {!appointments || appointments.length === 0 ? (
         <EmptyState title="暂无预约记录" />

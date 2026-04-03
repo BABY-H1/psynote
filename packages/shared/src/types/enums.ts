@@ -55,6 +55,24 @@ export type LessonBlockType =
   | 'post_reminder'
   | 'counselor_notes';
 
+/** Gender */
+export type Gender = 'male' | 'female' | 'other' | 'prefer_not_to_say';
+
+/** Marital status */
+export type MaritalStatus = 'single' | 'married' | 'divorced' | 'widowed' | 'other';
+
+/** Treatment plan status */
+export type TreatmentPlanStatus = 'draft' | 'active' | 'completed' | 'archived';
+
+/** Treatment goal status */
+export type GoalStatus = 'active' | 'achieved' | 'revised' | 'dropped';
+
+/** Note format */
+export type NoteFormat = 'soap' | 'dap' | 'birp' | 'custom';
+
+/** Note template visibility */
+export type TemplateVisibility = 'personal' | 'organization' | 'public';
+
 /** Referral target type */
 export type ReferralTargetType = 'psychiatric' | 'crisis_center' | 'hospital' | 'external_counselor' | 'other';
 
@@ -79,6 +97,7 @@ export type TimelineEventType =
   | 'triage_decision'
   | 'follow_up_plan'
   | 'follow_up_review'
+  | 'treatment_plan'
   | 'ai_insight'
   | 'note'
   | 'document';

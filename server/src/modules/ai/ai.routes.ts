@@ -22,7 +22,11 @@ import {
   refineGroupSchemeOverall,
   refineGroupSessionDetail,
 } from './pipelines/generate-scheme.js';
-import { analyzeSessionMaterial } from './pipelines/session-material.js';
+import { analyzeSessionMaterial, analyzeSessionMaterialForFormat } from './pipelines/session-material.js';
+import { noteGuidanceChat } from './pipelines/note-guidance-chat.js';
+import { suggestTreatmentPlan } from './pipelines/treatment-plan.js';
+import { buildAndGenerateClientSummary } from '../counseling/client-summary.service.js';
+import { buildAndGenerateCaseProgressReport } from '../counseling/progress-report.service.js';
 import {
   generateCourseBlueprint,
   refineCourseBlueprint,
@@ -163,6 +167,48 @@ export async function aiRoutes(app: FastifyInstance) {
     return { summary };
   });
 
+  /** Suggest treatment plan goals and interventions */
+  app.post('/suggest-treatment-plan', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as {
+      chiefComplaint?: string;
+      riskLevel: string;
+      assessmentSummary?: string;
+      sessionNotes?: string;
+    };
+
+    if (!body.riskLevel) throw new ValidationError('riskLevel is required');
+
+    const suggestion = await suggestTreatmentPlan(body);
+    await logAudit(request, 'ai_call', 'suggest-treatment-plan');
+    return suggestion;
+  });
+
+  /** AI client summary / risk profile */
+  app.post('/client-summary', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { clientId: string; episodeId: string };
+    if (!body.clientId || !body.episodeId) throw new ValidationError('clientId and episodeId are required');
+
+    const summary = await buildAndGenerateClientSummary(request.org!.orgId, body.clientId, body.episodeId);
+    await logAudit(request, 'ai_call', 'client-summary');
+    return summary;
+  });
+
+  /** AI case progress report */
+  app.post('/case-progress-report', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { episodeId: string };
+    if (!body.episodeId) throw new ValidationError('episodeId is required');
+
+    const report = await buildAndGenerateCaseProgressReport(request.org!.orgId, body.episodeId);
+    await logAudit(request, 'ai_call', 'case-progress-report');
+    return report;
+  });
+
   /** Personalized recommendations (for client portal) */
   app.post('/recommendations', async (request) => {
     const body = request.body as {
@@ -219,6 +265,47 @@ export async function aiRoutes(app: FastifyInstance) {
     const soap = await analyzeSessionMaterial(body);
     await logAudit(request, 'ai_call', 'analyze-material');
     return soap;
+  });
+
+  /** Format-aware material analysis */
+  app.post('/analyze-material-formatted', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as {
+      content: string;
+      format: string;
+      fieldDefinitions: { key: string; label: string }[];
+      inputType?: string;
+    };
+
+    if (!body.content) throw new ValidationError('content is required');
+    if (!body.format || !body.fieldDefinitions?.length) throw new ValidationError('format and fieldDefinitions are required');
+
+    const fields = await analyzeSessionMaterialForFormat(body);
+    await logAudit(request, 'ai_call', 'analyze-material-formatted');
+    return fields;
+  });
+
+  /** Conversational note guidance chat (A+B hybrid mode) */
+  app.post('/note-guidance-chat', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as {
+      messages: { role: 'user' | 'assistant'; content: string }[];
+      context: {
+        format: string;
+        fieldDefinitions: { key: string; label: string }[];
+        clientContext?: { chiefComplaint?: string; treatmentGoals?: string[]; previousNoteSummary?: string };
+        currentFields?: Record<string, string>;
+        attachmentTexts?: string[];
+      };
+    };
+
+    if (!body.messages || !body.context) throw new ValidationError('messages and context are required');
+
+    const response = await noteGuidanceChat(body.messages, body.context);
+    await logAudit(request, 'ai_call', 'note-guidance-chat');
+    return response;
   });
 
   /** Generate full group counseling scheme */

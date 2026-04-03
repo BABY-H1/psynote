@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useCreateAppointment } from '../../../api/useCounseling';
+import { useToast } from '../../../shared/components';
 
 interface Props {
   episodeId: string;
@@ -7,24 +8,48 @@ interface Props {
   onDone: () => void;
 }
 
+/** Add 50 minutes to a datetime-local string */
+function addMinutes(datetimeLocal: string, minutes: number): string {
+  if (!datetimeLocal) return '';
+  const d = new Date(datetimeLocal);
+  d.setMinutes(d.getMinutes() + minutes);
+  // Format back to datetime-local
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
 export function AppointmentForm({ episodeId, clientId, onDone }: Props) {
   const createAppointment = useCreateAppointment();
+  const { toast } = useToast();
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
   const [type, setType] = useState('online');
   const [notes, setNotes] = useState('');
 
+  const handleStartChange = (value: string) => {
+    setStartTime(value);
+    // Auto-fill endTime to startTime + 50 minutes
+    if (value) {
+      setEndTime(addMinutes(value, 50));
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await createAppointment.mutateAsync({
-      careEpisodeId: episodeId,
-      clientId,
-      startTime,
-      endTime,
-      type,
-      notes: notes || undefined,
-    });
-    onDone();
+    try {
+      await createAppointment.mutateAsync({
+        careEpisodeId: episodeId,
+        clientId,
+        startTime,
+        endTime,
+        type,
+        notes: notes || undefined,
+      });
+      toast('预约已创建', 'success');
+      onDone();
+    } catch (err: any) {
+      toast(err?.message || '创建失败', 'error');
+    }
   };
 
   return (
@@ -37,7 +62,7 @@ export function AppointmentForm({ episodeId, clientId, onDone }: Props) {
             <input
               type="datetime-local"
               value={startTime}
-              onChange={(e) => setStartTime(e.target.value)}
+              onChange={(e) => handleStartChange(e.target.value)}
               required
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
@@ -51,6 +76,7 @@ export function AppointmentForm({ episodeId, clientId, onDone }: Props) {
               required
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
+            <p className="text-xs text-slate-400 mt-1">默认 50 分钟</p>
           </div>
         </div>
 

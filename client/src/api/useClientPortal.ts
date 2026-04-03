@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { CareEpisode, AssessmentResult, Appointment, CareTimelineEvent } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
@@ -70,5 +70,33 @@ export function useAvailableCourses() {
       `${orgPrefix()}/courses`,
     ),
     enabled: !!orgId,
+  });
+}
+
+export function useCounselors() {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['counselors', orgId],
+    queryFn: () => api.get<{ id: string; name: string; avatarUrl?: string }[]>(
+      `${orgPrefix()}/counselors`,
+    ),
+    enabled: !!orgId,
+  });
+}
+
+export function useCreateAppointmentRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: {
+      counselorId: string;
+      startTime: string;
+      endTime: string;
+      type?: string;
+      notes?: string;
+    }) => api.post<Appointment>(`${orgPrefix()}/appointment-requests`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['myAppointments'] });
+      qc.invalidateQueries({ queryKey: ['clientDashboard'] });
+    },
   });
 }

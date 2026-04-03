@@ -7,6 +7,7 @@ const clientNav = [
   { to: '/portal/reports', label: '我的报告' },
   { to: '/portal/services', label: '服务大厅' },
   { to: '/portal/appointments', label: '我的预约' },
+  { to: '/portal/consents', label: '用户协议' },
 ];
 
 export function ClientPortalLayout() {

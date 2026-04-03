@@ -1,7 +1,10 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useClientDashboard, useMyTimeline } from '../../../api/useClientPortal';
+import { useMyDocuments } from '../../../api/useConsent';
 import { Timeline } from '../../counseling/components/Timeline';
 import { PageLoading, RiskBadge, EmptyState } from '../../../shared/components';
+import { AlertTriangle } from 'lucide-react';
 
 const riskDisplay: Record<string, { label: string; color: string; bg: string }> = {
   level_1: { label: '状态良好', color: 'text-green-700', bg: 'bg-green-50' },
@@ -11,8 +14,11 @@ const riskDisplay: Record<string, { label: string; color: string; bg: string }> 
 };
 
 export function ClientDashboard() {
+  const navigate = useNavigate();
   const { data, isLoading } = useClientDashboard();
   const { data: timeline, isLoading: timelineLoading } = useMyTimeline();
+  const { data: myDocs } = useMyDocuments();
+  const pendingDocs = (myDocs || []).filter((d) => d.status === 'pending');
 
   if (isLoading) {
     return <PageLoading />;
@@ -24,6 +30,28 @@ export function ClientDashboard() {
 
   return (
     <div className="space-y-6">
+      {pendingDocs.length > 0 && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0" />
+            <div>
+              <div className="text-sm font-medium text-amber-800">
+                您有 {pendingDocs.length} 份用户协议待签署
+              </div>
+              <div className="text-xs text-amber-600 mt-0.5">
+                请尽快查看并签署，以便开展后续服务
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => navigate('/portal/consents')}
+            className="px-4 py-2 bg-amber-600 text-white rounded-lg text-sm font-medium hover:bg-amber-500 flex-shrink-0"
+          >
+            前往签署
+          </button>
+        </div>
+      )}
+
       <h2 className="text-xl font-bold text-slate-900">我的健康概览</h2>
 
       {/* Status cards */}

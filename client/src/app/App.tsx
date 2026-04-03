@@ -7,6 +7,12 @@ import { ScaleLibrary } from '../features/assessment/pages/ScaleLibrary';
 import { AssessmentManagement } from '../features/assessment/pages/AssessmentManagement';
 import { AssessmentRunner } from '../features/assessment/pages/AssessmentRunner';
 import { CaseWorkbench } from '../features/counseling/pages/CaseWorkbench';
+import { EpisodeDetail } from '../features/counseling/pages/EpisodeDetail';
+import { CreateEpisodeWizard } from '../features/counseling/pages/CreateEpisodeWizard';
+import { MemberManagement } from '../features/settings/pages/MemberManagement';
+import { ReminderSettings } from '../features/settings/pages/ReminderSettings';
+import { AvailabilitySettings } from '../features/counseling/pages/AvailabilitySettings';
+import { AppointmentManagement } from '../features/counseling/pages/AppointmentManagement';
 import { GroupCenter } from '../features/groups/pages/GroupCenter';
 import { CourseCenter } from '../features/courses/pages/CourseCenter';
 import { CourseRequirementsConfig } from '../features/courses/pages/CourseRequirementsConfig';
@@ -17,8 +23,13 @@ import { ClientDashboard } from '../features/client-portal/pages/ClientDashboard
 import { ServiceHall } from '../features/client-portal/pages/ServiceHall';
 import { MyAppointments } from '../features/client-portal/pages/MyAppointments';
 import { MyReports } from '../features/client-portal/pages/MyReports';
+import { BookAppointment } from '../features/client-portal/pages/BookAppointment';
 import { CourseReader } from '../features/client-portal/pages/CourseReader';
+import { ConsentCenter } from '../features/client-portal/pages/ConsentCenter';
 import { DashboardHome } from '../features/dashboard/pages/DashboardHome';
+import { KnowledgeBase } from '../features/knowledge/pages/KnowledgeBase';
+import { GoalLibrary } from '../features/knowledge/pages/GoalLibrary';
+import { SchemesTab, CoursesTab, DocumentTemplatesTab } from '../features/knowledge/pages/PlaceholderTabs';
 
 function AppRoutes() {
   const { user, currentOrgId, currentRole } = useAuthStore();
@@ -46,6 +57,8 @@ function AppRoutes() {
             <Route path="reports" element={<MyReports />} />
             <Route path="services" element={<ServiceHall />} />
             <Route path="appointments" element={<MyAppointments />} />
+            <Route path="book" element={<BookAppointment />} />
+            <Route path="consents" element={<ConsentCenter />} />
             <Route path="courses/:courseId" element={<CourseReader />} />
           </Route>
           <Route path="*" element={<Navigate to="/portal" replace />} />
@@ -54,9 +67,22 @@ function AppRoutes() {
         /* Counselor / Admin shell */
         <Route path="/" element={<AppShell />}>
           <Route index element={<DashboardHome />} />
-          <Route path="scales" element={<ScaleLibrary />} />
+          <Route path="knowledge" element={<KnowledgeBase />}>
+            <Route path="scales" element={<ScaleLibrary />} />
+            <Route path="goals" element={<GoalLibrary />} />
+            <Route path="schemes" element={<SchemesTab />} />
+            <Route path="courses" element={<CoursesTab />} />
+            <Route path="templates" element={<DocumentTemplatesTab />} />
+          </Route>
+          <Route path="scales" element={<Navigate to="/knowledge/scales" replace />} />
           <Route path="assessments" element={<AssessmentManagement />} />
           <Route path="episodes" element={<CaseWorkbench />} />
+          <Route path="episodes/new" element={<CreateEpisodeWizard />} />
+          <Route path="episodes/:episodeId" element={<EpisodeDetail />} />
+          <Route path="settings/members" element={<MemberManagement />} />
+          <Route path="settings/reminders" element={<ReminderSettings />} />
+          <Route path="appointments" element={<AppointmentManagement />} />
+          <Route path="availability" element={<AvailabilitySettings />} />
           <Route path="groups" element={<GroupCenter />} />
           <Route path="courses" element={<CourseCenter />} />
           <Route path="courses/new/requirements" element={<CourseRequirementsConfig />} />
@@ -84,12 +110,13 @@ function OrgSelector() {
 
 const navItems: { to: string; label: string; end?: boolean; disabled?: boolean }[] = [
   { to: '/', label: '首页', end: true },
-  { to: '/scales', label: '量表库' },
+  { to: '/knowledge', label: '知识库' },
   { to: '/assessments', label: '测评管理' },
   // Phase 3+
   { to: '/episodes', label: '个体咨询' },
   { to: '/groups', label: '团辅中心' },
   { to: '/courses', label: '课程中心' },
+  { to: '/settings/members', label: '成员管理' },
 ];
 
 function AppShell() {

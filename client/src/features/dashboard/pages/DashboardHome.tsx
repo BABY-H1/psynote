@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import {
   ClipboardList, Users, BookOpen, Layers,
   Calendar, FileText, AlertTriangle, TrendingUp,
-  ArrowRight, Activity,
+  ArrowRight, Activity, Settings,
 } from 'lucide-react';
-import { useEpisodes } from '../../../api/useCounseling';
+import { useEpisodes, useAppointments, useUpdateAppointmentStatus } from '../../../api/useCounseling';
 import { useAssessments, useResults } from '../../../api/useAssessments';
 import { useGroupInstances } from '../../../api/useGroups';
 import { useCourses } from '../../../api/useCourses';
 import { useAuthStore } from '../../../stores/authStore';
+import { StatusBadge, useToast } from '../../../shared/components';
 
 export function DashboardHome() {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export function DashboardHome() {
   const { data: results } = useResults();
   const { data: groups } = useGroupInstances();
   const { data: courses } = useCourses();
+  const { data: appointmentRows } = useAppointments();
 
   // Compute stats
   const activeEpisodes = episodes?.filter((e) => e.status === 'active') ?? [];
@@ -29,7 +31,14 @@ export function DashboardHome() {
   );
   const recruitingGroups = groups?.filter((g) => g.status === 'recruiting') ?? [];
   const publishedCourses = courses?.filter((c) => c.status === 'published') ?? [];
-  const recentResults = results?.slice(0, 5) ?? [];
+
+  // Today's appointments
+  const today = new Date().toISOString().slice(0, 10);
+  const todayAppointments = (appointmentRows || [])
+    .filter((r) => r.appointment.startTime.slice(0, 10) === today)
+    .sort((a, b) => a.appointment.startTime.localeCompare(b.appointment.startTime));
+  const pendingCount = (appointmentRows || [])
+    .filter((r) => r.appointment.status === 'pending').length;
 
   // Risk distribution
   const riskCounts = {
@@ -113,8 +122,41 @@ export function DashboardHome() {
         />
       </div>
 
-      {/* Bottom row: risk distribution + recent results */}
+      {/* Bottom row: today's appointments + risk distribution */}
       <div className="grid lg:grid-cols-2 gap-4">
+        {/* Today's appointments */}
+        <div className="bg-white rounded-xl border border-slate-200 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-slate-900">今日预约</h3>
+              {pendingCount > 0 && (
+                <span className="px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded-full text-xs font-medium">
+                  {pendingCount} 待确认
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => navigate('/availability')}
+                className="text-xs text-slate-400 hover:text-slate-600 flex items-center gap-1"
+              >
+                <Settings className="w-3 h-3" /> 排班设置
+              </button>
+              <button
+                onClick={() => navigate('/appointments')}
+                className="text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1"
+              >
+                全部预约 <ArrowRight className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+          {todayAppointments.length === 0 ? (
+            <div className="text-center py-8 text-sm text-slate-400">今日暂无预约</div>
+          ) : (
+            <TodayAppointmentList items={todayAppointments} />
+          )}
+        </div>
+
         {/* Risk distribution */}
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center justify-between mb-4">
@@ -137,46 +179,6 @@ export function DashboardHome() {
             </div>
           )}
         </div>
-
-        {/* Recent results */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-semibold text-slate-900">最近测评结果</h3>
-            <button
-              onClick={() => navigate('/assessments')}
-              className="text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1"
-            >
-              查看全部 <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
-          {recentResults.length === 0 ? (
-            <div className="text-center py-8 text-sm text-slate-400">暂无测评结果</div>
-          ) : (
-            <div className="space-y-2">
-              {recentResults.map((r) => (
-                <div key={r.id} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <RiskDot level={r.riskLevel} />
-                    <div className="min-w-0">
-                      <div className="text-sm text-slate-700 truncate">
-                        {r.assessmentId?.slice(0, 8)}...
-                      </div>
-                      <div className="text-xs text-slate-400">
-                        {r.createdAt ? new Date(r.createdAt).toLocaleDateString('zh-CN') : '-'}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {r.totalScore != null && (
-                      <span className="text-sm font-medium text-slate-900">{r.totalScore}分</span>
-                    )}
-                    <RiskTag level={r.riskLevel} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );
@@ -191,16 +193,21 @@ const colorMap = {
   purple: { bg: 'bg-purple-50', text: 'text-purple-600', border: 'border-purple-100' },
 };
 
-function ShortcutCard({ icon, label, desc, onClick, color }: {
+function ShortcutCard({ icon, label, desc, onClick, color, badge }: {
   icon: React.ReactNode; label: string; desc: string;
-  onClick: () => void; color: keyof typeof colorMap;
+  onClick: () => void; color: keyof typeof colorMap; badge?: number;
 }) {
   const c = colorMap[color];
   return (
     <button
       onClick={onClick}
-      className={`flex items-center gap-3 p-4 rounded-xl border ${c.border} ${c.bg} hover:shadow-sm transition text-left w-full group`}
+      className={`flex items-center gap-3 p-4 rounded-xl border ${c.border} ${c.bg} hover:shadow-sm transition text-left w-full group relative`}
     >
+      {badge != null && badge > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white text-xs rounded-full flex items-center justify-center font-medium">
+          {badge}
+        </span>
+      )}
       <div className={`${c.text}`}>{icon}</div>
       <div>
         <div className={`text-sm font-semibold ${c.text}`}>{label}</div>
@@ -275,5 +282,68 @@ function RiskTag({ level }: { level?: string | null }) {
     <span className={`text-xs px-2 py-0.5 rounded-full ${riskTagColors[level]}`}>
       {riskLabels[level]}
     </span>
+  );
+}
+
+const apptStatusConfig: Record<string, { label: string; variant: 'yellow' | 'blue' | 'green' | 'slate' | 'red' }> = {
+  pending: { label: '待确认', variant: 'yellow' },
+  confirmed: { label: '已确认', variant: 'blue' },
+  completed: { label: '已完成', variant: 'green' },
+  cancelled: { label: '已取消', variant: 'slate' },
+  no_show: { label: '未到场', variant: 'red' },
+};
+
+const apptTypeLabels: Record<string, string> = {
+  online: '线上',
+  offline: '线下',
+  phone: '电话',
+};
+
+function TodayAppointmentList({ items }: { items: { appointment: any; clientName?: string }[] }) {
+  const updateStatus = useUpdateAppointmentStatus();
+  const { toast } = useToast();
+
+  const handleAction = async (id: string, status: string) => {
+    try {
+      await updateStatus.mutateAsync({ appointmentId: id, status });
+      toast('状态已更新', 'success');
+    } catch {
+      toast('操作失败', 'error');
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      {items.map(({ appointment: a, clientName }) => {
+        const status = apptStatusConfig[a.status] || apptStatusConfig.pending;
+        return (
+          <div key={a.id} className="flex items-center justify-between py-2 border-b border-slate-50 last:border-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="text-sm font-medium text-slate-700 whitespace-nowrap">
+                {new Date(a.startTime).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+              </div>
+              <div className="min-w-0">
+                <div className="text-sm text-slate-900 truncate">{clientName || '未知'}</div>
+                <div className="text-xs text-slate-400">
+                  {a.type ? apptTypeLabels[a.type] || a.type : ''}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {a.status === 'pending' && (
+                <button
+                  onClick={() => handleAction(a.id, 'confirmed')}
+                  disabled={updateStatus.isPending}
+                  className="text-xs px-2 py-1 bg-brand-600 text-white rounded hover:bg-brand-500 disabled:opacity-50"
+                >
+                  确认
+                </button>
+              )}
+              <StatusBadge label={status.label} variant={status.variant} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }

@@ -200,6 +200,50 @@ export async function orgRoutes(app: FastifyInstance) {
     });
   });
 
+  /** Update a member (role, status) */
+  app.patch('/:orgId/members/:memberId', {
+    preHandler: [orgContextGuard, requireRole('org_admin')],
+  }, async (request) => {
+    const { memberId } = request.params as { memberId: string };
+    const body = request.body as { role?: string; status?: string; permissions?: Record<string, unknown> };
+
+    const updates: Record<string, unknown> = {};
+    if (body.role) updates.role = body.role;
+    if (body.status) updates.status = body.status;
+    if (body.permissions) updates.permissions = body.permissions;
+
+    if (Object.keys(updates).length === 0) {
+      throw new ValidationError('No fields to update');
+    }
+
+    const [updated] = await db
+      .update(orgMembers)
+      .set(updates)
+      .where(eq(orgMembers.id, memberId))
+      .returning();
+
+    if (!updated) throw new ValidationError('Member not found');
+
+    await logAudit(request, 'update', 'org_members', memberId);
+    return updated;
+  });
+
+  /** Remove a member */
+  app.delete('/:orgId/members/:memberId', {
+    preHandler: [orgContextGuard, requireRole('org_admin')],
+  }, async (request) => {
+    const { memberId } = request.params as { memberId: string };
+
+    // Don't allow removing yourself
+    const [member] = await db.select().from(orgMembers).where(eq(orgMembers.id, memberId)).limit(1);
+    if (!member) throw new ValidationError('Member not found');
+    if (member.userId === request.user!.id) throw new ValidationError('Cannot remove yourself');
+
+    await db.delete(orgMembers).where(eq(orgMembers.id, memberId));
+    await logAudit(request, 'delete', 'org_members', memberId);
+    return { success: true };
+  });
+
   /** Get triage configuration */
   app.get('/:orgId/triage-config', {
     preHandler: [orgContextGuard],

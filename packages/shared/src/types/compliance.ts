@@ -26,6 +26,18 @@ export interface PhiAccessLog {
   createdAt: string;
 }
 
+export interface ConsentTemplate {
+  id: string;
+  orgId: string;
+  title: string;
+  consentType: ConsentType;
+  content: string;
+  isDefault: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ConsentRecord {
   id: string;
   orgId: string;

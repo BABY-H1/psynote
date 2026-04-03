@@ -29,7 +29,7 @@ export async function sessionNoteRoutes(app: FastifyInstance) {
     return note;
   });
 
-  /** Create a session note (SOAP) */
+  /** Create a session note (multi-format) */
   app.post('/', {
     preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request, reply) => {
@@ -37,6 +37,8 @@ export async function sessionNoteRoutes(app: FastifyInstance) {
       careEpisodeId?: string;
       appointmentId?: string;
       clientId: string;
+      noteFormat?: string;
+      templateId?: string;
       sessionDate: string;
       duration?: number;
       sessionType?: string;
@@ -44,6 +46,7 @@ export async function sessionNoteRoutes(app: FastifyInstance) {
       objective?: string;
       assessment?: string;
       plan?: string;
+      fields?: Record<string, string>;
       summary?: string;
       tags?: string[];
     };
@@ -57,6 +60,8 @@ export async function sessionNoteRoutes(app: FastifyInstance) {
       appointmentId: body.appointmentId,
       clientId: body.clientId,
       counselorId: request.user!.id,
+      noteFormat: body.noteFormat,
+      templateId: body.templateId,
       sessionDate: body.sessionDate,
       duration: body.duration,
       sessionType: body.sessionType,
@@ -64,6 +69,7 @@ export async function sessionNoteRoutes(app: FastifyInstance) {
       objective: body.objective,
       assessment: body.assessment,
       plan: body.plan,
+      fields: body.fields,
       summary: body.summary,
       tags: body.tags,
     });
@@ -82,6 +88,7 @@ export async function sessionNoteRoutes(app: FastifyInstance) {
       objective: string;
       assessment: string;
       plan: string;
+      fields: Record<string, string>;
       summary: string;
       tags: string[];
     }>;

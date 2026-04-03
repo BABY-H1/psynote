@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { CareEpisode, CareTimelineEvent, Appointment, SessionNote, Referral, FollowUpPlan, FollowUpReview } from '@psynote/shared';
+import type { CareEpisode, CareTimelineEvent, Appointment, SessionNote, Referral, FollowUpPlan, FollowUpReview, NoteTemplate, NoteAttachment } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
 
@@ -107,7 +107,7 @@ export function useCloseEpisode() {
 
 // ─── Appointments ────────────────────────────────────────────────
 
-export function useAppointments(filters?: { counselorId?: string; clientId?: string }) {
+export function useAppointments(filters?: { counselorId?: string; clientId?: string; status?: string; from?: string; to?: string }) {
   const orgId = useAuthStore((s) => s.currentOrgId);
   const params = new URLSearchParams();
   if (filters) {
@@ -177,6 +177,8 @@ export function useCreateSessionNote() {
       careEpisodeId?: string;
       appointmentId?: string;
       clientId: string;
+      noteFormat?: string;
+      templateId?: string;
       sessionDate: string;
       duration?: number;
       sessionType?: string;
@@ -184,6 +186,7 @@ export function useCreateSessionNote() {
       objective?: string;
       assessment?: string;
       plan?: string;
+      fields?: Record<string, string>;
       summary?: string;
       tags?: string[];
     }) => api.post<SessionNote>(`${orgPrefix()}/session-notes`, data),
@@ -191,6 +194,40 @@ export function useCreateSessionNote() {
       qc.invalidateQueries({ queryKey: ['sessionNotes'] });
       qc.invalidateQueries({ queryKey: ['timeline'] });
     },
+  });
+}
+
+// ─── Note Templates ─────────────────────────────────────────────
+
+export function useNoteTemplates() {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['noteTemplates', orgId],
+    queryFn: () => api.get<NoteTemplate[]>(`${orgPrefix()}/note-templates`),
+    enabled: !!orgId,
+  });
+}
+
+export function useCreateNoteTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { title: string; format: string; fieldDefinitions: unknown[]; visibility?: string }) =>
+      api.post<NoteTemplate>(`${orgPrefix()}/note-templates`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['noteTemplates'] }); },
+  });
+}
+
+// ─── Note Attachments ───────────────────────────────────────────
+
+export function useUploadNoteAttachment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ noteId, file }: { noteId: string; file: File }) => {
+      const formData = new FormData();
+      formData.append('file', file);
+      return api.uploadFile<NoteAttachment>(`${orgPrefix()}/session-notes/${noteId}/attachments`, formData);
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['noteAttachments'] }); },
   });
 }
 
@@ -226,6 +263,23 @@ export function useCreateReferral() {
   });
 }
 
+export function useUpdateReferral() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ referralId, ...data }: {
+      referralId: string;
+      status?: string;
+      followUpNotes?: string;
+      targetName?: string;
+      targetContact?: string;
+    }) => api.patch<Referral>(`${orgPrefix()}/referrals/${referralId}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['referrals'] });
+      qc.invalidateQueries({ queryKey: ['timeline'] });
+    },
+  });
+}
+
 // ─── Follow-up ───────────────────────────────────────────────────
 
 export function useFollowUpPlans(careEpisodeId?: string) {
@@ -249,6 +303,23 @@ export function useCreateFollowUpPlan() {
       nextDue?: string;
       notes?: string;
     }) => api.post<FollowUpPlan>(`${orgPrefix()}/follow-up/plans`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['followUpPlans'] });
+      qc.invalidateQueries({ queryKey: ['timeline'] });
+    },
+  });
+}
+
+export function useUpdateFollowUpPlan() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ planId, ...data }: {
+      planId: string;
+      frequency?: string;
+      nextDue?: string;
+      status?: string;
+      notes?: string;
+    }) => api.patch<FollowUpPlan>(`${orgPrefix()}/follow-up/plans/${planId}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['followUpPlans'] });
       qc.invalidateQueries({ queryKey: ['timeline'] });

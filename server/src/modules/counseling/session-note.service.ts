@@ -30,12 +30,27 @@ export async function getSessionNoteById(noteId: string) {
   return note;
 }
 
+/** Get unified fields regardless of note format */
+export function getNoteFieldsUnified(note: typeof sessionNotes.$inferSelect): Record<string, string> {
+  if (note.noteFormat === 'soap') {
+    const result: Record<string, string> = {};
+    if (note.subjective) result.subjective = note.subjective;
+    if (note.objective) result.objective = note.objective;
+    if (note.assessment) result.assessment = note.assessment;
+    if (note.plan) result.plan = note.plan;
+    return result;
+  }
+  return (note.fields as Record<string, string>) || {};
+}
+
 export async function createSessionNote(input: {
   orgId: string;
   careEpisodeId?: string;
   appointmentId?: string;
   clientId: string;
   counselorId: string;
+  noteFormat?: string;
+  templateId?: string;
   sessionDate: string;
   duration?: number;
   sessionType?: string;
@@ -43,35 +58,44 @@ export async function createSessionNote(input: {
   objective?: string;
   assessment?: string;
   plan?: string;
+  fields?: Record<string, string>;
   summary?: string;
   tags?: string[];
 }) {
+  const format = input.noteFormat || 'soap';
+
   const [note] = await db.insert(sessionNotes).values({
     orgId: input.orgId,
     careEpisodeId: input.careEpisodeId || null,
     appointmentId: input.appointmentId || null,
     clientId: input.clientId,
     counselorId: input.counselorId,
+    noteFormat: format,
+    templateId: input.templateId || null,
     sessionDate: input.sessionDate,
     duration: input.duration,
     sessionType: input.sessionType,
-    subjective: input.subjective,
-    objective: input.objective,
-    assessment: input.assessment,
-    plan: input.plan,
+    // SOAP columns (only for soap format)
+    subjective: format === 'soap' ? input.subjective : null,
+    objective: format === 'soap' ? input.objective : null,
+    assessment: format === 'soap' ? input.assessment : null,
+    plan: format === 'soap' ? input.plan : null,
+    // Generic fields (for non-SOAP formats)
+    fields: format !== 'soap' ? (input.fields || {}) : {},
     summary: input.summary,
     tags: input.tags || [],
   }).returning();
 
   // Add to episode timeline
   if (input.careEpisodeId) {
+    const formatLabel = { soap: 'SOAP', dap: 'DAP', birp: 'BIRP', custom: '自定义' }[format] || format;
     await db.insert(careTimeline).values({
       careEpisodeId: input.careEpisodeId,
       eventType: 'session_note',
       refId: note.id,
-      title: '咨询记录',
+      title: `咨询记录 (${formatLabel})`,
       summary: input.summary || `${input.sessionDate} ${input.sessionType || '咨询'}`,
-      metadata: { duration: input.duration, sessionType: input.sessionType },
+      metadata: { duration: input.duration, sessionType: input.sessionType, noteFormat: format },
       createdBy: input.counselorId,
     });
   }
@@ -86,6 +110,7 @@ export async function updateSessionNote(
     objective: string;
     assessment: string;
     plan: string;
+    fields: Record<string, string>;
     summary: string;
     tags: string[];
   }>,

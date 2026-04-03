@@ -51,3 +51,39 @@ export async function analyzeSessionMaterial(input: {
     { temperature: 0.4, maxTokens: 2048 },
   );
 }
+
+/**
+ * Format-aware material analysis.
+ * Extracts content into the fields defined by any note format (not just SOAP).
+ */
+export async function analyzeSessionMaterialForFormat(input: {
+  content: string;
+  format: string;
+  fieldDefinitions: { key: string; label: string }[];
+  inputType?: string;
+}): Promise<Record<string, string>> {
+  const contextHint =
+    input.inputType === 'transcribed_audio' ? '以下是咨询录音的转录文本。' :
+    input.inputType === 'transcribed_image' ? '以下是手写咨询笔记的OCR识别文本。' :
+    '以下是咨询会谈的原始记录。';
+
+  const fieldDesc = input.fieldDefinitions
+    .map((f) => `- ${f.key}: ${f.label}`)
+    .join('\n');
+
+  const systemPrompt = `你是一位经验丰富的临床督导师。分析提供的咨询会谈原始素材，将其结构化为指定的笔记格式。
+
+目标格式: ${input.format.toUpperCase()}
+
+字段定义:
+${fieldDesc}
+
+请为每个字段生成专业、准确的内容。输出JSON对象，键为字段key，值为对应内容。
+语言：专业中文。输出纯文本，不使用Markdown格式。`;
+
+  return aiClient.generateJSON<Record<string, string>>(
+    systemPrompt,
+    `${contextHint}\n\n${input.content}`,
+    { temperature: 0.4, maxTokens: 2048 },
+  );
+}

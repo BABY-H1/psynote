@@ -13,7 +13,12 @@ import { reportRoutes } from './modules/assessment/report.routes.js';
 import { distributionRoutes } from './modules/assessment/distribution.routes.js';
 import { episodeRoutes } from './modules/counseling/episode.routes.js';
 import { appointmentRoutes } from './modules/counseling/appointment.routes.js';
+import { availabilityRoutes } from './modules/counseling/availability.routes.js';
 import { sessionNoteRoutes } from './modules/counseling/session-note.routes.js';
+import { noteTemplateRoutes } from './modules/counseling/note-template.routes.js';
+import { goalLibraryRoutes } from './modules/counseling/goal-library.routes.js';
+import { clientProfileRoutes } from './modules/counseling/client-profile.routes.js';
+import { treatmentPlanRoutes } from './modules/counseling/treatment-plan.routes.js';
 import { referralRoutes } from './modules/referral/referral.routes.js';
 import { followUpRoutes } from './modules/follow-up/follow-up.routes.js';
 import { aiRoutes } from './modules/ai/ai.routes.js';
@@ -21,6 +26,10 @@ import { schemeRoutes } from './modules/group/scheme.routes.js';
 import { instanceRoutes } from './modules/group/instance.routes.js';
 import { enrollmentRoutes } from './modules/group/enrollment.routes.js';
 import { courseRoutes } from './modules/course/course.routes.js';
+import { consentRoutes } from './modules/compliance/consent.routes.js';
+import { complianceReviewRoutes } from './modules/compliance/compliance-review.routes.js';
+import { notificationRoutes } from './modules/notification/notification.routes.js';
+import { reminderSettingsRoutes, publicAppointmentRoutes } from './modules/notification/reminder-settings.routes.js';
 import { clientPortalRoutes } from './modules/client-portal/client.routes.js';
 
 const app = Fastify({
@@ -60,7 +69,12 @@ await app.register(publicResultRoutes, { prefix: '/api/public/assessments' });
 // Counseling domain
 await app.register(episodeRoutes, { prefix: '/api/orgs/:orgId/episodes' });
 await app.register(appointmentRoutes, { prefix: '/api/orgs/:orgId/appointments' });
+await app.register(availabilityRoutes, { prefix: '/api/orgs/:orgId/availability' });
 await app.register(sessionNoteRoutes, { prefix: '/api/orgs/:orgId/session-notes' });
+await app.register(noteTemplateRoutes, { prefix: '/api/orgs/:orgId/note-templates' });
+await app.register(goalLibraryRoutes, { prefix: '/api/orgs/:orgId/goal-library' });
+await app.register(clientProfileRoutes, { prefix: '/api/orgs/:orgId/clients' });
+await app.register(treatmentPlanRoutes, { prefix: '/api/orgs/:orgId/treatment-plans' });
 await app.register(referralRoutes, { prefix: '/api/orgs/:orgId/referrals' });
 await app.register(followUpRoutes, { prefix: '/api/orgs/:orgId/follow-up' });
 
@@ -74,6 +88,19 @@ await app.register(enrollmentRoutes, { prefix: '/api/orgs/:orgId/group-instances
 
 // Course domain
 await app.register(courseRoutes, { prefix: '/api/orgs/:orgId/courses' });
+
+// Compliance
+await app.register(consentRoutes, { prefix: '/api/orgs/:orgId/compliance' });
+await app.register(complianceReviewRoutes, { prefix: '/api/orgs/:orgId/compliance' });
+
+// Notifications
+await app.register(notificationRoutes, { prefix: '/api/orgs/:orgId/notifications' });
+
+// Reminder settings
+await app.register(reminderSettingsRoutes, { prefix: '/api/orgs/:orgId/reminder-settings' });
+
+// Public appointment confirm/cancel (no auth)
+await app.register(publicAppointmentRoutes, { prefix: '/api/public/appointments' });
 
 // Client self-service portal
 await app.register(clientPortalRoutes, { prefix: '/api/orgs/:orgId/client' });
