@@ -21,6 +21,7 @@ interface Props {
 }
 
 import { RISK_LABELS, RISK_COLORS, ASSESSMENT_TYPE_LABELS, COLLECT_MODE_LABELS } from '../constants';
+import { downloadReportAsText, buildIndividualReportText, buildGroupReportText, buildTrendReportText } from '../utils/downloadReport';
 
 export function AssessmentDetail({ assessmentId, onClose }: Props) {
   const { data: assessment, isLoading } = useAssessment(assessmentId);
@@ -401,7 +402,7 @@ function IndividualReportView({ report, assessmentTitle, onClose }: { report: As
   const demographics = content.demographics as Record<string, unknown> | undefined;
 
   return (
-    <ReportShell title={`${assessmentTitle} — 个人报告`} date={new Date().toLocaleDateString('zh-CN')}>
+    <ReportShell title={`${assessmentTitle} — 个人报告`} date={new Date().toLocaleDateString('zh-CN')} onDownload={() => downloadReportAsText(`个人报告_${new Date().toLocaleDateString('zh-CN')}`, buildIndividualReportText(`${assessmentTitle} — 个人报告`, content, advice))}>
       <div className="flex justify-end">
         <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">返回列表</button>
       </div>
@@ -489,7 +490,7 @@ function TrendReportView({ report, onClose }: { report: AssessmentReport; onClos
   };
 
   return (
-    <ReportShell title="追踪评估趋势报告" subtitle={`共 ${content.assessmentCount || 0} 次测评`}>
+    <ReportShell title="追踪评估趋势报告" subtitle={`共 ${content.assessmentCount || 0} 次测评`} onDownload={() => downloadReportAsText(`趋势报告_${new Date().toLocaleDateString('zh-CN')}`, buildTrendReportText(content, advice))}>
       <div className="flex justify-end">
         <button onClick={onClose} className="text-xs text-slate-400 hover:text-slate-600">返回列表</button>
       </div>
@@ -577,7 +578,7 @@ function GroupReportView({ report, results, assessmentTitle, assessmentType, cro
   }, [results, assessmentType]);
 
   return (
-    <ReportShell title={`${assessmentTitle} — 团体报告`} subtitle={`${content.participantCount || results.length} 人参与`} date={new Date().toLocaleDateString('zh-CN')}>
+    <ReportShell title={`${assessmentTitle} — 团体报告`} subtitle={`${content.participantCount || results.length} 人参与`} date={new Date().toLocaleDateString('zh-CN')} onDownload={() => downloadReportAsText(`团体报告_${new Date().toLocaleDateString('zh-CN')}`, buildGroupReportText(`${assessmentTitle} — 团体报告`, content, report.aiNarrative || undefined))}>
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-3">
         <ScoreCard label="参与人数" value={content.participantCount || results.length} />
