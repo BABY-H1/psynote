@@ -206,6 +206,21 @@ export function useCreateSessionNote() {
   });
 }
 
+export function useUpdateSessionNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ noteId, ...data }: {
+      noteId: string;
+      subjective?: string; objective?: string; assessment?: string; plan?: string;
+      fields?: Record<string, string>; summary?: string; tags?: string[];
+    }) => api.patch<SessionNote>(`${orgPrefix()}/session-notes/${noteId}`, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['sessionNotes'] });
+      qc.invalidateQueries({ queryKey: ['timeline'] });
+    },
+  });
+}
+
 // ─── Note Templates ─────────────────────────────────────────────
 
 export function useNoteTemplates() {
