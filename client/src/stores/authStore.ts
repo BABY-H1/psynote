@@ -6,10 +6,12 @@ import { api } from '../api/client';
 interface AuthState {
   user: User | null;
   accessToken: string | null;
+  refreshToken: string | null;
   currentOrgId: string | null;
   currentRole: OrgRole | null;
   setAuth: (user: User, accessToken: string, refreshToken: string) => void;
   setOrg: (orgId: string, role: OrgRole) => void;
+  updateTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
 }
 
@@ -18,17 +20,22 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       accessToken: null,
+      refreshToken: null,
       currentOrgId: null,
       currentRole: null,
 
       setAuth: (user, accessToken, refreshToken) => {
         api.setToken(accessToken);
-        set({ user, accessToken });
-        // Store refreshToken separately if needed
+        set({ user, accessToken, refreshToken });
       },
 
       setOrg: (orgId, role) => {
         set({ currentOrgId: orgId, currentRole: role });
+      },
+
+      updateTokens: (accessToken, refreshToken) => {
+        api.setToken(accessToken);
+        set({ accessToken, refreshToken });
       },
 
       logout: () => {
@@ -36,6 +43,7 @@ export const useAuthStore = create<AuthState>()(
         set({
           user: null,
           accessToken: null,
+          refreshToken: null,
           currentOrgId: null,
           currentRole: null,
         });
@@ -46,6 +54,7 @@ export const useAuthStore = create<AuthState>()(
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
+        refreshToken: state.refreshToken,
         currentOrgId: state.currentOrgId,
         currentRole: state.currentRole,
       }),

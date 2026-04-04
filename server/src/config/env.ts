@@ -24,3 +24,9 @@ if (!parsed.success) {
 }
 
 export const env = parsed.data;
+
+// Hard-fail if production is missing critical auth secrets
+if (env.NODE_ENV === 'production' && !env.SUPABASE_JWT_SECRET) {
+  console.error('FATAL: SUPABASE_JWT_SECRET is required in production');
+  process.exit(1);
+}
