@@ -44,6 +44,8 @@ export function EpisodeDetail() {
   const navigate = useNavigate();
   const { data: episode } = useEpisode(episodeId);
   const { data: plans } = useTreatmentPlans(episodeId);
+  const { data: sessionNotes } = useSessionNotes({ careEpisodeId: episodeId });
+  const { data: profile } = useClientProfile(episode?.clientId);
   const closeEpisode = useCloseEpisode();
   const reopenEpisode = useReopenEpisode();
   const { toast } = useToast();
@@ -61,6 +63,9 @@ export function EpisodeDetail() {
   const goalProgress = goals.length > 0
     ? { total: goals.length, achieved: goals.filter((g: any) => g.status === 'achieved').length }
     : undefined;
+
+  const lastNote = sessionNotes?.[0];
+  const presentingIssues = (profile?.presentingIssues as string[]) || [];
 
   return (
     <>
@@ -150,6 +155,9 @@ export function EpisodeDetail() {
             activePlan={activePlan}
             plans={plans || []}
             goalProgress={goalProgress}
+            lastNoteSummary={lastNote?.summary || undefined}
+            lastNoteDate={lastNote ? lastNote.sessionDate : undefined}
+            presentingIssues={presentingIssues}
           />
         }
       />

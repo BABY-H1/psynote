@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import type { WorkMode } from './ChatWorkspace';
 import type { TreatmentPlan, TreatmentGoal } from '@psynote/shared';
 import { useCreateSessionNote } from '../../../api/useCounseling';
-import { useCreateTreatmentPlan, useUpdateTreatmentPlan, useUpdateGoalStatus } from '../../../api/useTreatmentPlan';
-import { RiskBadge, useToast } from '../../../shared/components';
-import { Save, Edit3, Target, FileText, TrendingUp } from 'lucide-react';
+import { useCreateTreatmentPlan, useUpdateGoalStatus } from '../../../api/useTreatmentPlan';
+import { useToast } from '../../../shared/components';
+import { Save, FileText, Target, User, GraduationCap } from 'lucide-react';
 import { BUILT_IN_FORMATS } from './NoteFormatSelector';
 
 interface Props {
@@ -20,43 +20,26 @@ interface Props {
   planSuggestion: any;
   activePlan?: TreatmentPlan;
   plans: TreatmentPlan[];
-  // Summary info
+  // Context info
+  goalProgress?: { total: number; achieved: number };
   lastNoteSummary?: string;
   lastNoteDate?: string;
-  goalProgress?: { total: number; achieved: number };
+  presentingIssues?: string[];
 }
 
 export function OutputPanel({
   mode, episodeId, clientId, episode,
   noteFields, noteFormat, onNoteFieldChange,
   planSuggestion, activePlan, plans,
-  lastNoteSummary, lastNoteDate, goalProgress,
+  goalProgress, lastNoteSummary, lastNoteDate, presentingIssues,
 }: Props) {
   const createNote = useCreateSessionNote();
-  const createPlan = useCreateTreatmentPlan();
   const updateGoalStatus = useUpdateGoalStatus();
   const { toast } = useToast();
 
   return (
     <div className="flex flex-col h-full">
-      {/* Header: client summary (always visible) */}
-      <div className="p-3 border-b border-slate-200">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-bold text-slate-900">{episode.client?.name || '未知'}</span>
-          <RiskBadge level={episode.currentRisk} />
-        </div>
-        {episode.chiefComplaint && (
-          <p className="text-xs text-slate-500 mb-2">{episode.chiefComplaint}</p>
-        )}
-        <div className="flex gap-3 text-xs text-slate-400">
-          {lastNoteDate && <span>上次笔记: {lastNoteDate}</span>}
-          {goalProgress && goalProgress.total > 0 && (
-            <span>目标: {goalProgress.achieved}/{goalProgress.total}</span>
-          )}
-        </div>
-      </div>
-
-      {/* Mode-specific output */}
+      {/* Mode-specific output — NO shared header */}
       <div className="flex-1 overflow-y-auto">
         {mode === 'note' && (
           <NoteOutput
@@ -101,18 +84,20 @@ export function OutputPanel({
           />
         )}
         {mode === 'simulate' && (
-          <div className="p-4 text-center text-sm text-slate-400">
-            <div className="text-3xl mb-3">🗣️</div>
-            <p>模拟来访者对话进行中</p>
-            <p className="text-xs mt-1">在左侧和"来访者"对话，练习咨询技巧</p>
-          </div>
+          <SimulateContext
+            episode={episode}
+            lastNoteSummary={lastNoteSummary}
+            lastNoteDate={lastNoteDate}
+            presentingIssues={presentingIssues}
+          />
         )}
         {mode === 'supervise' && (
-          <div className="p-4 text-center text-sm text-slate-400">
-            <div className="text-3xl mb-3">🎓</div>
-            <p>AI 督导进行中</p>
-            <p className="text-xs mt-1">在左侧和督导讨论你的个案思考</p>
-          </div>
+          <SuperviseContext
+            episode={episode}
+            activePlan={activePlan}
+            lastNoteSummary={lastNoteSummary}
+            lastNoteDate={lastNoteDate}
+          />
         )}
       </div>
     </div>
@@ -128,7 +113,7 @@ function NoteOutput({
   onChange: (key: string, value: string) => void;
   onSave: () => void; isSaving: boolean;
 }) {
-  const fmt = BUILT_IN_FORMATS.find((f) => f.format === format) || BUILT_IN_FORMATS[0];
+  const fmt = BUILT_IN_FORMATS.find((f: any) => f.format === format) || BUILT_IN_FORMATS[0];
   const hasContent = Object.values(fields).some((v) => v?.trim());
 
   return (
@@ -138,18 +123,15 @@ function NoteOutput({
           {fmt.title} — {format.toUpperCase()}
         </span>
         {hasContent && (
-          <button
-            onClick={onSave}
-            disabled={isSaving}
-            className="flex items-center gap-1 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-500 disabled:opacity-50"
-          >
+          <button onClick={onSave} disabled={isSaving}
+            className="flex items-center gap-1 px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs hover:bg-brand-500 disabled:opacity-50">
             <Save className="w-3 h-3" />
             {isSaving ? '保存中...' : '保存笔记'}
           </button>
         )}
       </div>
 
-      {fmt.fieldDefinitions.map((fd) => (
+      {fmt.fieldDefinitions.map((fd: any) => (
         <div key={fd.key}>
           <label className="block text-xs font-medium text-slate-500 mb-1">{fd.label}</label>
           <textarea
@@ -183,19 +165,19 @@ function PlanOutput({
 }) {
   const createPlan = useCreateTreatmentPlan();
   const { toast } = useToast();
-
   const goals = (activePlan?.goals as TreatmentGoal[]) || [];
   const achievedCount = goals.filter((g) => g.status === 'achieved').length;
 
   return (
     <div className="p-3 space-y-4">
-      {/* Active plan */}
       {activePlan ? (
         <div>
-          <div className="text-xs font-medium text-slate-500 mb-2">当前计划：{activePlan.title || '未命名'}</div>
+          <div className="flex items-center gap-2 mb-2">
+            <Target className="w-3.5 h-3.5 text-brand-500" />
+            <span className="text-xs font-semibold text-slate-700">{activePlan.title || '治疗计划'}</span>
+          </div>
           {activePlan.approach && <div className="text-xs text-slate-400 mb-2">取向：{activePlan.approach}</div>}
 
-          {/* Progress bar */}
           {goals.length > 0 && (
             <div className="flex items-center gap-2 mb-3">
               <div className="flex-1 h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -205,7 +187,6 @@ function PlanOutput({
             </div>
           )}
 
-          {/* Goals */}
           <div className="space-y-1.5">
             {goals.map((g) => (
               <div key={g.id} className="flex items-center gap-2 text-xs">
@@ -214,70 +195,149 @@ function PlanOutput({
                   className={`w-4 h-4 rounded border flex-shrink-0 ${
                     g.status === 'achieved' ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-300'
                   }`}
-                >
-                  {g.status === 'achieved' && '✓'}
-                </button>
-                <span className={g.status === 'achieved' ? 'text-slate-400 line-through' : 'text-slate-700'}>
-                  {g.description}
-                </span>
+                >{g.status === 'achieved' && '✓'}</button>
+                <span className={g.status === 'achieved' ? 'text-slate-400 line-through' : 'text-slate-700'}>{g.description}</span>
               </div>
             ))}
           </div>
+
+          {activePlan.sessionPlan && (
+            <div className="mt-3 text-xs text-slate-500">安排：{activePlan.sessionPlan}</div>
+          )}
         </div>
       ) : (
         <div className="text-xs text-slate-400 text-center py-4">
-          尚无治疗计划<br />在左侧和 AI 讨论后，建议方案会出现在这里
+          尚无治疗计划<br />在左侧和 AI 讨论后，方案会出现在这里
         </div>
       )}
 
-      {/* AI suggestion */}
       {suggestion && (
         <div className="border-t border-slate-100 pt-3">
           <div className="text-xs font-medium text-teal-600 mb-2">AI 建议方案</div>
           <div className="text-xs text-slate-600 mb-2">{suggestion.rationale}</div>
-
           {suggestion.suggestedGoals?.map((g: any, i: number) => (
             <div key={i} className="text-xs text-slate-600 mb-1">• {g.description}</div>
           ))}
-
           {suggestion.sessionPlanSuggestion && (
             <div className="text-xs text-slate-400 mt-2">安排：{suggestion.sessionPlanSuggestion}</div>
           )}
-
           {!activePlan && (
             <button
               onClick={async () => {
                 try {
                   await createPlan.mutateAsync({
-                    careEpisodeId: episodeId,
-                    title: '治疗计划',
-                    goals: suggestion.suggestedGoals?.map((g: any) => ({
-                      id: crypto.randomUUID(),
-                      description: g.description,
-                      status: 'active',
-                      createdAt: new Date().toISOString(),
-                    })) || [],
-                    interventions: suggestion.suggestedInterventions?.map((i: any) => ({
-                      id: crypto.randomUUID(),
-                      description: i.description,
-                      frequency: i.frequency,
-                    })) || [],
-                    sessionPlan: suggestion.sessionPlanSuggestion,
-                    status: 'active',
+                    careEpisodeId: episodeId, title: '治疗计划',
+                    goals: suggestion.suggestedGoals?.map((g: any) => ({ id: crypto.randomUUID(), description: g.description, status: 'active', createdAt: new Date().toISOString() })) || [],
+                    interventions: suggestion.suggestedInterventions?.map((i: any) => ({ id: crypto.randomUUID(), description: i.description, frequency: i.frequency })) || [],
+                    sessionPlan: suggestion.sessionPlanSuggestion, status: 'active',
                   });
                   toast('治疗计划已创建', 'success');
-                } catch {
-                  toast('创建失败', 'error');
-                }
+                } catch { toast('创建失败', 'error'); }
               }}
               disabled={createPlan.isPending}
               className="mt-3 px-3 py-1.5 bg-teal-600 text-white rounded-lg text-xs hover:bg-teal-500 disabled:opacity-50"
-            >
-              {createPlan.isPending ? '创建中...' : '采纳为治疗计划'}
-            </button>
+            >{createPlan.isPending ? '创建中...' : '采纳为治疗计划'}</button>
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── Simulate Context (来访者背景参考) ──────────────────────────
+
+function SimulateContext({ episode, lastNoteSummary, lastNoteDate, presentingIssues }: {
+  episode: any; lastNoteSummary?: string; lastNoteDate?: string; presentingIssues?: string[];
+}) {
+  return (
+    <div className="p-3 space-y-4">
+      <div className="flex items-center gap-2 text-xs font-semibold text-purple-700">
+        <User className="w-3.5 h-3.5" /> 来访者背景参考
+      </div>
+
+      {/* Chief complaint */}
+      <div>
+        <div className="text-xs text-slate-400 mb-1">主诉</div>
+        <div className="text-sm text-slate-700">{episode.chiefComplaint || '未填写'}</div>
+      </div>
+
+      {/* Presenting issues */}
+      {presentingIssues && presentingIssues.length > 0 && (
+        <div>
+          <div className="text-xs text-slate-400 mb-1">问题标签</div>
+          <div className="flex flex-wrap gap-1">
+            {presentingIssues.map((tag) => (
+              <span key={tag} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full text-xs">{tag}</span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Last note summary */}
+      <div>
+        <div className="text-xs text-slate-400 mb-1">上次笔记 {lastNoteDate || ''}</div>
+        <div className="text-xs text-slate-600 bg-slate-50 rounded-lg p-2.5">
+          {lastNoteSummary || '暂无会谈记录'}
+        </div>
+      </div>
+
+      <div className="bg-purple-50 rounded-lg p-3 text-xs text-purple-600">
+        在左侧以咨询师身份和"来访者"对话。AI 会基于以上背景扮演来访者，帮助你练习咨询技巧。
+      </div>
+    </div>
+  );
+}
+
+// ─── Supervise Context (督导参考素材) ───────────────────────────
+
+function SuperviseContext({ episode, activePlan, lastNoteSummary, lastNoteDate }: {
+  episode: any; activePlan?: TreatmentPlan; lastNoteSummary?: string; lastNoteDate?: string;
+}) {
+  const goals = (activePlan?.goals as TreatmentGoal[]) || [];
+
+  return (
+    <div className="p-3 space-y-4">
+      <div className="flex items-center gap-2 text-xs font-semibold text-amber-700">
+        <GraduationCap className="w-3.5 h-3.5" /> 督导参考素材
+      </div>
+
+      {/* Chief complaint */}
+      <div>
+        <div className="text-xs text-slate-400 mb-1">来访者主诉</div>
+        <div className="text-sm text-slate-700">{episode.chiefComplaint || '未填写'}</div>
+      </div>
+
+      {/* Treatment plan */}
+      {activePlan ? (
+        <div>
+          <div className="text-xs text-slate-400 mb-1">当前治疗计划：{activePlan.title || '未命名'}</div>
+          {activePlan.approach && <div className="text-xs text-slate-500 mb-1">取向：{activePlan.approach}</div>}
+          <div className="space-y-1">
+            {goals.map((g) => (
+              <div key={g.id} className="text-xs text-slate-600">
+                {g.status === 'achieved' ? '✓' : '○'} {g.description}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div>
+          <div className="text-xs text-slate-400 mb-1">治疗计划</div>
+          <div className="text-xs text-slate-500">尚无治疗计划</div>
+        </div>
+      )}
+
+      {/* Last note */}
+      <div>
+        <div className="text-xs text-slate-400 mb-1">最近笔记 {lastNoteDate || ''}</div>
+        <div className="text-xs text-slate-600 bg-slate-50 rounded-lg p-2.5">
+          {lastNoteSummary || '暂无会谈记录'}
+        </div>
+      </div>
+
+      <div className="bg-amber-50 rounded-lg p-3 text-xs text-amber-600">
+        在左侧和 AI 督导对话。督导会通过提问帮助你反思个案，以上信息供参考。
+      </div>
     </div>
   );
 }
