@@ -241,6 +241,29 @@ export function useCreateNoteTemplate() {
   });
 }
 
+export function useUpdateNoteTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ templateId, ...data }: {
+      templateId: string;
+      title?: string;
+      format?: string;
+      fieldDefinitions?: unknown[];
+      visibility?: string;
+      isDefault?: boolean;
+    }) => api.patch<NoteTemplate>(`${orgPrefix()}/note-templates/${templateId}`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['noteTemplates'] }); },
+  });
+}
+
+export function useDeleteNoteTemplate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (templateId: string) => api.delete(`${orgPrefix()}/note-templates/${templateId}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['noteTemplates'] }); },
+  });
+}
+
 // ─── Note Attachments ───────────────────────────────────────────
 
 export function useUploadNoteAttachment() {

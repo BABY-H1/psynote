@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useCreateEpisode, useOrgMembers } from '../../../api/useCounseling';
+import { useCreateEpisode, useCreateAppointment, useOrgMembers } from '../../../api/useCounseling';
 import { useClientProfile, useUpsertClientProfile } from '../../../api/useClientProfile';
 import { useConsentTemplates, useSendConsent } from '../../../api/useConsent';
+import { useAvailableSlots } from '../../../api/useAvailability';
 import { useInviteMember } from '../../../api/useOrg';
+import { useAuthStore } from '../../../stores/authStore';
 import { PageLoading, useToast } from '../../../shared/components';
-import { ArrowLeft, ArrowRight, Check, UserPlus, FileText } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, UserPlus, FileText, Calendar, Clock } from 'lucide-react';
 
 export function CreateEpisodeWizard() {
   const navigate = useNavigate();
@@ -13,10 +15,13 @@ export function CreateEpisodeWizard() {
   const [clientId, setClientId] = useState('');
   const [clientName, setClientName] = useState('');
   const [complaint, setComplaint] = useState('');
-  const [risk, setRisk] = useState('level_1');
-  const [intervention, setIntervention] = useState('');
+  const [appointmentDate, setAppointmentDate] = useState('');
+  const [appointmentStart, setAppointmentStart] = useState('');
+  const [appointmentEnd, setAppointmentEnd] = useState('');
+  const [appointmentType, setAppointmentType] = useState('offline');
   const [selectedConsents, setSelectedConsents] = useState<string[]>([]);
-  const [createdEpisodeId, setCreatedEpisodeId] = useState<string | null>(null);
+
+  const TOTAL_STEPS = 5;
 
   return (
     <div className="max-w-2xl mx-auto space-y-6">
@@ -27,7 +32,7 @@ export function CreateEpisodeWizard() {
 
       {/* Progress */}
       <div className="flex items-center gap-2">
-        {[1, 2, 3, 4].map((s) => (
+        {Array.from({ length: TOTAL_STEPS }, (_, i) => i + 1).map((s) => (
           <React.Fragment key={s}>
             <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
               s < step ? 'bg-brand-600 text-white' :
@@ -36,7 +41,7 @@ export function CreateEpisodeWizard() {
             }`}>
               {s < step ? <Check className="w-4 h-4" /> : s}
             </div>
-            {s < 4 && <div className={`flex-1 h-0.5 ${s < step ? 'bg-brand-600' : 'bg-slate-200'}`} />}
+            {s < TOTAL_STEPS && <div className={`flex-1 h-0.5 ${s < step ? 'bg-brand-600' : 'bg-slate-200'}`} />}
           </React.Fragment>
         ))}
       </div>
@@ -60,25 +65,37 @@ export function CreateEpisodeWizard() {
       {step === 3 && (
         <ComplaintStep
           complaint={complaint}
-          risk={risk}
-          intervention={intervention}
           onComplaintChange={setComplaint}
-          onRiskChange={setRisk}
-          onInterventionChange={setIntervention}
           onBack={() => setStep(2)}
           onNext={() => setStep(4)}
         />
       )}
       {step === 4 && (
+        <AppointmentStep
+          date={appointmentDate}
+          startTime={appointmentStart}
+          endTime={appointmentEnd}
+          type={appointmentType}
+          onDateChange={setAppointmentDate}
+          onStartChange={setAppointmentStart}
+          onEndChange={setAppointmentEnd}
+          onTypeChange={setAppointmentType}
+          onBack={() => setStep(3)}
+          onNext={() => setStep(5)}
+        />
+      )}
+      {step === 5 && (
         <ConsentStep
           clientId={clientId}
           clientName={clientName}
           complaint={complaint}
-          risk={risk}
-          intervention={intervention}
+          appointmentDate={appointmentDate}
+          appointmentStart={appointmentStart}
+          appointmentEnd={appointmentEnd}
+          appointmentType={appointmentType}
           selectedConsents={selectedConsents}
           onToggleConsent={(id) => setSelectedConsents((prev) => prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id])}
-          onBack={() => setStep(3)}
+          onBack={() => setStep(4)}
         />
       )}
     </div>
@@ -286,48 +303,22 @@ function ProfileStep({
 // ─── Step 3: Chief Complaint ────────────────────────────────────
 
 function ComplaintStep({
-  complaint, risk, intervention, onComplaintChange, onRiskChange, onInterventionChange, onBack, onNext,
+  complaint, onComplaintChange, onBack, onNext,
 }: {
-  complaint: string; risk: string; intervention: string;
-  onComplaintChange: (v: string) => void; onRiskChange: (v: string) => void; onInterventionChange: (v: string) => void;
+  complaint: string;
+  onComplaintChange: (v: string) => void;
   onBack: () => void; onNext: () => void;
 }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-6">
-      <h2 className="text-lg font-bold text-slate-900 mb-1">主诉与初始评估</h2>
-      <p className="text-sm text-slate-500 mb-4">描述来访原因和初步评估</p>
+      <h2 className="text-lg font-bold text-slate-900 mb-1">来访原因</h2>
+      <p className="text-sm text-slate-500 mb-4">简要描述来访者的主要问题（可跳过，后续补充）</p>
 
-      <div className="space-y-4">
-        <div>
-          <label className="block text-xs text-slate-500 mb-1">主诉</label>
-          <textarea value={complaint} onChange={(e) => onComplaintChange(e.target.value)}
-            rows={3} placeholder="简要描述来访者的主要问题..."
-            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-        </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">初始风险等级</label>
-            <select value={risk} onChange={(e) => onRiskChange(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
-              <option value="level_1">一级（一般）</option>
-              <option value="level_2">二级（关注）</option>
-              <option value="level_3">三级（严重）</option>
-              <option value="level_4">四级（危机）</option>
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">干预方式（可选）</label>
-            <select value={intervention} onChange={(e) => onInterventionChange(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
-              <option value="">待定</option>
-              <option value="counseling">个体咨询</option>
-              <option value="group">团体辅导</option>
-              <option value="course">课程</option>
-              <option value="referral">转介</option>
-            </select>
-          </div>
-        </div>
+      <div>
+        <label className="block text-xs text-slate-500 mb-1">主诉</label>
+        <textarea value={complaint} onChange={(e) => onComplaintChange(e.target.value)}
+          rows={4} placeholder="简要描述来访者的主要问题..."
+          className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
       </div>
 
       <div className="flex justify-between mt-6">
@@ -343,20 +334,187 @@ function ComplaintStep({
   );
 }
 
-// ─── Step 4: Consent + Create ───────────────────────────────────
+// ─── Step 4: Schedule First Appointment ────────────────────────
+
+function AppointmentStep({
+  date, startTime, endTime, type,
+  onDateChange, onStartChange, onEndChange, onTypeChange,
+  onBack, onNext,
+}: {
+  date: string; startTime: string; endTime: string; type: string;
+  onDateChange: (v: string) => void; onStartChange: (v: string) => void;
+  onEndChange: (v: string) => void; onTypeChange: (v: string) => void;
+  onBack: () => void; onNext: () => void;
+}) {
+  const userId = useAuthStore((s) => s.user?.id);
+  const { data: slots } = useAvailableSlots(userId, date || undefined);
+
+  // Generate next 14 days
+  const dateOptions: { value: string; label: string }[] = [];
+  const weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+  for (let i = 1; i <= 14; i++) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    const val = d.toISOString().slice(0, 10);
+    const label = `${d.getMonth() + 1}/${d.getDate()} ${weekdays[d.getDay()]}`;
+    dateOptions.push({ value: val, label });
+  }
+
+  // Auto-set end time when start time changes
+  const handleStartChange = (v: string) => {
+    onStartChange(v);
+    // Default 50-minute session
+    const [h, m] = v.split(':').map(Number);
+    const endMin = h * 60 + m + 50;
+    const eh = Math.floor(endMin / 60);
+    const em = endMin % 60;
+    if (eh < 24) {
+      onEndChange(`${String(eh).padStart(2, '0')}:${String(em).padStart(2, '0')}`);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 p-6">
+      <h2 className="text-lg font-bold text-slate-900 mb-1">安排首次会谈</h2>
+      <p className="text-sm text-slate-500 mb-4">为来访者安排第一次咨询时间（可跳过，后续安排）</p>
+
+      <div className="space-y-4">
+        {/* Date selection */}
+        <div>
+          <label className="block text-xs text-slate-500 mb-2">选择日期</label>
+          <div className="flex flex-wrap gap-2">
+            {dateOptions.map((d) => (
+              <button
+                key={d.value}
+                onClick={() => onDateChange(d.value)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                  date === d.value
+                    ? 'border-brand-500 bg-brand-50 text-brand-700'
+                    : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                }`}
+              >
+                {d.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Time slots */}
+        {date && (
+          <div>
+            <label className="block text-xs text-slate-500 mb-2">
+              <Clock className="w-3 h-3 inline mr-1" />
+              {slots && slots.length > 0 ? '可用时段（点击选择）' : '手动输入时间'}
+            </label>
+            {slots && slots.length > 0 ? (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {slots.map((s, i) => {
+                  const st = s.start;
+                  const et = s.end;
+                  const isSelected = startTime === st;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => { onStartChange(st); onEndChange(et); }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition ${
+                        isSelected
+                          ? 'border-brand-500 bg-brand-50 text-brand-700'
+                          : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                      }`}
+                    >
+                      {st} - {et}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 mb-3">
+                {date ? '该日期暂无已设置的可用时段，请手动输入' : ''}
+              </p>
+            )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">开始时间</label>
+                <input type="time" value={startTime} onChange={(e) => handleStartChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-500 mb-1">结束时间</label>
+                <input type="time" value={endTime} onChange={(e) => onEndChange(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Session type */}
+        {date && startTime && (
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">咨询方式</label>
+            <div className="flex gap-2">
+              {[
+                { value: 'offline', label: '线下' },
+                { value: 'online', label: '线上' },
+                { value: 'phone', label: '电话' },
+              ].map((t) => (
+                <button
+                  key={t.value}
+                  onClick={() => onTypeChange(t.value)}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-medium border transition ${
+                    type === t.value
+                      ? 'border-brand-500 bg-brand-50 text-brand-700'
+                      : 'border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-between mt-6">
+        <button onClick={onBack} className="px-4 py-2 text-sm text-slate-600 hover:text-slate-800 flex items-center gap-1.5">
+          <ArrowLeft className="w-4 h-4" /> 上一步
+        </button>
+        <div className="flex gap-2">
+          {!date && (
+            <button onClick={onNext}
+              className="px-4 py-2 text-sm text-slate-500 hover:text-slate-700">
+              跳过
+            </button>
+          )}
+          <button onClick={onNext} disabled={!!date && (!startTime || !endTime)}
+            className="px-5 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50 flex items-center gap-1.5">
+            下一步 <ArrowRight className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Step 5: Consent + Create ───────────────────────────────────
 
 function ConsentStep({
-  clientId, clientName, complaint, risk, intervention, selectedConsents, onToggleConsent, onBack,
+  clientId, clientName, complaint,
+  appointmentDate, appointmentStart, appointmentEnd, appointmentType,
+  selectedConsents, onToggleConsent, onBack,
 }: {
-  clientId: string; clientName: string; complaint: string; risk: string; intervention: string;
+  clientId: string; clientName: string; complaint: string;
+  appointmentDate: string; appointmentStart: string; appointmentEnd: string; appointmentType: string;
   selectedConsents: string[]; onToggleConsent: (id: string) => void; onBack: () => void;
 }) {
   const navigate = useNavigate();
   const createEpisode = useCreateEpisode();
+  const createAppointment = useCreateAppointment();
   const sendConsent = useSendConsent();
   const { data: templates } = useConsentTemplates();
   const { toast } = useToast();
   const [creating, setCreating] = useState(false);
+
+  const hasAppointment = appointmentDate && appointmentStart && appointmentEnd;
 
   const consentTypeLabels: Record<string, string> = {
     treatment: '咨询知情同意', data_collection: '数据采集同意', ai_processing: 'AI辅助分析同意',
@@ -369,9 +527,20 @@ function ConsentStep({
       const episode = await createEpisode.mutateAsync({
         clientId,
         chiefComplaint: complaint || undefined,
-        currentRisk: risk,
-        interventionType: intervention || undefined,
       });
+
+      // Create first appointment if scheduled
+      if (hasAppointment) {
+        try {
+          await createAppointment.mutateAsync({
+            careEpisodeId: episode.id,
+            clientId,
+            startTime: `${appointmentDate}T${appointmentStart}:00`,
+            endTime: `${appointmentDate}T${appointmentEnd}:00`,
+            type: appointmentType,
+          });
+        } catch { /* appointment creation is optional */ }
+      }
 
       // Send consent documents
       for (const templateId of selectedConsents) {
@@ -390,8 +559,19 @@ function ConsentStep({
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-6">
-      <h2 className="text-lg font-bold text-slate-900 mb-1">发送知情同意书</h2>
+      <h2 className="text-lg font-bold text-slate-900 mb-1">确认并创建</h2>
       <p className="text-sm text-slate-500 mb-4">选择要发送给 {clientName} 的知情同意书（可跳过）</p>
+
+      {/* Appointment summary */}
+      {hasAppointment && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-brand-50 rounded-lg text-sm text-brand-700 mb-4">
+          <Calendar className="w-4 h-4" />
+          <span>首次会谈：{appointmentDate} {appointmentStart}-{appointmentEnd}</span>
+          <span className="text-xs px-1.5 py-0.5 bg-brand-100 rounded">
+            {{ offline: '线下', online: '线上', phone: '电话' }[appointmentType] || appointmentType}
+          </span>
+        </div>
+      )}
 
       {templates && templates.length > 0 ? (
         <div className="space-y-2 mb-4">
@@ -423,7 +603,7 @@ function ConsentStep({
         </button>
         <button onClick={handleCreate} disabled={creating}
           className="px-6 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50 flex items-center gap-1.5">
-          {creating ? '创建中...' : selectedConsents.length > 0 ? '创建个案并发送' : '创建个案'}
+          {creating ? '创建中...' : selectedConsents.length > 0 ? '创建个案并发送' : hasAppointment ? '创建个案并预约' : '创建个案'}
           <Check className="w-4 h-4" />
         </button>
       </div>

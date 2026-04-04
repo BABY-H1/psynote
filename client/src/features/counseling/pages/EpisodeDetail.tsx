@@ -300,6 +300,23 @@ function LeftPanel({ episodeId, clientId, onSelectNote }: {
   const [expandedNote, setExpandedNote] = useState<string | null>(null);
   const [expandedResult, setExpandedResult] = useState<string | null>(null);
   const [bottomTab, setBottomTab] = useState<BottomTab | null>(null);
+  const [bottomHeight, setBottomHeight] = useState(200);
+  const [draggingBottom, setDraggingBottom] = useState(false);
+
+  React.useEffect(() => {
+    if (!draggingBottom) return;
+    const handleMove = (e: MouseEvent) => {
+      const container = document.querySelector('[data-left-panel]');
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      const newH = Math.max(100, Math.min(rect.bottom - e.clientY - 40, rect.height * 0.6));
+      setBottomHeight(newH);
+    };
+    const handleUp = () => setDraggingBottom(false);
+    document.addEventListener('mousemove', handleMove);
+    document.addEventListener('mouseup', handleUp);
+    return () => { document.removeEventListener('mousemove', handleMove); document.removeEventListener('mouseup', handleUp); };
+  }, [draggingBottom]);
   const [showReferralForm, setShowReferralForm] = useState(false);
   const [showFollowUpForm, setShowFollowUpForm] = useState(false);
   const [showConsentForm, setShowConsentForm] = useState(false);
@@ -318,7 +335,7 @@ function LeftPanel({ episodeId, clientId, onSelectNote }: {
   const currentEp = allEpisodes?.find((e) => e.id === viewingEpisodeId);
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" data-left-panel>
       {/* Client basic info */}
       <div className="p-3 border-b border-slate-200">
         <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -475,7 +492,12 @@ function LeftPanel({ episodeId, clientId, onSelectNote }: {
         </div>
 
         {bottomTab && (
-          <div className="max-h-48 overflow-y-auto p-3 space-y-2 border-t border-slate-100">
+          <>
+          <div
+            className={`h-1 cursor-row-resize hover:bg-brand-300 transition-colors ${draggingBottom ? 'bg-brand-400' : 'bg-transparent'}`}
+            onMouseDown={() => setDraggingBottom(true)}
+          />
+          <div className="overflow-y-auto p-3 space-y-2 border-t border-slate-100" style={{ height: bottomHeight }}>
             {bottomTab === 'referral' && (
               <>
                 <button onClick={() => setShowReferralForm(!showReferralForm)} className="text-xs text-brand-600 hover:underline">
@@ -521,6 +543,7 @@ function LeftPanel({ episodeId, clientId, onSelectNote }: {
               </>
             )}
           </div>
+          </>
         )}
       </div>
     </div>

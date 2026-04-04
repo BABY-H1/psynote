@@ -36,6 +36,10 @@ import {
   generateSingleLessonBlock,
   refineLessonBlock,
 } from './pipelines/course-authoring.js';
+import { extractAgreement } from './pipelines/extract-agreement.js';
+import { chatCreateAgreement } from './pipelines/create-agreement-chat.js';
+import { extractNoteTemplate } from './pipelines/extract-note-template.js';
+import { chatCreateNoteTemplate } from './pipelines/create-note-template-chat.js';
 
 export async function aiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
@@ -532,5 +536,53 @@ export async function aiRoutes(app: FastifyInstance) {
 
     await logAudit(request, 'ai_call', 'refine');
     return { refined };
+  });
+
+  /** Extract agreement template from text */
+  app.post('/extract-agreement', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { content: string };
+    if (!body.content) throw new ValidationError('content is required');
+    const result = await extractAgreement(body);
+    await logAudit(request, 'ai_call', 'extract-agreement');
+    return result;
+  });
+
+  /** AI-guided agreement creation chat */
+  app.post('/create-agreement-chat', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { messages: { role: 'user' | 'assistant'; content: string }[] };
+    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+      throw new ValidationError('messages array is required');
+    }
+    const result = await chatCreateAgreement(body.messages);
+    await logAudit(request, 'ai_call', 'create-agreement-chat');
+    return result;
+  });
+
+  /** Extract note template from text */
+  app.post('/extract-note-template', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { content: string };
+    if (!body.content) throw new ValidationError('content is required');
+    const result = await extractNoteTemplate(body);
+    await logAudit(request, 'ai_call', 'extract-note-template');
+    return result;
+  });
+
+  /** AI-guided note template creation chat */
+  app.post('/create-note-template-chat', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { messages: { role: 'user' | 'assistant'; content: string }[] };
+    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+      throw new ValidationError('messages array is required');
+    }
+    const result = await chatCreateNoteTemplate(body.messages);
+    await logAudit(request, 'ai_call', 'create-note-template-chat');
+    return result;
   });
 }

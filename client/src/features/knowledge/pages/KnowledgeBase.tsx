@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useLocation, Navigate } from 'react-router-dom';
 
 const tabs = [
-  { to: '/knowledge/scales', label: '量表' },
-  { to: '/knowledge/goals', label: '治疗目标库' },
-  { to: '/knowledge/agreements', label: '协议库' },
+  { to: '/knowledge/scales', label: '测评量表' },
+  { to: '/knowledge/goals', label: '治疗目标' },
+  { to: '/knowledge/agreements', label: '合规协议' },
   { to: '/knowledge/schemes', label: '团辅方案' },
-  { to: '/knowledge/courses', label: '课程模板' },
-  { to: '/knowledge/templates', label: '文档模板' },
+  { to: '/knowledge/courses', label: '课程方案' },
+  { to: '/knowledge/templates', label: '会谈记录' },
 ];
 
 export function KnowledgeBase() {
@@ -22,7 +22,7 @@ export function KnowledgeBase() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-slate-900">知识库</h1>
-        <p className="text-sm text-slate-500 mt-1">量表、治疗目标、方案模板等专业资源</p>
+        <p className="text-sm text-slate-500 mt-1">测评量表、治疗目标、合规协议、方案与记录模板等专业资源</p>
       </div>
 
       {/* Sub tabs */}

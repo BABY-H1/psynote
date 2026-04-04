@@ -16,10 +16,3 @@ export function CoursesTab() {
   );
 }
 
-export function DocumentTemplatesTab() {
-  return (
-    <div className="text-center py-12 text-sm text-slate-400">
-      文档模板库（笔记模板 + 协议模板，开发中）
-    </div>
-  );
-}

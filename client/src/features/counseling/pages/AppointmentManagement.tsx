@@ -1,7 +1,12 @@
 import React, { useState } from 'react';
-import { useAppointments, useUpdateAppointmentStatus } from '../../../api/useCounseling';
+import { useNavigate } from 'react-router-dom';
+import {
+  useAppointments, useUpdateAppointmentStatus,
+  useCreateEpisode, useEpisodes,
+} from '../../../api/useCounseling';
 import { AppointmentCard } from '../components/AppointmentCard';
 import { PageLoading, EmptyState, useToast } from '../../../shared/components';
+import { FolderPlus, Link2, X } from 'lucide-react';
 import type { Appointment } from '@psynote/shared';
 
 const STATUS_FILTERS = [
@@ -13,12 +18,53 @@ const STATUS_FILTERS = [
 ];
 
 export function AppointmentManagement() {
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState('');
   const { data: rows, isLoading } = useAppointments(
     statusFilter ? { status: statusFilter } as any : undefined,
   );
   const updateStatus = useUpdateAppointmentStatus();
+  const createEpisode = useCreateEpisode();
   const { toast } = useToast();
+
+  // Modal state for episode creation prompt
+  const [promptAppt, setPromptAppt] = useState<(Appointment & { clientName?: string }) | null>(null);
+
+  // Fetch active episodes for the prompted client
+  const { data: clientEpisodes } = useEpisodes(
+    promptAppt ? { clientId: promptAppt.clientId, status: 'active' } : undefined,
+  );
+
+  const handleConfirm = (item: Appointment & { clientName?: string }) => {
+    // If client request with no linked episode, prompt to create one
+    if (item.status === 'pending' && !item.careEpisodeId && item.source === 'client_request') {
+      setPromptAppt(item);
+      return;
+    }
+    doConfirm(item.id);
+  };
+
+  const doConfirm = async (appointmentId: string) => {
+    try {
+      await updateStatus.mutateAsync({ appointmentId, status: 'confirmed' });
+      toast('已确认预约', 'success');
+      setPromptAppt(null);
+    } catch {
+      toast('操作失败，请重试', 'error');
+    }
+  };
+
+  const handleCreateEpisodeAndConfirm = async () => {
+    if (!promptAppt) return;
+    try {
+      await createEpisode.mutateAsync({ clientId: promptAppt.clientId });
+      await updateStatus.mutateAsync({ appointmentId: promptAppt.id, status: 'confirmed' });
+      toast('已创建个案并确认预约', 'success');
+      setPromptAppt(null);
+    } catch {
+      toast('操作失败', 'error');
+    }
+  };
 
   const handleStatusChange = async (appointmentId: string, status: string) => {
     try {
@@ -88,7 +134,7 @@ export function AppointmentManagement() {
                     appointment={item}
                     clientName={item.clientName}
                     isPending={updateStatus.isPending}
-                    onConfirm={() => handleStatusChange(item.id, 'confirmed')}
+                    onConfirm={() => handleConfirm(item)}
                     onCancel={() => handleStatusChange(item.id, 'cancelled')}
                     onComplete={() => handleStatusChange(item.id, 'completed')}
                     onNoShow={() => handleStatusChange(item.id, 'no_show')}
@@ -97,6 +143,66 @@ export function AppointmentManagement() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Episode creation prompt modal */}
+      {promptAppt && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setPromptAppt(null)}>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between">
+              <h3 className="text-base font-bold text-slate-900">确认预约</h3>
+              <button onClick={() => setPromptAppt(null)} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-sm text-slate-600">
+              来访者 <span className="font-medium text-slate-900">{promptAppt.clientName || '未知'}</span> 目前没有进行中的个案。
+            </p>
+
+            {clientEpisodes && clientEpisodes.length > 0 ? (
+              <div className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg">
+                该来访者已有 {clientEpisodes.length} 个进行中的个案，可直接确认预约。
+              </div>
+            ) : null}
+
+            <div className="space-y-2">
+              <button
+                onClick={handleCreateEpisodeAndConfirm}
+                disabled={createEpisode.isPending || updateStatus.isPending}
+                className="w-full flex items-center gap-3 px-4 py-3 border border-brand-200 bg-brand-50 rounded-lg hover:bg-brand-100 transition text-left"
+              >
+                <FolderPlus className="w-5 h-5 text-brand-600 flex-shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-brand-700">创建个案并确认</div>
+                  <div className="text-xs text-brand-500">快速为该来访者创建个案，同时确认预约</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => {
+                  setPromptAppt(null);
+                  navigate(`/episodes/new?clientId=${promptAppt.clientId}`);
+                }}
+                className="w-full flex items-center gap-3 px-4 py-3 border border-slate-200 rounded-lg hover:bg-slate-50 transition text-left"
+              >
+                <Link2 className="w-5 h-5 text-slate-500 flex-shrink-0" />
+                <div>
+                  <div className="text-sm font-medium text-slate-700">前往建案向导</div>
+                  <div className="text-xs text-slate-400">填写完整的个案信息后再确认预约</div>
+                </div>
+              </button>
+
+              <button
+                onClick={() => doConfirm(promptAppt.id)}
+                disabled={updateStatus.isPending}
+                className="w-full px-4 py-2.5 text-sm text-slate-500 hover:text-slate-700 transition"
+              >
+                仅确认预约，暂不建案
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

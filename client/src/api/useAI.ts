@@ -385,3 +385,54 @@ export function useRefineContent() {
       api.post<{ refined: string }>(`${orgPrefix()}/refine`, data),
   });
 }
+
+// ─── Agreement AI ──────────────────────────────────────────────
+
+/** Extract agreement template from text */
+export function useExtractAgreement() {
+  return useMutation({
+    mutationFn: (data: { content: string }) =>
+      api.post<{
+        title: string;
+        consentType: string;
+        content: string;
+        sections: { heading: string; body: string }[];
+      }>(`${orgPrefix()}/extract-agreement`, data),
+  });
+}
+
+/** AI-guided agreement creation chat */
+export function useCreateAgreementChat() {
+  return useMutation({
+    mutationFn: (data: { messages: { role: 'user' | 'assistant'; content: string }[] }) =>
+      api.post<
+        | { type: 'message'; content: string }
+        | { type: 'agreement'; agreement: { title: string; consentType: string; content: string }; summary: string }
+      >(`${orgPrefix()}/create-agreement-chat`, data),
+  });
+}
+
+// ─── Note Template AI ──────────────────────────────────────────
+
+/** Extract note template from text */
+export function useExtractNoteTemplate() {
+  return useMutation({
+    mutationFn: (data: { content: string }) =>
+      api.post<{
+        title: string;
+        format: string;
+        fieldDefinitions: { key: string; label: string; placeholder: string; required: boolean; order: number }[];
+      }>(`${orgPrefix()}/extract-note-template`, data),
+  });
+}
+
+/** AI-guided note template creation chat */
+export function useCreateNoteTemplateChat() {
+  return useMutation({
+    mutationFn: (data: { messages: { role: 'user' | 'assistant'; content: string }[] }) =>
+      api.post<
+        | { type: 'message'; content: string }
+        | { type: 'template'; template: { title: string; format: string; fieldDefinitions: { key: string; label: string; placeholder: string; required: boolean; order: number }[] }; summary: string }
+      >(`${orgPrefix()}/create-note-template-chat`, data),
+  });
+}
