@@ -32,13 +32,19 @@ interface Props {
   activePlan?: TreatmentPlan;
   onNoteFieldsUpdate: (fields: Record<string, string>, format: string) => void;
   onPlanSuggestion: (data: any) => void;
+  onModeChange?: (mode: WorkMode) => void;
+  onNoteFormatChange?: (format: string) => void;
 }
 
 export function ChatWorkspace({
   episodeId, clientId, chiefComplaint, currentRisk, activePlan,
-  onNoteFieldsUpdate, onPlanSuggestion,
+  onNoteFieldsUpdate, onPlanSuggestion, onModeChange, onNoteFormatChange,
 }: Props) {
-  const [mode, setMode] = useState<WorkMode>('note');
+  const [mode, setModeInternal] = useState<WorkMode>('note');
+  const setMode = (m: WorkMode) => {
+    setModeInternal(m);
+    onModeChange?.(m);
+  };
   const [messages, setMessages] = useState<Record<WorkMode, ChatMessage[]>>({
     note: [], plan: [], simulate: [], supervise: [],
   });
@@ -165,7 +171,7 @@ export function ChatWorkspace({
         {mode === 'note' && (
           <select
             value={noteFormat}
-            onChange={(e) => setNoteFormat(e.target.value)}
+            onChange={(e) => { setNoteFormat(e.target.value); onNoteFormatChange?.(e.target.value); }}
             className="ml-auto px-2 py-1 border border-slate-200 rounded text-xs text-slate-600"
           >
             <option value="soap">SOAP</option>

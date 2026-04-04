@@ -4,6 +4,7 @@ import { Outlet, NavLink, useLocation, Navigate } from 'react-router-dom';
 const tabs = [
   { to: '/knowledge/scales', label: '量表' },
   { to: '/knowledge/goals', label: '治疗目标库' },
+  { to: '/knowledge/agreements', label: '协议库' },
   { to: '/knowledge/schemes', label: '团辅方案' },
   { to: '/knowledge/courses', label: '课程模板' },
   { to: '/knowledge/templates', label: '文档模板' },

@@ -123,6 +123,8 @@ export function EpisodeDetail() {
               chiefComplaint={episode.chiefComplaint}
               currentRisk={episode.currentRisk}
               activePlan={activePlan}
+              onModeChange={setCurrentMode}
+              onNoteFormatChange={(format) => { setNoteFormat(format); setNoteFields({}); }}
               onNoteFieldsUpdate={(fields, format) => {
                 setNoteFields((prev) => ({ ...prev, ...fields }));
                 setNoteFormat(format);
