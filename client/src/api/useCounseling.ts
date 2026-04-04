@@ -105,6 +105,15 @@ export function useCloseEpisode() {
   });
 }
 
+export function useReopenEpisode() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (episodeId: string) =>
+      api.post<CareEpisode>(`${orgPrefix()}/episodes/${episodeId}/reopen`, {}),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['episodes'] }); },
+  });
+}
+
 // ─── Appointments ────────────────────────────────────────────────
 
 export function useAppointments(filters?: { counselorId?: string; clientId?: string; status?: string; from?: string; to?: string }) {

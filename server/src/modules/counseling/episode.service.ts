@@ -1,6 +1,6 @@
-import { eq, and, desc, asc } from 'drizzle-orm';
+import { eq, and, desc, asc, gt, sql, count as drizzleCount } from 'drizzle-orm';
 import { db } from '../../config/database.js';
-import { careEpisodes, careTimeline, users } from '../../db/schema.js';
+import { careEpisodes, careTimeline, users, appointments, sessionNotes } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
 
 export async function listEpisodes(
@@ -23,10 +23,39 @@ export async function listEpisodes(
     .where(and(...conditions))
     .orderBy(desc(careEpisodes.updatedAt));
 
-  return episodes.map((row) => ({
-    ...row.episode,
-    client: { name: row.clientName, email: row.clientEmail },
-  }));
+  // Enrich with next appointment and session count per episode
+  const enriched = await Promise.all(
+    episodes.map(async (row) => {
+      // Next upcoming appointment
+      const [nextAppt] = await db
+        .select({ startTime: appointments.startTime })
+        .from(appointments)
+        .where(
+          and(
+            eq(appointments.careEpisodeId, row.episode.id),
+            gt(appointments.startTime, new Date()),
+            sql`${appointments.status} IN ('pending', 'confirmed')`,
+          ),
+        )
+        .orderBy(asc(appointments.startTime))
+        .limit(1);
+
+      // Session note count
+      const [noteCount] = await db
+        .select({ count: drizzleCount() })
+        .from(sessionNotes)
+        .where(eq(sessionNotes.careEpisodeId, row.episode.id));
+
+      return {
+        ...row.episode,
+        client: { name: row.clientName, email: row.clientEmail },
+        nextAppointment: nextAppt?.startTime?.toISOString() || null,
+        sessionCount: Number(noteCount?.count) || 0,
+      };
+    }),
+  );
+
+  return enriched;
 }
 
 export async function getEpisodeById(episodeId: string) {
@@ -154,6 +183,26 @@ export async function closeEpisode(episodeId: string, closedBy: string, reason?:
     title: '个案结案',
     summary: reason || '个案已关闭',
     createdBy: closedBy,
+  });
+
+  return updated;
+}
+
+export async function reopenEpisode(episodeId: string, reopenedBy: string) {
+  const [updated] = await db
+    .update(careEpisodes)
+    .set({ status: 'active', closedAt: null, updatedAt: new Date() })
+    .where(eq(careEpisodes.id, episodeId))
+    .returning();
+
+  if (!updated) throw new NotFoundError('CareEpisode', episodeId);
+
+  await db.insert(careTimeline).values({
+    careEpisodeId: episodeId,
+    eventType: 'note',
+    title: '个案重新开启',
+    summary: '个案已重新激活',
+    createdBy: reopenedBy,
   });
 
   return updated;

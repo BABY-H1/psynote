@@ -61,7 +61,22 @@
       "Read(//c/ngrok/**)",
       "Read(//c/Users/psyli/**)",
       "Bash(powershell -Command \"Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -notmatch ''Loopback'' -and $_.IPAddress -notmatch ''^169'' } | Select IPAddress -First 3\")",
-      "Bash(PGPASSWORD=psynote123 \"D:/PostgreSQL/bin/psql.exe\" -h localhost -U postgres -d psynote -c \"ALTER TABLE assessments ADD COLUMN IF NOT EXISTS allow_client_report boolean NOT NULL DEFAULT false;\")"
+      "Bash(PGPASSWORD=psynote123 \"D:/PostgreSQL/bin/psql.exe\" -h localhost -U postgres -d psynote -c \"ALTER TABLE assessments ADD COLUMN IF NOT EXISTS allow_client_report boolean NOT NULL DEFAULT false;\")",
+      "WebSearch",
+      "Bash(xargs grep:*)",
+      "Bash(npm run:*)",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(grep -r \"clientDocuments\\\\|consentRecords\" /d/Desktop/psynote/server --include=*.ts)",
+      "Bash(grep -l \"AppointmentForm\" /d/Desktop/psynote/client/src/**/*.tsx)",
+      "Bash(grep -l \"ComplianceReviewPanel\" /d/Desktop/psynote/client/src/**/*.tsx)",
+      "Bash(for file:*)",
+      "Bash(do echo:*)",
+      "Bash(grep -r \"import.*$file\\\\|from.*$file\" /d/Desktop/psynote/client/src --include=\"*.tsx\" --include=\"*.ts\")",
+      "Bash(done)",
+      "Bash(for hook:*)",
+      "Bash(grep -r \"$hook\" /d/Desktop/psynote/client/src --include=\"*.tsx\" --include=\"*.ts\")",
+      "Read(//d/Desktop/psynote/**)",
+      "Bash(bash /tmp/check_imports.sh)"
     ]
   }
 }

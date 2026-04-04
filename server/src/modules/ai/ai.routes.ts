@@ -27,6 +27,8 @@ import { noteGuidanceChat } from './pipelines/note-guidance-chat.js';
 import { suggestTreatmentPlan } from './pipelines/treatment-plan.js';
 import { buildAndGenerateClientSummary } from '../counseling/client-summary.service.js';
 import { buildAndGenerateCaseProgressReport } from '../counseling/progress-report.service.js';
+import { simulatedClientChat } from './pipelines/simulated-client.js';
+import { supervisionChat } from './pipelines/supervision.js';
 import {
   generateCourseBlueprint,
   refineCourseBlueprint,
@@ -207,6 +209,26 @@ export async function aiRoutes(app: FastifyInstance) {
     const report = await buildAndGenerateCaseProgressReport(request.org!.orgId, body.episodeId);
     await logAudit(request, 'ai_call', 'case-progress-report');
     return report;
+  });
+
+  /** Simulated client conversation */
+  app.post('/simulated-client', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { messages: { role: string; content: string }[]; context: any };
+    const result = await simulatedClientChat(body.messages || [], body.context || {});
+    await logAudit(request, 'ai_call', 'simulated-client');
+    return result;
+  });
+
+  /** Supervision conversation */
+  app.post('/supervision', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { messages: { role: string; content: string }[]; context: any };
+    const result = await supervisionChat(body.messages || [], body.context || {});
+    await logAudit(request, 'ai_call', 'supervision');
+    return result;
   });
 
   /** Personalized recommendations (for client portal) */

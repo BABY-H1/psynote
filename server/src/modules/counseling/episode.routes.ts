@@ -119,4 +119,14 @@ export async function episodeRoutes(app: FastifyInstance) {
     await logAudit(request, 'update', 'care_episodes', episodeId);
     return updated;
   });
+
+  /** Reopen a closed episode */
+  app.post('/:episodeId/reopen', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const { episodeId } = request.params as { episodeId: string };
+    const updated = await episodeService.reopenEpisode(episodeId, request.user!.id);
+    await logAudit(request, 'update', 'care_episodes', episodeId);
+    return updated;
+  });
 }

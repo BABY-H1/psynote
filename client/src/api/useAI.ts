@@ -206,6 +206,22 @@ export function useNoteGuidanceChat() {
   });
 }
 
+/** Simulated client conversation */
+export function useSimulatedClient() {
+  return useMutation({
+    mutationFn: (data: { messages: { role: string; content: string }[]; context: any }) =>
+      api.post<{ type: 'message'; content: string }>(`${orgPrefix()}/simulated-client`, data),
+  });
+}
+
+/** Supervision conversation */
+export function useSupervision() {
+  return useMutation({
+    mutationFn: (data: { messages: { role: string; content: string }[]; context: any }) =>
+      api.post<{ type: 'message'; content: string }>(`${orgPrefix()}/supervision`, data),
+  });
+}
+
 /** AI-guided scale creation via multi-turn conversation */
 export function useCreateScaleChat() {
   return useMutation({
