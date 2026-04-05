@@ -55,11 +55,12 @@ export function GroupReportView({ report, results, assessmentTitle, assessmentTy
 
   return (
     <ReportShell title={`${assessmentTitle} — 团体报告`} subtitle={`${content.participantCount || results.length} 人参与`} date={new Date().toLocaleDateString('zh-CN')} onDownload={() => downloadPDF(report.id)}>
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-5 gap-3">
         <ScoreCard label="参与人数" value={content.participantCount || results.length} />
-        {content.riskDistribution && Object.entries(content.riskDistribution).slice(0, 2).map(([level, count]) => (
-          <ScoreCard key={level} label={RISK_LABELS[level] || level} value={count} />
-        ))}
+        <ScoreCard label={RISK_LABELS['level_1'] || '一级'} value={content.riskDistribution?.level_1 || 0} />
+        <ScoreCard label={RISK_LABELS['level_2'] || '二级'} value={content.riskDistribution?.level_2 || 0} />
+        <ScoreCard label={RISK_LABELS['level_3'] || '三级'} value={content.riskDistribution?.level_3 || 0} />
+        <ScoreCard label={RISK_LABELS['level_4'] || '四级'} value={content.riskDistribution?.level_4 || 0} />
       </div>
 
       {content.riskDistribution && (

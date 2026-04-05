@@ -1,4 +1,16 @@
-import type { GroupCategory, GroupStatus, EnrollmentStatus } from './enums';
+import type { GroupStatus, EnrollmentStatus, GroupSessionStatus, AttendanceStatus, SchemeVisibility } from './enums';
+
+export interface KeyResult {
+  title: string;
+  metric?: string;
+}
+
+export interface SessionPhase {
+  name: string;
+  duration?: string;
+  description?: string;
+  facilitatorNotes?: string;
+}
 
 export interface GroupScheme {
   id: string;
@@ -6,9 +18,24 @@ export interface GroupScheme {
   title: string;
   description?: string;
   theory?: string;
-  category?: GroupCategory;
-  tags?: string[];
-  isPublic: boolean;
+  // Goals
+  overallGoal?: string;
+  specificGoals?: KeyResult[];
+  // Target audience
+  targetAudience?: string;
+  ageRange?: string;
+  selectionCriteria?: string;
+  // Group settings
+  recommendedSize?: string;
+  totalSessions?: number;
+  sessionDuration?: string;
+  frequency?: string;
+  // Facilitator & evaluation
+  facilitatorRequirements?: string;
+  evaluationMethod?: string;
+  notes?: string;
+  // Meta
+  visibility: SchemeVisibility;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
@@ -20,9 +47,14 @@ export interface GroupSchemeSession {
   schemeId: string;
   title: string;
   goal?: string;
-  activities?: string;
+  phases?: SessionPhase[];
   materials?: string;
   duration?: string;
+  homework?: string;
+  assessmentNotes?: string;
+  relatedGoals?: number[];
+  sessionTheory?: string;
+  sessionEvaluation?: string;
   sortOrder: number;
   relatedAssessmentId?: string;
 }
@@ -42,6 +74,8 @@ export interface GroupInstance {
   status: GroupStatus;
   capacity?: number;
   screeningAssessmentId?: string;
+  preAssessmentId?: string;
+  postAssessmentId?: string;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;
@@ -56,4 +90,29 @@ export interface GroupEnrollment {
   screeningResultId?: string;
   enrolledAt?: string;
   createdAt: string;
+}
+
+export interface GroupSessionRecord {
+  id: string;
+  instanceId: string;
+  schemeSessionId?: string;
+  sessionNumber: number;
+  title: string;
+  date?: string;
+  status: GroupSessionStatus;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+  attendance?: GroupSessionAttendance[];
+  attendanceCount?: number;
+}
+
+export interface GroupSessionAttendance {
+  id: string;
+  sessionRecordId: string;
+  enrollmentId: string;
+  status: AttendanceStatus;
+  note?: string;
+  createdAt: string;
+  user?: { id: string; name?: string; email?: string };
 }

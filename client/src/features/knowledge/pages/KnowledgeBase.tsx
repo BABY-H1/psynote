@@ -25,17 +25,17 @@ export function KnowledgeBase() {
         <p className="text-sm text-slate-500 mt-1">测评量表、治疗目标、合规协议、方案与记录模板等专业资源</p>
       </div>
 
-      {/* Sub tabs */}
-      <div className="flex gap-1 border-b border-slate-200 pb-0">
+      {/* Sub tabs — pill style */}
+      <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
         {tabs.map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}
             className={({ isActive }) =>
-              `px-4 py-2 text-sm font-medium border-b-2 transition ${
+              `px-4 py-2 rounded-lg text-sm font-medium transition ${
                 isActive
-                  ? 'border-brand-600 text-brand-700'
-                  : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
               }`
             }
           >

@@ -133,6 +133,16 @@ export async function generateGroupSingleReport(input: {
     }
   }
 
+  // Load dimension names
+  const dimIds = Object.keys(allDimScores);
+  const dimNameMap: Record<string, string> = {};
+  if (dimIds.length > 0) {
+    const dims = await db.select({ id: scaleDimensions.id, name: scaleDimensions.name })
+      .from(scaleDimensions)
+      .where(or(...dimIds.map((id) => eq(scaleDimensions.id, id))));
+    for (const d of dims) dimNameMap[d.id] = d.name;
+  }
+
   const dimensionStats: Record<string, {
     mean: number; median: number; stdDev: number; min: number; max: number;
   }> = {};
@@ -145,7 +155,8 @@ export async function generateGroupSingleReport(input: {
       : sorted[Math.floor(sorted.length / 2)];
     const variance = scores.reduce((s, v) => s + (v - mean) ** 2, 0) / scores.length;
 
-    dimensionStats[dimId] = {
+    const dimName = dimNameMap[dimId] || dimId;
+    dimensionStats[dimName] = {
       mean: Math.round(mean * 100) / 100,
       median: Math.round(median * 100) / 100,
       stdDev: Math.round(Math.sqrt(variance) * 100) / 100,

@@ -8,18 +8,28 @@ const RISK_LABELS: Record<string, string> = {
   level_1: '一级（一般）', level_2: '二级（关注）', level_3: '三级（严重）', level_4: '四级（危机）', none: '无风险',
 };
 
+const ALL_LEVELS = ['level_1', 'level_2', 'level_3', 'level_4'];
+
 interface Props {
   distribution: Record<string, number>;
 }
 
 export function RiskPieChart({ distribution }: Props) {
-  const data = Object.entries(distribution).map(([level, count]) => ({
+  // Always show all 4 levels, even if count is 0
+  const data = ALL_LEVELS.map((level) => ({
     name: RISK_LABELS[level] || level,
-    value: count,
+    value: distribution[level] || 0,
     color: RISK_COLORS[level] || '#94a3b8',
   }));
 
-  if (data.length === 0) return <p className="text-sm text-slate-400">暂无数据</p>;
+  // Also include 'none' if present
+  if (distribution.none) {
+    data.push({
+      name: RISK_LABELS.none,
+      value: distribution.none,
+      color: RISK_COLORS.none,
+    });
+  }
 
   return (
     <ResponsiveContainer width="100%" height={240}>

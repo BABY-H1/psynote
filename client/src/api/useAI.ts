@@ -441,3 +441,24 @@ export function useCreateNoteTemplateChat() {
       >(`${orgPrefix()}/create-note-template-chat`, data),
   });
 }
+
+// ─── Group Scheme AI ───────────────────────────────────────────
+
+/** Extract group scheme from text */
+export function useExtractScheme() {
+  return useMutation({
+    mutationFn: (data: { content: string }) =>
+      api.post<Record<string, unknown>>(`${orgPrefix()}/extract-scheme`, data),
+  });
+}
+
+/** AI-guided group scheme creation chat */
+export function useCreateSchemeChat() {
+  return useMutation({
+    mutationFn: (data: { messages: { role: 'user' | 'assistant'; content: string }[] }) =>
+      api.post<
+        | { type: 'message'; content: string }
+        | { type: 'scheme'; scheme: Record<string, unknown>; summary: string }
+      >(`${orgPrefix()}/create-scheme-chat`, data),
+  });
+}

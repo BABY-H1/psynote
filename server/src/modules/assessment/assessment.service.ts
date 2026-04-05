@@ -1,6 +1,6 @@
-import { eq, and, isNull, asc, desc } from 'drizzle-orm';
+import { eq, and, isNull, asc, desc, or } from 'drizzle-orm';
 import { db } from '../../config/database.js';
-import { assessments, assessmentScales, scales } from '../../db/schema.js';
+import { assessments, assessmentScales, scales, scaleDimensions } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
 import crypto from 'crypto';
 
@@ -38,6 +38,18 @@ export async function getAssessmentById(assessmentId: string) {
     .where(eq(assessmentScales.assessmentId, assessmentId))
     .orderBy(asc(assessmentScales.sortOrder));
 
+  // Load dimensions for all associated scales
+  const scaleIds = assocScales.map((s) => s.scale.id);
+  const dimensions = scaleIds.length > 0
+    ? await db.select({ id: scaleDimensions.id, name: scaleDimensions.name, scaleId: scaleDimensions.scaleId })
+        .from(scaleDimensions)
+        .where(or(...scaleIds.map((sid) => eq(scaleDimensions.scaleId, sid))))
+    : [];
+
+  // Build dimension name map: { dimensionId -> dimensionName }
+  const dimensionNameMap: Record<string, string> = {};
+  for (const d of dimensions) dimensionNameMap[d.id] = d.name;
+
   return {
     ...assessment,
     scales: assocScales.map((s) => ({
@@ -46,6 +58,7 @@ export async function getAssessmentById(assessmentId: string) {
       description: s.scale.description,
       sortOrder: s.sortOrder,
     })),
+    dimensionNameMap,
   };
 }
 

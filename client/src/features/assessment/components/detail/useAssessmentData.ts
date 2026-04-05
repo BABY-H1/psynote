@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { AssessmentResult } from '@psynote/shared';
 
 /** Averaged dimension scores across all results */
-export function useDimAverages(results: AssessmentResult[] | undefined) {
+export function useDimAverages(results: AssessmentResult[] | undefined, dimNameMap?: Record<string, string>) {
   return useMemo(() => {
     if (!results || results.length === 0) return [];
     const dimTotals: Record<string, { sum: number; count: number }> = {};
@@ -14,13 +14,13 @@ export function useDimAverages(results: AssessmentResult[] | undefined) {
       }
     }
     return Object.entries(dimTotals).map(([id, { sum, count }]) => ({
-      name: id.slice(0, 12),
+      name: dimNameMap?.[id] || id.slice(0, 12),
       score: Math.round((sum / count) * 100) / 100,
       mean: Math.round((sum / count) * 100) / 100,
       min: 0,
       max: 0,
     }));
-  }, [results]);
+  }, [results, dimNameMap]);
 }
 
 /** Cross analysis by demographic group */

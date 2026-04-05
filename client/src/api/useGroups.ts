@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { GroupScheme, GroupInstance, GroupEnrollment } from '@psynote/shared';
+import type { GroupScheme, GroupInstance, GroupEnrollment, GroupSessionRecord } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
 
@@ -31,14 +31,17 @@ export function useGroupScheme(schemeId: string | undefined) {
 export function useCreateGroupScheme() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: {
-      title: string;
-      description?: string;
-      theory?: string;
-      category?: string;
-      tags?: string[];
-      sessions?: { title: string; goal?: string; activities?: string; materials?: string; duration?: string }[];
-    }) => api.post<GroupScheme>(`${orgPrefix()}/group-schemes`, data),
+    mutationFn: (data: Record<string, unknown>) =>
+      api.post<GroupScheme>(`${orgPrefix()}/group-schemes`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupSchemes'] }); },
+  });
+}
+
+export function useUpdateGroupScheme() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ schemeId, ...data }: { schemeId: string } & Record<string, unknown>) =>
+      api.patch<GroupScheme>(`${orgPrefix()}/group-schemes/${schemeId}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupSchemes'] }); },
   });
 }
@@ -89,6 +92,8 @@ export function useCreateGroupInstance() {
       location?: string;
       capacity?: number;
       screeningAssessmentId?: string;
+      preAssessmentId?: string;
+      postAssessmentId?: string;
     }) => api.post<GroupInstance>(`${orgPrefix()}/group-instances`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupInstances'] }); },
   });
@@ -99,6 +104,7 @@ export function useUpdateGroupInstance() {
   return useMutation({
     mutationFn: ({ instanceId, ...data }: { instanceId: string } & Partial<{
       title: string; status: string; capacity: number;
+      preAssessmentId: string; postAssessmentId: string;
     }>) => api.patch<GroupInstance>(`${orgPrefix()}/group-instances/${instanceId}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupInstances'] }); },
   });
@@ -122,5 +128,84 @@ export function useUpdateEnrollment() {
     mutationFn: ({ enrollmentId, status }: { enrollmentId: string; status: string }) =>
       api.patch<GroupEnrollment>(`${orgPrefix()}/group-instances/enrollments/${enrollmentId}`, { status }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupInstances'] }); },
+  });
+}
+
+// ─── Session Records ────────────────────────────────────────────
+
+export function useGroupSessions(instanceId: string | undefined) {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['groupSessions', orgId, instanceId],
+    queryFn: () => api.get<GroupSessionRecord[]>(`${orgPrefix()}/group-instances/${instanceId}/sessions`),
+    enabled: !!orgId && !!instanceId,
+  });
+}
+
+export function useInitializeSessions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (instanceId: string) =>
+      api.post<GroupSessionRecord[]>(`${orgPrefix()}/group-instances/${instanceId}/sessions/init`, {}),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupSessions'] }); },
+  });
+}
+
+export function useCreateSessionRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ instanceId, ...data }: {
+      instanceId: string;
+      title: string;
+      sessionNumber: number;
+      date?: string;
+    }) => api.post<GroupSessionRecord>(`${orgPrefix()}/group-instances/${instanceId}/sessions`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupSessions'] }); },
+  });
+}
+
+export function useUpdateSessionRecord() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ instanceId, sessionId, ...data }: {
+      instanceId: string;
+      sessionId: string;
+      status?: string;
+      date?: string;
+      notes?: string;
+    }) => api.patch<GroupSessionRecord>(
+      `${orgPrefix()}/group-instances/${instanceId}/sessions/${sessionId}`,
+      data,
+    ),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupSessions'] }); },
+  });
+}
+
+export function useRecordAttendance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ instanceId, sessionId, attendances }: {
+      instanceId: string;
+      sessionId: string;
+      attendances: { enrollmentId: string; status: string; note?: string }[];
+    }) => api.post(
+      `${orgPrefix()}/group-instances/${instanceId}/sessions/${sessionId}/attendance`,
+      { attendances },
+    ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['groupSessions'] });
+      qc.invalidateQueries({ queryKey: ['attendanceSummary'] });
+    },
+  });
+}
+
+export function useAttendanceSummary(instanceId: string | undefined) {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['attendanceSummary', orgId, instanceId],
+    queryFn: () => api.get<Record<string, { present: number; total: number }>>(
+      `${orgPrefix()}/group-instances/${instanceId}/attendance-summary`,
+    ),
+    enabled: !!orgId && !!instanceId,
   });
 }

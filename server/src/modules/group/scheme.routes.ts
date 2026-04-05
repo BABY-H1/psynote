@@ -11,7 +11,7 @@ export async function schemeRoutes(app: FastifyInstance) {
   app.addHook('preHandler', orgContextGuard);
 
   app.get('/', async (request) => {
-    return schemeService.listSchemes(request.org!.orgId);
+    return schemeService.listSchemes(request.org!.orgId, request.user!.id);
   });
 
   app.get('/:schemeId', async (request) => {
@@ -22,23 +22,7 @@ export async function schemeRoutes(app: FastifyInstance) {
   app.post('/', {
     preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request, reply) => {
-    const body = request.body as {
-      title: string;
-      description?: string;
-      theory?: string;
-      category?: string;
-      tags?: string[];
-      isPublic?: boolean;
-      sessions?: {
-        title: string;
-        goal?: string;
-        activities?: string;
-        materials?: string;
-        duration?: string;
-        relatedAssessmentId?: string;
-      }[];
-    };
-
+    const body = request.body as any;
     if (!body.title) throw new ValidationError('title is required');
 
     const scheme = await schemeService.createScheme({
@@ -55,16 +39,9 @@ export async function schemeRoutes(app: FastifyInstance) {
     preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request) => {
     const { schemeId } = request.params as { schemeId: string };
-    const body = request.body as Partial<{
-      title: string;
-      description: string;
-      theory: string;
-      category: string;
-      tags: string[];
-      isPublic: boolean;
-    }>;
+    const { sessions, ...schemeUpdates } = request.body as any;
 
-    const updated = await schemeService.updateScheme(schemeId, body);
+    const updated = await schemeService.updateScheme(schemeId, schemeUpdates, sessions);
     await logAudit(request, 'update', 'group_schemes', schemeId);
     return updated;
   });

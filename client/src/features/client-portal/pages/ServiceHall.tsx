@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAvailableGroups, useAvailableCourses } from '../../../api/useClientPortal';
 import { useEnrollInGroup } from '../../../api/useGroups';
 import { useEnrollInCourse } from '../../../api/useCourses';
-import { PageLoading, EmptyState } from '../../../shared/components';
+import { PageLoading, EmptyState, useToast } from '../../../shared/components';
+import { Users, MapPin, Calendar } from 'lucide-react';
 
 export function ServiceHall() {
   const { data: groups, isLoading: groupsLoading } = useAvailableGroups();
@@ -11,6 +12,16 @@ export function ServiceHall() {
   const enrollGroup = useEnrollInGroup();
   const enrollCourse = useEnrollInCourse();
   const navigate = useNavigate();
+  const { toast } = useToast();
+
+  const handleEnrollGroup = (instanceId: string, isFull: boolean) => {
+    enrollGroup.mutate({ instanceId }, {
+      onSuccess: () => {
+        toast(isFull ? '已加入等候列表' : '报名成功，等待审批', 'success');
+      },
+      onError: () => toast('报名失败', 'error'),
+    });
+  };
 
   return (
     <div className="space-y-8">
@@ -41,27 +52,48 @@ export function ServiceHall() {
           <EmptyState title="暂无可参加的团辅活动" />
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
-            {groups.map((g) => (
-              <div key={g.id} className="bg-white rounded-xl border border-slate-200 p-5">
-                <h4 className="font-semibold text-slate-900 mb-1">{g.title}</h4>
-                {g.description && (
-                  <p className="text-sm text-slate-500 line-clamp-2 mb-3">{g.description}</p>
-                )}
-                <div className="flex items-center justify-between">
-                  <div className="flex gap-3 text-xs text-slate-400">
-                    {g.startDate && <span>{g.startDate}</span>}
-                    {g.location && <span>{g.location}</span>}
+            {groups.map((g: any) => {
+              const isFull = g.capacity && g.approvedCount >= g.capacity;
+              return (
+                <div key={g.id} className="bg-white rounded-xl border border-slate-200 p-5">
+                  <h4 className="font-semibold text-slate-900 mb-1">{g.title}</h4>
+                  {g.description && (
+                    <p className="text-sm text-slate-500 line-clamp-2 mb-3">{g.description}</p>
+                  )}
+                  <div className="flex flex-wrap gap-3 text-xs text-slate-400 mb-3">
+                    {g.startDate && (
+                      <span className="flex items-center gap-1">
+                        <Calendar className="w-3 h-3" /> {g.startDate}
+                      </span>
+                    )}
+                    {g.location && (
+                      <span className="flex items-center gap-1">
+                        <MapPin className="w-3 h-3" /> {g.location}
+                      </span>
+                    )}
+                    {g.capacity && (
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3 h-3" /> {g.approvedCount || 0}/{g.capacity}
+                      </span>
+                    )}
+                    {g.schedule && <span>{g.schedule}</span>}
                   </div>
-                  <button
-                    onClick={() => enrollGroup.mutate({ instanceId: g.id })}
-                    disabled={enrollGroup.isPending}
-                    className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-500 disabled:opacity-50"
-                  >
-                    报名
-                  </button>
+                  <div className="flex items-center justify-end">
+                    <button
+                      onClick={() => handleEnrollGroup(g.id, isFull)}
+                      disabled={enrollGroup.isPending}
+                      className={`px-4 py-1.5 rounded-lg text-xs font-medium disabled:opacity-50 ${
+                        isFull
+                          ? 'bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100'
+                          : 'bg-brand-600 text-white hover:bg-brand-500'
+                      }`}
+                    >
+                      {isFull ? '加入等候列表' : '报名'}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </section>

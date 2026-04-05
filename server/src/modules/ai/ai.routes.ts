@@ -40,6 +40,8 @@ import { extractAgreement } from './pipelines/extract-agreement.js';
 import { chatCreateAgreement } from './pipelines/create-agreement-chat.js';
 import { extractNoteTemplate } from './pipelines/extract-note-template.js';
 import { chatCreateNoteTemplate } from './pipelines/create-note-template-chat.js';
+import { extractScheme } from './pipelines/extract-scheme.js';
+import { chatCreateScheme } from './pipelines/create-scheme-chat.js';
 
 export async function aiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
@@ -587,6 +589,30 @@ export async function aiRoutes(app: FastifyInstance) {
     }
     const result = await chatCreateNoteTemplate(body.messages);
     await logAudit(request, 'ai_call', 'create-note-template-chat');
+    return result;
+  });
+
+  /** Extract group scheme from text */
+  app.post('/extract-scheme', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { content: string };
+    if (!body.content) throw new ValidationError('content is required');
+    const result = await extractScheme(body);
+    await logAudit(request, 'ai_call', 'extract-scheme');
+    return result;
+  });
+
+  /** AI-guided group scheme creation chat */
+  app.post('/create-scheme-chat', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { messages: { role: 'user' | 'assistant'; content: string }[] };
+    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+      throw new ValidationError('messages array is required');
+    }
+    const result = await chatCreateScheme(body.messages);
+    await logAudit(request, 'ai_call', 'create-scheme-chat');
     return result;
   });
 }

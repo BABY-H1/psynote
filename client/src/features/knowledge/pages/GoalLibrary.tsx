@@ -39,21 +39,21 @@ export function GoalLibrary() {
       {/* Filters */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索目标..."
+              className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          </div>
           <select
             value={problemFilter}
             onChange={(e) => setProblemFilter(e.target.value)}
-            className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm"
+            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           >
             <option value="">全部问题领域</option>
             {Object.entries(problemAreaLabels).map(([v, l]) => (
               <option key={v} value={v}>{l}</option>
             ))}
           </select>
-          <div className="relative">
-            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索目标..."
-              className="pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm w-48" />
-          </div>
         </div>
         <button onClick={() => setShowCreate(!showCreate)}
           className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 flex items-center gap-2">

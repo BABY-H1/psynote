@@ -29,7 +29,8 @@ import { ConsentCenter } from '../features/client-portal/pages/ConsentCenter';
 import { DashboardHome } from '../features/dashboard/pages/DashboardHome';
 import { KnowledgeBase } from '../features/knowledge/pages/KnowledgeBase';
 import { GoalLibrary } from '../features/knowledge/pages/GoalLibrary';
-import { SchemesTab, CoursesTab } from '../features/knowledge/pages/PlaceholderTabs';
+import { CoursesTab } from '../features/knowledge/pages/PlaceholderTabs';
+import { SchemeLibrary } from '../features/knowledge/pages/SchemeLibrary';
 import { NoteTemplateLibrary } from '../features/knowledge/pages/NoteTemplateLibrary';
 import { AgreementLibrary } from '../features/knowledge/pages/AgreementLibrary';
 
@@ -73,7 +74,7 @@ function AppRoutes() {
             <Route path="scales" element={<ScaleLibrary />} />
             <Route path="goals" element={<GoalLibrary />} />
             <Route path="agreements" element={<AgreementLibrary />} />
-            <Route path="schemes" element={<SchemesTab />} />
+            <Route path="schemes" element={<SchemeLibrary />} />
             <Route path="courses" element={<CoursesTab />} />
             <Route path="templates" element={<NoteTemplateLibrary />} />
           </Route>

@@ -470,9 +470,24 @@ export const groupSchemes = pgTable('group_schemes', {
   title: text('title').notNull(),
   description: text('description'),
   theory: text('theory'),
-  category: text('category'),
-  tags: jsonb('tags').default([]),
-  isPublic: boolean('is_public').notNull().default(false),
+  // Goals
+  overallGoal: text('overall_goal'),
+  specificGoals: jsonb('specific_goals').default([]), // string[]
+  // Target audience
+  targetAudience: text('target_audience'),
+  ageRange: text('age_range'),
+  selectionCriteria: text('selection_criteria'),
+  // Group settings
+  recommendedSize: text('recommended_size'),
+  totalSessions: integer('total_sessions'),
+  sessionDuration: text('session_duration'),
+  frequency: text('frequency'),
+  // Facilitator & evaluation
+  facilitatorRequirements: text('facilitator_requirements'),
+  evaluationMethod: text('evaluation_method'),
+  notes: text('notes'), // ethics, exit mechanism, crisis plan
+  // Meta
+  visibility: text('visibility').notNull().default('personal'), // personal | organization | public
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -483,9 +498,14 @@ export const groupSchemeSessions = pgTable('group_scheme_sessions', {
   schemeId: uuid('scheme_id').notNull().references(() => groupSchemes.id, { onDelete: 'cascade' }),
   title: text('title').notNull(),
   goal: text('goal'),
-  activities: text('activities'),
+  phases: jsonb('phases').default([]), // SessionPhase[] — structured activity phases
   materials: text('materials'),
   duration: text('duration'),
+  homework: text('homework'),
+  assessmentNotes: text('assessment_notes'),
+  relatedGoals: jsonb('related_goals').default([]), // number[] — indexes into scheme.specificGoals
+  sessionTheory: text('session_theory'),
+  sessionEvaluation: text('session_evaluation'),
   sortOrder: integer('sort_order').notNull().default(0),
   relatedAssessmentId: uuid('related_assessment_id').references(() => assessments.id),
 });
@@ -505,6 +525,8 @@ export const groupInstances = pgTable('group_instances', {
   status: text('status').notNull().default('draft'),
   capacity: integer('capacity'),
   screeningAssessmentId: uuid('screening_assessment_id').references(() => assessments.id),
+  preAssessmentId: uuid('pre_assessment_id').references(() => assessments.id),
+  postAssessmentId: uuid('post_assessment_id').references(() => assessments.id),
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -521,6 +543,32 @@ export const groupEnrollments = pgTable('group_enrollments', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_group_enrollments_instance_user').on(t.instanceId, t.userId),
+]);
+
+export const groupSessionRecords = pgTable('group_session_records', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  instanceId: uuid('instance_id').notNull().references(() => groupInstances.id, { onDelete: 'cascade' }),
+  schemeSessionId: uuid('scheme_session_id').references(() => groupSchemeSessions.id),
+  sessionNumber: integer('session_number').notNull(),
+  title: text('title').notNull(),
+  date: date('date'),
+  status: text('status').notNull().default('planned'), // planned | completed | cancelled
+  notes: text('notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_group_session_records_instance').on(t.instanceId),
+]);
+
+export const groupSessionAttendance = pgTable('group_session_attendance', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionRecordId: uuid('session_record_id').notNull().references(() => groupSessionRecords.id, { onDelete: 'cascade' }),
+  enrollmentId: uuid('enrollment_id').notNull().references(() => groupEnrollments.id),
+  status: text('status').notNull().default('present'), // present | absent | excused | late
+  note: text('note'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_group_attendance_session_enrollment').on(t.sessionRecordId, t.enrollmentId),
 ]);
 
 // ─── Course Domain ────────────────────────────────────────────────

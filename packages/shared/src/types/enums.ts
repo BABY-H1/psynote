@@ -25,11 +25,17 @@ export type SessionType = 'online' | 'offline' | 'phone';
 /** Group instance status */
 export type GroupStatus = 'draft' | 'recruiting' | 'ongoing' | 'full' | 'ended';
 
-/** Group category */
-export type GroupCategory = 'relationship' | 'stress' | 'growth' | 'grief' | 'other';
-
 /** Group enrollment status */
-export type EnrollmentStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn';
+export type EnrollmentStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'waitlisted';
+
+/** Group session record status */
+export type GroupSessionStatus = 'planned' | 'completed' | 'cancelled';
+
+/** Group session attendance status */
+export type AttendanceStatus = 'present' | 'absent' | 'excused' | 'late';
+
+/** Scheme visibility */
+export type SchemeVisibility = 'personal' | 'organization' | 'public';
 
 /** Course enrollment status */
 export type CourseEnrollmentStatus = 'enrolled' | 'completed' | 'dropped';

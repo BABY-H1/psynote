@@ -57,6 +57,8 @@ export async function createInstance(input: {
   status?: string;
   capacity?: number;
   screeningAssessmentId?: string;
+  preAssessmentId?: string;
+  postAssessmentId?: string;
   createdBy: string;
 }) {
   const [instance] = await db.insert(groupInstances).values({
@@ -73,6 +75,8 @@ export async function createInstance(input: {
     status: input.status || 'draft',
     capacity: input.capacity,
     screeningAssessmentId: input.screeningAssessmentId || null,
+    preAssessmentId: input.preAssessmentId || null,
+    postAssessmentId: input.postAssessmentId || null,
     createdBy: input.createdBy,
   }).returning();
 
@@ -93,6 +97,8 @@ export async function updateInstance(
     status: string;
     capacity: number;
     screeningAssessmentId: string;
+    preAssessmentId: string;
+    postAssessmentId: string;
   }>,
 ) {
   const [updated] = await db

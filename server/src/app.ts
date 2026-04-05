@@ -26,6 +26,7 @@ import { aiRoutes } from './modules/ai/ai.routes.js';
 import { schemeRoutes } from './modules/group/scheme.routes.js';
 import { instanceRoutes } from './modules/group/instance.routes.js';
 import { enrollmentRoutes } from './modules/group/enrollment.routes.js';
+import { sessionRoutes } from './modules/group/session.routes.js';
 import { courseRoutes } from './modules/course/course.routes.js';
 import { consentRoutes } from './modules/compliance/consent.routes.js';
 import { complianceReviewRoutes } from './modules/compliance/compliance-review.routes.js';
@@ -87,6 +88,7 @@ await app.register(aiRoutes, { prefix: '/api/orgs/:orgId/ai' });
 await app.register(schemeRoutes, { prefix: '/api/orgs/:orgId/group-schemes' });
 await app.register(instanceRoutes, { prefix: '/api/orgs/:orgId/group-instances' });
 await app.register(enrollmentRoutes, { prefix: '/api/orgs/:orgId/group-instances' });
+await app.register(sessionRoutes, { prefix: '/api/orgs/:orgId/group-instances' });
 
 // Course domain
 await app.register(courseRoutes, { prefix: '/api/orgs/:orgId/courses' });

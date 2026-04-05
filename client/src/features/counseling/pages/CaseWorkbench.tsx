@@ -57,8 +57,17 @@ export function CaseWorkbench() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="flex gap-1">
+      <div className="flex items-center gap-3">
+        <div className="relative flex-1 max-w-xs">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="搜索姓名或主诉"
+            className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
+        </div>
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
           {([
             { key: 'all' as const, label: `全部 (${counts.all})` },
             { key: 'active' as const, label: `进行中 (${counts.active})` },
@@ -67,24 +76,15 @@ export function CaseWorkbench() {
             <button
               key={tab.key}
               onClick={() => setStatusFilter(tab.key)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition ${
+              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
                 statusFilter === tab.key
-                  ? 'bg-brand-600 text-white'
-                  : 'text-slate-600 hover:bg-slate-100'
+                  ? 'bg-white text-slate-900 shadow-sm'
+                  : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               {tab.label}
             </button>
           ))}
-        </div>
-        <div className="relative">
-          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索姓名或主诉"
-            className="pl-9 pr-3 py-1.5 border border-slate-200 rounded-lg text-sm w-48 focus:outline-none focus:ring-2 focus:ring-brand-500"
-          />
         </div>
       </div>
 
@@ -179,7 +179,7 @@ function EpisodeCard({ ep, navigate, nested }: { ep: any; navigate: (path: strin
       className={`w-full text-left hover:bg-slate-50 transition ${
         nested
           ? 'px-4 py-3 border-b border-slate-50 last:border-b-0 pl-11'
-          : 'bg-white rounded-xl border border-slate-200 p-4 hover:border-brand-300 hover:shadow-sm'
+          : 'bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm'
       }`}
     >
       <div className="flex items-center justify-between">

@@ -1,13 +1,5 @@
 import React from 'react';
 
-export function SchemesTab() {
-  return (
-    <div className="text-center py-12 text-sm text-slate-400">
-      团辅方案库（从团辅中心整合，开发中）
-    </div>
-  );
-}
-
 export function CoursesTab() {
   return (
     <div className="text-center py-12 text-sm text-slate-400">
@@ -15,4 +7,3 @@ export function CoursesTab() {
     </div>
   );
 }
-
