@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEpisodes } from '../../../api/useCounseling';
 import { PageLoading, EmptyState } from '../../../shared/components';
-import { Search, Plus, Calendar, Hash } from 'lucide-react';
+import { Search, Plus, Calendar, Hash, ChevronDown, ChevronRight, User } from 'lucide-react';
 
 const statusLabels: Record<string, string> = {
   active: '进行中', paused: '暂停', closed: '已结案', archived: '已归档',
@@ -88,7 +88,7 @@ export function CaseWorkbench() {
         </div>
       </div>
 
-      {/* Episode list */}
+      {/* Episode list grouped by client */}
       {isLoading ? (
         <PageLoading />
       ) : filtered.length === 0 ? (
@@ -97,58 +97,131 @@ export function CaseWorkbench() {
           action={!search && statusFilter === 'all' ? { label: '+ 新建个案', onClick: () => navigate('/episodes/new') } : undefined}
         />
       ) : (
-        <div className="grid gap-3">
-          {filtered.map((ep: any) => (
-            <button
-              key={ep.id}
-              onClick={() => navigate(`/episodes/${ep.id}`)}
-              className="w-full text-left bg-white rounded-xl border border-slate-200 p-4 hover:border-brand-300 hover:shadow-sm transition"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-slate-900">
-                      {ep.client?.name || '未知来访者'}
-                    </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
-                      ep.status === 'active' ? 'bg-blue-50 text-blue-700' :
-                      ep.status === 'closed' ? 'bg-slate-100 text-slate-500' :
-                      'bg-yellow-50 text-yellow-700'
-                    }`}>
-                      {statusLabels[ep.status] || ep.status}
-                    </span>
-                  </div>
-                  {ep.chiefComplaint && (
-                    <p className="text-sm text-slate-500 mt-1 truncate">{ep.chiefComplaint}</p>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-4 flex-shrink-0 ml-4">
-                  {/* Session count */}
-                  <div className="flex items-center gap-1 text-xs text-slate-400">
-                    <Hash className="w-3 h-3" />
-                    <span>{ep.sessionCount ?? 0} 次</span>
-                  </div>
-
-                  {/* Next appointment */}
-                  {ep.nextAppointment ? (
-                    <div className="flex items-center gap-1 text-xs text-brand-600">
-                      <Calendar className="w-3 h-3" />
-                      <span>{formatNextTime(ep.nextAppointment)}</span>
-                    </div>
-                  ) : ep.status === 'active' ? (
-                    <div className="flex items-center gap-1 text-xs text-slate-300">
-                      <Calendar className="w-3 h-3" />
-                      <span>未预约</span>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            </button>
-          ))}
-        </div>
+        <ClientGroupedList episodes={filtered} navigate={navigate} />
       )}
     </div>
+  );
+}
+
+interface ClientGroup {
+  clientId: string;
+  clientName: string;
+  episodes: any[];
+}
+
+function ClientGroupedList({ episodes, navigate }: { episodes: any[]; navigate: (path: string) => void }) {
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  // Group by clientId
+  const groups: ClientGroup[] = [];
+  const map = new Map<string, ClientGroup>();
+  for (const ep of episodes) {
+    const cid = ep.clientId || ep.client?.id || 'unknown';
+    let group = map.get(cid);
+    if (!group) {
+      group = { clientId: cid, clientName: ep.client?.name || '未知来访者', episodes: [] };
+      map.set(cid, group);
+      groups.push(group);
+    }
+    group.episodes.push(ep);
+  }
+
+  const toggle = (clientId: string) => {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(clientId)) next.delete(clientId); else next.add(clientId);
+      return next;
+    });
+  };
+
+  return (
+    <div className="space-y-2">
+      {groups.map((group) => {
+        const isMulti = group.episodes.length > 1;
+        const isCollapsed = collapsed.has(group.clientId);
+
+        if (!isMulti) {
+          // Single episode: render flat card (same as before)
+          const ep = group.episodes[0];
+          return <EpisodeCard key={ep.id} ep={ep} navigate={navigate} />;
+        }
+
+        // Multi-episode: render as collapsible group
+        return (
+          <div key={group.clientId} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <button
+              onClick={() => toggle(group.clientId)}
+              className="w-full text-left flex items-center gap-2 px-4 py-3 hover:bg-slate-50 transition"
+            >
+              {isCollapsed ? <ChevronRight className="w-4 h-4 text-slate-400" /> : <ChevronDown className="w-4 h-4 text-slate-400" />}
+              <User className="w-4 h-4 text-brand-500" />
+              <span className="text-sm font-semibold text-slate-900">{group.clientName}</span>
+              <span className="text-xs text-slate-400">{group.episodes.length} 个个案</span>
+            </button>
+            {!isCollapsed && (
+              <div className="border-t border-slate-100">
+                {group.episodes.map((ep) => (
+                  <EpisodeCard key={ep.id} ep={ep} navigate={navigate} nested />
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function EpisodeCard({ ep, navigate, nested }: { ep: any; navigate: (path: string) => void; nested?: boolean }) {
+  return (
+    <button
+      onClick={() => navigate(`/episodes/${ep.id}`)}
+      className={`w-full text-left hover:bg-slate-50 transition ${
+        nested
+          ? 'px-4 py-3 border-b border-slate-50 last:border-b-0 pl-11'
+          : 'bg-white rounded-xl border border-slate-200 p-4 hover:border-brand-300 hover:shadow-sm'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            {!nested && (
+              <span className="text-sm font-semibold text-slate-900">
+                {ep.client?.name || '未知来访者'}
+              </span>
+            )}
+            <span className={`text-xs px-2 py-0.5 rounded-full ${
+              ep.status === 'active' ? 'bg-blue-50 text-blue-700' :
+              ep.status === 'closed' ? 'bg-slate-100 text-slate-500' :
+              'bg-yellow-50 text-yellow-700'
+            }`}>
+              {statusLabels[ep.status] || ep.status}
+            </span>
+          </div>
+          {ep.chiefComplaint && (
+            <p className="text-sm text-slate-500 mt-1 truncate">{ep.chiefComplaint}</p>
+          )}
+        </div>
+
+        <div className="flex items-center gap-4 flex-shrink-0 ml-4">
+          <div className="flex items-center gap-1 text-xs text-slate-400">
+            <Hash className="w-3 h-3" />
+            <span>{ep.sessionCount ?? 0} 次</span>
+          </div>
+          {ep.nextAppointment ? (
+            <div className="flex items-center gap-1 text-xs text-brand-600">
+              <Calendar className="w-3 h-3" />
+              <span>{formatNextTime(ep.nextAppointment)}</span>
+            </div>
+          ) : ep.status === 'active' ? (
+            <div className="flex items-center gap-1 text-xs text-slate-300">
+              <Calendar className="w-3 h-3" />
+              <span>未预约</span>
+            </div>
+          ) : null}
+        </div>
+      </div>
+    </button>
   );
 }
 

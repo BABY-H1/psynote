@@ -278,6 +278,47 @@ export function useUploadNoteAttachment() {
   });
 }
 
+// ─── AI Conversations ───────────────────────────────────────────
+
+export function useAiConversations(filters?: { careEpisodeId?: string; mode?: string }) {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  const params = new URLSearchParams();
+  if (filters?.careEpisodeId) params.set('careEpisodeId', filters.careEpisodeId);
+  if (filters?.mode) params.set('mode', filters.mode);
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ['aiConversations', orgId, filters],
+    queryFn: () => api.get<any[]>(`${orgPrefix()}/ai-conversations${qs ? `?${qs}` : ''}`),
+    enabled: !!orgId,
+  });
+}
+
+export function useCreateAiConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { careEpisodeId: string; mode: string; title?: string }) =>
+      api.post<any>(`${orgPrefix()}/ai-conversations`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['aiConversations'] }); },
+  });
+}
+
+export function useUpdateAiConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: string; messages?: any[]; title?: string; summary?: string }) =>
+      api.patch<any>(`${orgPrefix()}/ai-conversations/${id}`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['aiConversations'] }); },
+  });
+}
+
+export function useDeleteAiConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<any>(`${orgPrefix()}/ai-conversations/${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['aiConversations'] }); },
+  });
+}
+
 // ─── Referrals ───────────────────────────────────────────────────
 
 export function useReferrals(careEpisodeId?: string) {

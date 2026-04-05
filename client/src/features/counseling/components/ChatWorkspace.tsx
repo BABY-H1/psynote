@@ -3,9 +3,9 @@ import {
   useNoteGuidanceChat, useSuggestTreatmentPlan,
   useSimulatedClient, useSupervision,
 } from '../../../api/useAI';
-import { useCreateSessionNote } from '../../../api/useCounseling';
+import { useCreateSessionNote, useCreateAiConversation, useUpdateAiConversation } from '../../../api/useCounseling';
 import { useToast } from '../../../shared/components';
-import { Send, Loader2, FileText, Target, Users, GraduationCap, Paperclip } from 'lucide-react';
+import { Send, Loader2, FileText, Target, Users, GraduationCap, Paperclip, X } from 'lucide-react';
 import type { TreatmentPlan } from '@psynote/shared';
 import { BUILT_IN_FORMATS } from './NoteFormatSelector';
 
@@ -50,8 +50,15 @@ export function ChatWorkspace({
   });
   const [input, setInput] = useState('');
   const [noteFormat, setNoteFormat] = useState('soap');
+  const [attachments, setAttachments] = useState<{ name: string; content: string }[]>([]);
+  const [conversationIds, setConversationIds] = useState<Record<string, string>>({});
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
+
+  // Auto-save hooks for simulate/supervise
+  const createConversation = useCreateAiConversation();
+  const updateConversation = useUpdateAiConversation();
 
   // AI hooks
   const noteChat = useNoteGuidanceChat();
@@ -72,11 +79,25 @@ export function ChatWorkspace({
     return fmt?.fieldDefinitions || BUILT_IN_FORMATS[0].fieldDefinitions;
   };
 
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files) return;
+    for (const file of Array.from(files)) {
+      if (file.size > 5 * 1024 * 1024) { toast('文件过大（最大5MB）', 'error'); continue; }
+      try {
+        const text = await file.text();
+        setAttachments((prev) => [...prev, { name: file.name, content: text }]);
+      } catch { toast(`无法读取 ${file.name}`, 'error'); }
+    }
+    e.target.value = '';
+  };
+
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || isPending) return;
+    if ((!text && attachments.length === 0) || isPending) return;
+    const sendText = text || (attachments.length > 0 ? '请帮我整理这些会谈素材。' : '');
 
-    const userMsg: ChatMessage = { role: 'user', content: text };
+    const userMsg: ChatMessage = { role: 'user', content: sendText };
     const newMsgs = [...currentMessages, userMsg];
     setMessages({ ...messages, [mode]: newMsgs });
     setInput('');
@@ -92,8 +113,11 @@ export function ChatWorkspace({
             fieldDefinitions: getFieldDefs().map((f) => ({ key: f.key, label: f.label })),
             clientContext: { chiefComplaint },
             currentFields: {},
+            attachmentTexts: attachments.length > 0 ? attachments.map((a) => a.content) : undefined,
           },
         });
+        // Clear attachments after first send
+        if (attachments.length > 0) setAttachments([]);
 
         if (response.type === 'suggestion') {
           const aMsg: ChatMessage = {
@@ -135,7 +159,24 @@ export function ChatWorkspace({
         assistantContent = response.content;
       }
 
-      setMessages({ ...messages, [mode]: [...newMsgs, { role: 'assistant', content: assistantContent }] });
+      const finalMsgs = [...newMsgs, { role: 'assistant' as const, content: assistantContent }];
+      setMessages({ ...messages, [mode]: finalMsgs });
+
+      // Auto-save for simulate/supervise
+      if (mode === 'simulate' || mode === 'supervise') {
+        const saveMsgs = finalMsgs.map((m) => ({ role: m.role, content: m.content }));
+        const convId = conversationIds[mode];
+        if (convId) {
+          updateConversation.mutate({ id: convId, messages: saveMsgs });
+        } else {
+          const modeLabel = mode === 'simulate' ? '模拟练习' : '督导对话';
+          const title = `${modeLabel} · ${new Date().toLocaleDateString('zh-CN')}`;
+          createConversation.mutateAsync({ careEpisodeId: episodeId, mode, title }).then((conv) => {
+            setConversationIds((prev) => ({ ...prev, [mode]: conv.id }));
+            updateConversation.mutate({ id: conv.id, messages: saveMsgs });
+          });
+        }
+      }
     } catch {
       setMessages({ ...messages, [mode]: [...newMsgs, { role: 'assistant', content: '抱歉，AI 服务暂时不可用。' }] });
     }
@@ -167,18 +208,6 @@ export function ChatWorkspace({
           </button>
         ))}
 
-        {/* Note format selector (only in note mode) */}
-        {mode === 'note' && (
-          <select
-            value={noteFormat}
-            onChange={(e) => { setNoteFormat(e.target.value); onNoteFormatChange?.(e.target.value); }}
-            className="ml-auto px-2 py-1 border border-slate-200 rounded text-xs text-slate-600"
-          >
-            <option value="soap">SOAP</option>
-            <option value="dap">DAP</option>
-            <option value="birp">BIRP</option>
-          </select>
-        )}
       </div>
 
       {/* Chat messages */}
@@ -236,19 +265,42 @@ export function ChatWorkspace({
       </div>
 
       {/* Input */}
-      <div className="border-t border-slate-200 p-3">
+      <div className="border-t border-slate-200 p-3 space-y-2">
+        {/* Attachment preview */}
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {attachments.map((att, i) => (
+              <div key={i} className="flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded-lg text-xs">
+                <Paperclip className="w-3 h-3" />
+                <span className="truncate max-w-[120px]">{att.name}</span>
+                <button onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))} className="text-blue-400 hover:text-blue-600">
+                  <X className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex gap-2">
+          {mode === 'note' && (
+            <>
+              <input ref={fileInputRef} type="file" accept=".txt,.md,.csv,.json,.docx" multiple className="hidden" onChange={handleFileSelect} />
+              <button onClick={() => fileInputRef.current?.click()} title="上传会谈素材"
+                className="px-3 py-2.5 border border-slate-200 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-50">
+                <Paperclip className="w-4 h-4" />
+              </button>
+            </>
+          )}
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-            placeholder={config.placeholder}
+            placeholder={attachments.length > 0 ? '添加说明，或直接发送素材...' : config.placeholder}
             disabled={isPending}
             className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
           <button
             onClick={handleSend}
-            disabled={isPending || !input.trim()}
+            disabled={isPending || (!input.trim() && attachments.length === 0)}
             className="px-4 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-500 disabled:opacity-50"
           >
             <Send className="w-4 h-4" />

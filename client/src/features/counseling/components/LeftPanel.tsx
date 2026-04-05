@@ -1,14 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import {
   useEpisodes, useSessionNotes, useReferrals, useUpdateReferral,
-  useFollowUpPlans, useFollowUpReviews,
+  useFollowUpPlans, useFollowUpReviews, useAiConversations,
 } from '../../../api/useCounseling';
 import { useResults } from '../../../api/useAssessments';
 import { useClientProfile } from '../../../api/useClientProfile';
 import { useConsentDocuments } from '../../../api/useConsent';
 import { useToast } from '../../../shared/components';
 import {
-  FileText, BarChart3, ChevronDown, ChevronUp,
+  FileText, BarChart3, ChevronDown, MessageSquare,
   ArrowRightLeft, ClipboardList, FileCheck, Download,
 } from 'lucide-react';
 import { ReferralForm } from './ReferralForm';
@@ -29,9 +29,11 @@ interface Props {
   episodeId: string;
   clientId: string;
   onSelectNote: (note: SessionNote) => void;
+  onSelectResult?: (result: any) => void;
+  onSelectConversation?: (conv: any) => void;
 }
 
-export function LeftPanel({ episodeId, clientId, onSelectNote }: Props) {
+export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, onSelectConversation }: Props) {
   const { data: profile } = useClientProfile(clientId);
   const { data: allEpisodes } = useEpisodes({ clientId });
   const [viewingEpisodeId, setViewingEpisodeId] = useState(episodeId);
@@ -43,9 +45,8 @@ export function LeftPanel({ episodeId, clientId, onSelectNote }: Props) {
   const { data: followUpPlans } = useFollowUpPlans(episodeId);
   const { data: followUpReviews } = useFollowUpReviews(episodeId);
   const { data: consentDocs } = useConsentDocuments({ clientId, careEpisodeId: episodeId });
+  const { data: aiConversations } = useAiConversations({ careEpisodeId: viewingEpisodeId });
   const { toast } = useToast();
-  const [expandedNote, setExpandedNote] = useState<string | null>(null);
-  const [expandedResult, setExpandedResult] = useState<string | null>(null);
   const [bottomTab, setBottomTab] = useState<BottomTab | null>(null);
   const [bottomHeight, setBottomHeight] = useState(200);
   const [draggingBottom, setDraggingBottom] = useState(false);
@@ -124,26 +125,16 @@ export function LeftPanel({ episodeId, clientId, onSelectNote }: Props) {
             <div className="text-xs text-slate-400 py-2">暂无会谈记录</div>
           ) : (
             sessionNotes.map((note, i) => (
-              <div key={note.id}>
-                <button onClick={() => setExpandedNote(expandedNote === note.id ? null : note.id)}
-                  className={`w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition ${expandedNote === note.id ? 'bg-emerald-50' : 'hover:bg-slate-50'}`}>
-                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-xs font-medium">{sessionNotes.length - i}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-slate-700 truncate">{note.summary || `${(note.noteFormat || 'soap').toUpperCase()} 记录`}</div>
-                    <div className="text-slate-400">{note.sessionDate}</div>
-                  </div>
-                  {expandedNote === note.id ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
-                </button>
-                {expandedNote === note.id && (
-                  <div className="ml-7 mt-1 mb-2 p-2 bg-slate-50 rounded-lg text-xs space-y-1.5">
-                    {note.subjective && <div><span className="font-medium text-slate-500">S:</span> <span className="text-slate-600 line-clamp-2">{note.subjective}</span></div>}
-                    {note.objective && <div><span className="font-medium text-slate-500">O:</span> <span className="text-slate-600 line-clamp-2">{note.objective}</span></div>}
-                    {note.assessment && <div><span className="font-medium text-slate-500">A:</span> <span className="text-slate-600 line-clamp-2">{note.assessment}</span></div>}
-                    {note.plan && <div><span className="font-medium text-slate-500">P:</span> <span className="text-slate-600 line-clamp-2">{note.plan}</span></div>}
-                    <button onClick={() => onSelectNote(note)} className="text-xs text-brand-600 hover:underline mt-1">查看完整 / 编辑 →</button>
-                  </div>
-                )}
-              </div>
+              <button key={note.id}
+                onClick={() => onSelectNote(note)}
+                className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-emerald-50">
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-xs font-medium">{sessionNotes.length - i}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-slate-700 truncate">{note.summary || `${(note.noteFormat || 'soap').toUpperCase()} 记录`}</div>
+                  <div className="text-slate-400">{note.sessionDate}</div>
+                </div>
+                <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
+              </button>
             ))
           )}
         </div>
@@ -153,29 +144,55 @@ export function LeftPanel({ episodeId, clientId, onSelectNote }: Props) {
           {(!assessmentResults || assessmentResults.length === 0) ? (
             <div className="text-xs text-slate-400 py-2">暂无评估记录</div>
           ) : (
-            assessmentResults.slice(0, 10).map((result: any) => (
-              <div key={result.id}>
-                <button onClick={() => setExpandedResult(expandedResult === result.id ? null : result.id)}
-                  className={`w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition ${expandedResult === result.id ? 'bg-blue-50' : 'hover:bg-slate-50'}`}>
+            assessmentResults.slice(0, 10).map((result: any) => {
+              const scaleLabel = result.scaleTitles?.join(' / ') || result.assessmentTitle || '测评';
+              const firstInterp = result.interpretations?.[0];
+              const resultLabel = firstInterp?.label || '';
+
+              return (
+                <button key={result.id}
+                  onClick={() => onSelectResult?.(result)}
+                  className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-blue-50">
                   <div className="w-5 h-5 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center flex-shrink-0"><BarChart3 className="w-3 h-3" /></div>
                   <div className="flex-1 min-w-0">
-                    <div className="text-slate-700 truncate">{result.totalScore != null ? `${result.totalScore}分` : '已完成'}</div>
+                    <div className="text-slate-700 truncate">
+                      {scaleLabel}
+                      {result.totalScore != null && <span className="text-slate-500"> · {result.totalScore}分</span>}
+                      {resultLabel && <span className="text-slate-500"> · {resultLabel}</span>}
+                    </div>
                     <div className="text-slate-400">{new Date(result.createdAt).toLocaleDateString('zh-CN')}</div>
                   </div>
-                  {expandedResult === result.id ? <ChevronUp className="w-3 h-3 text-slate-400" /> : <ChevronDown className="w-3 h-3 text-slate-400" />}
+                  <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
                 </button>
-                {expandedResult === result.id && (
-                  <div className="ml-7 mt-1 mb-2 p-2 bg-slate-50 rounded-lg text-xs space-y-1">
-                    {result.totalScore != null && <div><span className="text-slate-500">总分:</span> <span className="font-medium">{result.totalScore}</span></div>}
-                    {result.dimensionScores && Object.entries(result.dimensionScores as Record<string, number>).map(([dim, score]) => (
-                      <div key={dim}><span className="text-slate-500">{dim}:</span> {score}</div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))
+              );
+            })
           )}
         </div>
+
+        {/* AI Conversations */}
+        {aiConversations && aiConversations.length > 0 && (
+          <>
+            <SectionHeader icon={<MessageSquare className="w-3.5 h-3.5" />} title="AI 对话" count={aiConversations.length} />
+            <div className="px-3 pb-2 space-y-1">
+              {aiConversations.map((conv: any) => {
+                const modeLabel = conv.mode === 'simulate' ? '🗣️' : '🎓';
+                const msgCount = (conv.messages as any[])?.length || 0;
+                return (
+                  <button key={conv.id}
+                    onClick={() => onSelectConversation?.(conv)}
+                    className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-violet-50">
+                    <div className="w-5 h-5 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center flex-shrink-0 text-xs">{modeLabel}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-slate-700 truncate">{conv.title || (conv.mode === 'simulate' ? '模拟练习' : '督导对话')}</div>
+                      <div className="text-slate-400">{msgCount}条 · {new Date(conv.updatedAt).toLocaleDateString('zh-CN')}</div>
+                    </div>
+                    <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         {sessionNotes && sessionNotes.length > 0 && (
           <div className="px-3 pb-2">

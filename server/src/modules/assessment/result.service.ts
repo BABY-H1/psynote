@@ -7,7 +7,8 @@ import {
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { generateIndividualSingleReport } from './report.service.js';
 
-/** List results for an org, optionally filtered */
+/** List results for an org, optionally filtered.
+ *  Joins assessment → assessment_scales → scales to include scale titles. */
 export async function listResults(
   orgId: string,
   filters?: {
@@ -39,11 +40,95 @@ export async function listResults(
     conditions.push(eq(assessmentResults.riskLevel, filters.riskLevel));
   }
 
-  return db
+  const rows = await db
     .select()
     .from(assessmentResults)
     .where(and(...conditions))
     .orderBy(desc(assessmentResults.createdAt));
+
+  if (rows.length === 0) return [];
+
+  // Collect unique assessmentIds to batch-load scale titles
+  const assessmentIds = [...new Set(rows.map((r) => r.assessmentId))];
+
+  // Load assessment titles
+  const assessmentRows = assessmentIds.length > 0
+    ? await db.select({ id: assessments.id, title: assessments.title })
+        .from(assessments)
+        .where(or(...assessmentIds.map((id) => eq(assessments.id, id))))
+    : [];
+  const assessmentMap = new Map(assessmentRows.map((a) => [a.id, a.title]));
+
+  // Load scale titles per assessment
+  const scaleJoinRows = assessmentIds.length > 0
+    ? await db.select({
+        assessmentId: assessmentScales.assessmentId,
+        scaleTitle: scales.title,
+      })
+        .from(assessmentScales)
+        .innerJoin(scales, eq(assessmentScales.scaleId, scales.id))
+        .where(or(...assessmentIds.map((id) => eq(assessmentScales.assessmentId, id))))
+        .orderBy(assessmentScales.sortOrder)
+    : [];
+  const scaleMap = new Map<string, string[]>();
+  for (const row of scaleJoinRows) {
+    const list = scaleMap.get(row.assessmentId) || [];
+    list.push(row.scaleTitle);
+    scaleMap.set(row.assessmentId, list);
+  }
+
+  // Load dimension labels for interpreting scores
+  const allDimScoreKeys = new Set<string>();
+  for (const r of rows) {
+    const ds = r.dimensionScores as Record<string, number> | any[];
+    if (ds && !Array.isArray(ds)) {
+      for (const k of Object.keys(ds)) allDimScoreKeys.add(k);
+    }
+  }
+  const dimIds = [...allDimScoreKeys];
+  const dimRows = dimIds.length > 0
+    ? await db.select({ id: scaleDimensions.id, name: scaleDimensions.name })
+        .from(scaleDimensions)
+        .where(or(...dimIds.map((id) => eq(scaleDimensions.id, id))))
+    : [];
+  const dimNameMap = new Map(dimRows.map((d) => [d.id, d.name]));
+
+  const ruleRows = dimIds.length > 0
+    ? await db.select()
+        .from(dimensionRules)
+        .where(or(...dimIds.map((id) => eq(dimensionRules.dimensionId, id))))
+    : [];
+
+  return rows.map((r) => {
+    const ds = r.dimensionScores as Record<string, number> | any[];
+    let interpretations: { dimension: string; score: number; label: string }[] = [];
+
+    if (ds && !Array.isArray(ds)) {
+      interpretations = Object.entries(ds).map(([dimId, score]) => {
+        const rules = ruleRows.filter((rule) => rule.dimensionId === dimId);
+        const matched = rules.find((rule) =>
+          score >= parseFloat(rule.minScore) && score <= parseFloat(rule.maxScore));
+        return {
+          dimension: dimNameMap.get(dimId) || dimId,
+          score,
+          label: matched?.label || '',
+        };
+      });
+    } else if (Array.isArray(ds)) {
+      interpretations = ds.map((d: any) => ({
+        dimension: d.label || d.dimensionId || '',
+        score: d.score ?? 0,
+        label: d.label || '',
+      }));
+    }
+
+    return {
+      ...r,
+      assessmentTitle: assessmentMap.get(r.assessmentId) || null,
+      scaleTitles: scaleMap.get(r.assessmentId) || [],
+      interpretations,
+    };
+  });
 }
 
 /** Get a single result by ID */

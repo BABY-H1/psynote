@@ -11,7 +11,6 @@ import { WorkspaceLayout } from '../components/WorkspaceLayout';
 import { ChatWorkspace, type WorkMode } from '../components/ChatWorkspace';
 import { OutputPanel } from '../components/OutputPanel';
 import { LeftPanel } from '../components/LeftPanel';
-import { NoteViewer } from '../components/NoteViewer';
 
 import { PageLoading, useToast } from '../../../shared/components';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
@@ -20,11 +19,6 @@ import type { SessionNote } from '@psynote/shared';
 const statusLabels: Record<string, string> = {
   active: '进行中', paused: '暂停', closed: '已结案', archived: '已归档',
 };
-
-type CenterView =
-  | { type: 'chat' }
-  | { type: 'viewNote'; note: SessionNote }
-  | { type: 'editNote'; note: SessionNote };
 
 export function EpisodeDetail() {
   const { episodeId } = useParams<{ episodeId: string }>();
@@ -41,7 +35,9 @@ export function EpisodeDetail() {
   const [noteFormat, setNoteFormat] = useState('soap');
   const [planSuggestion, setPlanSuggestion] = useState<any>(null);
   const [currentMode, setCurrentMode] = useState<WorkMode>('note');
-  const [centerView, setCenterView] = useState<CenterView>({ type: 'chat' });
+  const [viewingNote, setViewingNote] = useState<SessionNote | null>(null);
+  const [viewingResult, setViewingResult] = useState<any>(null);
+  const [viewingConversation, setViewingConversation] = useState<any>(null);
 
   if (!episode) return <PageLoading />;
 
@@ -99,37 +95,30 @@ export function EpisodeDetail() {
           <LeftPanel
             episodeId={episode.id}
             clientId={episode.clientId}
-            onSelectNote={(note) => setCenterView({ type: 'viewNote', note })}
+            onSelectNote={(note) => { setViewingNote(note); setViewingResult(null); setViewingConversation(null); }}
+            onSelectResult={(result) => { setViewingResult(result); setViewingNote(null); setViewingConversation(null); }}
+            onSelectConversation={(conv) => { setViewingConversation(conv); setViewingNote(null); setViewingResult(null); }}
           />
         }
         center={
-          centerView.type === 'chat' ? (
-            <ChatWorkspace
-              episodeId={episode.id}
-              clientId={episode.clientId}
-              chiefComplaint={episode.chiefComplaint}
-              currentRisk={episode.currentRisk}
-              activePlan={activePlan}
-              onModeChange={setCurrentMode}
-              onNoteFormatChange={(format) => { setNoteFormat(format); setNoteFields({}); }}
-              onNoteFieldsUpdate={(fields, format) => {
-                setNoteFields((prev) => ({ ...prev, ...fields }));
-                setNoteFormat(format);
-                setCurrentMode('note');
-              }}
-              onPlanSuggestion={(data) => {
-                setPlanSuggestion(data);
-                setCurrentMode('plan');
-              }}
-            />
-          ) : centerView.type === 'viewNote' || centerView.type === 'editNote' ? (
-            <NoteViewer
-              note={centerView.note}
-              editing={centerView.type === 'editNote'}
-              onEdit={() => setCenterView({ type: 'editNote', note: centerView.note })}
-              onClose={() => setCenterView({ type: 'chat' })}
-            />
-          ) : null
+          <ChatWorkspace
+            episodeId={episode.id}
+            clientId={episode.clientId}
+            chiefComplaint={episode.chiefComplaint}
+            currentRisk={episode.currentRisk}
+            activePlan={activePlan}
+            onModeChange={setCurrentMode}
+            onNoteFormatChange={(format) => { setNoteFormat(format); setNoteFields({}); }}
+            onNoteFieldsUpdate={(fields, format) => {
+              setNoteFields((prev) => ({ ...prev, ...fields }));
+              setNoteFormat(format);
+              setCurrentMode('note');
+            }}
+            onPlanSuggestion={(data) => {
+              setPlanSuggestion(data);
+              setCurrentMode('plan');
+            }}
+          />
         }
         right={
           <OutputPanel
@@ -140,6 +129,7 @@ export function EpisodeDetail() {
             noteFields={noteFields}
             noteFormat={noteFormat}
             onNoteFieldChange={(key, val) => setNoteFields((prev) => ({ ...prev, [key]: val }))}
+            onNoteFormatChange={(format) => { setNoteFormat(format); setNoteFields({}); }}
             planSuggestion={planSuggestion}
             activePlan={activePlan}
             plans={plans || []}
@@ -147,6 +137,12 @@ export function EpisodeDetail() {
             lastNoteSummary={lastNote?.summary || undefined}
             lastNoteDate={lastNote ? lastNote.sessionDate : undefined}
             presentingIssues={presentingIssues}
+            viewingNote={viewingNote}
+            onCloseNote={() => setViewingNote(null)}
+            viewingResult={viewingResult}
+            onCloseResult={() => setViewingResult(null)}
+            viewingConversation={viewingConversation}
+            onCloseConversation={() => setViewingConversation(null)}
           />
         }
       />

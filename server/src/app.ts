@@ -19,6 +19,7 @@ import { noteTemplateRoutes } from './modules/counseling/note-template.routes.js
 import { goalLibraryRoutes } from './modules/counseling/goal-library.routes.js';
 import { clientProfileRoutes } from './modules/counseling/client-profile.routes.js';
 import { treatmentPlanRoutes } from './modules/counseling/treatment-plan.routes.js';
+import { aiConversationRoutes } from './modules/counseling/ai-conversation.routes.js';
 import { referralRoutes } from './modules/referral/referral.routes.js';
 import { followUpRoutes } from './modules/follow-up/follow-up.routes.js';
 import { aiRoutes } from './modules/ai/ai.routes.js';
@@ -75,6 +76,7 @@ await app.register(noteTemplateRoutes, { prefix: '/api/orgs/:orgId/note-template
 await app.register(goalLibraryRoutes, { prefix: '/api/orgs/:orgId/goal-library' });
 await app.register(clientProfileRoutes, { prefix: '/api/orgs/:orgId/clients' });
 await app.register(treatmentPlanRoutes, { prefix: '/api/orgs/:orgId/treatment-plans' });
+await app.register(aiConversationRoutes, { prefix: '/api/orgs/:orgId/ai-conversations' });
 await app.register(referralRoutes, { prefix: '/api/orgs/:orgId/referrals' });
 await app.register(followUpRoutes, { prefix: '/api/orgs/:orgId/follow-up' });
 

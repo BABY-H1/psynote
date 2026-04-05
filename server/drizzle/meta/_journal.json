@@ -8,6 +8,13 @@
       "when": 1775189433696,
       "tag": "0000_quiet_scalphunter",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1775358599380,
+      "tag": "0001_thick_selene",
+      "breakpoints": true
     }
   ]
 }

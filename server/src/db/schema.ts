@@ -445,6 +445,23 @@ export const followUpReviews = pgTable('follow_up_reviews', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ─── AI Conversations ────────────────────────────────────────────
+
+export const aiConversations = pgTable('ai_conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  careEpisodeId: uuid('care_episode_id').notNull().references(() => careEpisodes.id, { onDelete: 'cascade' }),
+  counselorId: uuid('counselor_id').notNull().references(() => users.id),
+  mode: text('mode').notNull(), // 'simulate' | 'supervise'
+  title: text('title'),
+  messages: jsonb('messages').notNull().default([]), // ChatMessage[]
+  summary: text('summary'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_ai_conversations_episode').on(t.careEpisodeId, t.mode),
+]);
+
 // ─── Group Domain ─────────────────────────────────────────────────
 
 export const groupSchemes = pgTable('group_schemes', {
