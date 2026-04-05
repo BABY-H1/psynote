@@ -24,12 +24,26 @@ const modeConfig: Record<WorkMode, { icon: React.ReactNode; label: string; place
   supervise: { icon: <GraduationCap className="w-3.5 h-3.5" />, label: '督导', placeholder: '和 AI 督导讨论你的个案...', color: 'amber' },
 };
 
+interface ClientContext {
+  name?: string;
+  age?: number;
+  gender?: string;
+  occupation?: string;
+  education?: string;
+  presentingIssues?: string[];
+  medicalHistory?: string;
+  familyBackground?: string;
+}
+
 interface Props {
   episodeId: string;
   clientId: string;
   chiefComplaint?: string;
-  currentRisk?: string;
   activePlan?: TreatmentPlan;
+  clientContext?: ClientContext;
+  sessionHistorySummary?: string;
+  assessmentSummary?: string;
+  lastNoteSummary?: string;
   onNoteFieldsUpdate: (fields: Record<string, string>, format: string) => void;
   onPlanSuggestion: (data: any) => void;
   onModeChange?: (mode: WorkMode) => void;
@@ -37,7 +51,8 @@ interface Props {
 }
 
 export function ChatWorkspace({
-  episodeId, clientId, chiefComplaint, currentRisk, activePlan,
+  episodeId, clientId, chiefComplaint, activePlan,
+  clientContext, sessionHistorySummary, assessmentSummary, lastNoteSummary,
   onNoteFieldsUpdate, onPlanSuggestion, onModeChange, onNoteFormatChange,
 }: Props) {
   const [mode, setModeInternal] = useState<WorkMode>('note');
@@ -111,7 +126,17 @@ export function ChatWorkspace({
           context: {
             format: noteFormat,
             fieldDefinitions: getFieldDefs().map((f) => ({ key: f.key, label: f.label })),
-            clientContext: { chiefComplaint },
+            clientContext: {
+              chiefComplaint,
+              name: clientContext?.name,
+              age: clientContext?.age,
+              gender: clientContext?.gender,
+              presentingIssues: clientContext?.presentingIssues,
+              previousNoteSummary: lastNoteSummary,
+              treatmentGoals: activePlan
+                ? ((activePlan.goals as any[]) || []).map((g: any) => g.description)
+                : undefined,
+            },
             currentFields: {},
             attachmentTexts: attachments.length > 0 ? attachments.map((a) => a.content) : undefined,
           },
@@ -136,15 +161,33 @@ export function ChatWorkspace({
       } else if (mode === 'plan') {
         const response = await planSuggest.mutateAsync({
           chiefComplaint,
-          riskLevel: currentRisk || 'level_1',
           sessionNotes: text,
+          assessmentSummary,
+          clientContext: clientContext ? {
+            name: clientContext.name,
+            age: clientContext.age,
+            gender: clientContext.gender,
+            presentingIssues: clientContext.presentingIssues,
+          } : undefined,
         });
         onPlanSuggestion(response);
         assistantContent = `已生成建议方案，请在右侧查看。\n\n${response.rationale}`;
       } else if (mode === 'simulate') {
         const response = await simulateChat.mutateAsync({
           messages: newMsgs.map((m) => ({ role: m.role, content: m.content })),
-          context: { clientProfile: { chiefComplaint, riskLevel: currentRisk } },
+          context: {
+            clientProfile: {
+              chiefComplaint,
+              name: clientContext?.name,
+              age: clientContext?.age,
+              gender: clientContext?.gender,
+              occupation: clientContext?.occupation,
+              education: clientContext?.education,
+              presentingIssues: clientContext?.presentingIssues,
+              familyBackground: clientContext?.familyBackground,
+            },
+            sessionHistory: sessionHistorySummary,
+          },
         });
         assistantContent = response.content;
       } else if (mode === 'supervise') {
@@ -154,7 +197,18 @@ export function ChatWorkspace({
         } : undefined;
         const response = await superviseChat.mutateAsync({
           messages: newMsgs.map((m) => ({ role: m.role, content: m.content })),
-          context: { clientProfile: { chiefComplaint, riskLevel: currentRisk }, treatmentPlan: goalData },
+          context: {
+            clientProfile: {
+              chiefComplaint,
+              name: clientContext?.name,
+              age: clientContext?.age,
+              gender: clientContext?.gender,
+              presentingIssues: clientContext?.presentingIssues,
+            },
+            treatmentPlan: goalData,
+            sessionHistory: sessionHistorySummary,
+            assessmentSummary,
+          },
         });
         assistantContent = response.content;
       }

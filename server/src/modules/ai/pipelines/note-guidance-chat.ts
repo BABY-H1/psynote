@@ -12,6 +12,10 @@ interface NoteGuidanceContext {
     chiefComplaint?: string;
     treatmentGoals?: string[];
     previousNoteSummary?: string;
+    name?: string;
+    age?: number;
+    gender?: string;
+    presentingIssues?: string[];
   };
   currentFields?: Record<string, string>;
   attachmentTexts?: string[];
@@ -28,9 +32,16 @@ function buildSystemPrompt(context: NoteGuidanceContext): string {
     .join('\n');
 
   const clientInfo: string[] = [];
-  if (context.clientContext?.chiefComplaint) clientInfo.push(`主诉: ${context.clientContext.chiefComplaint}`);
-  if (context.clientContext?.treatmentGoals?.length) clientInfo.push(`治疗目标: ${context.clientContext.treatmentGoals.join('、')}`);
-  if (context.clientContext?.previousNoteSummary) clientInfo.push(`上次会谈概要: ${context.clientContext.previousNoteSummary}`);
+  const cc = context.clientContext;
+  const demographics: string[] = [];
+  if (cc?.name) demographics.push(cc.name);
+  if (cc?.gender) demographics.push(cc.gender === 'male' ? '男' : cc.gender === 'female' ? '女' : cc.gender);
+  if (cc?.age) demographics.push(`${cc.age}岁`);
+  if (demographics.length) clientInfo.push(`来访者: ${demographics.join('，')}`);
+  if (cc?.chiefComplaint) clientInfo.push(`主诉: ${cc.chiefComplaint}`);
+  if (cc?.presentingIssues?.length) clientInfo.push(`现有问题: ${cc.presentingIssues.join('、')}`);
+  if (cc?.treatmentGoals?.length) clientInfo.push(`治疗目标: ${cc.treatmentGoals.join('、')}`);
+  if (cc?.previousNoteSummary) clientInfo.push(`上次会谈概要: ${cc.previousNoteSummary}`);
 
   const filledFields = Object.entries(context.currentFields || {})
     .filter(([, v]) => v?.trim())

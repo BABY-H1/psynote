@@ -2,9 +2,15 @@ import { aiClient } from '../providers/openai-compatible.js';
 
 interface SuggestInput {
   chiefComplaint?: string;
-  riskLevel: string;
+  riskLevel?: string;
   assessmentSummary?: string;
   sessionNotes?: string;
+  clientContext?: {
+    name?: string;
+    age?: number;
+    gender?: string;
+    presentingIssues?: string[];
+  };
 }
 
 interface SuggestedGoal {
@@ -32,8 +38,14 @@ interface TreatmentPlanSuggestion {
  */
 export async function suggestTreatmentPlan(input: SuggestInput): Promise<TreatmentPlanSuggestion> {
   const contextParts: string[] = [];
+  const cc = input.clientContext;
+  const demographics: string[] = [];
+  if (cc?.name) demographics.push(cc.name);
+  if (cc?.gender) demographics.push(cc.gender === 'male' ? '男' : cc.gender === 'female' ? '女' : cc.gender);
+  if (cc?.age) demographics.push(`${cc.age}岁`);
+  if (demographics.length) contextParts.push(`来访者: ${demographics.join('，')}`);
+  if (cc?.presentingIssues?.length) contextParts.push(`现有问题: ${cc.presentingIssues.join('、')}`);
   if (input.chiefComplaint) contextParts.push(`主诉: ${input.chiefComplaint}`);
-  contextParts.push(`当前风险等级: ${input.riskLevel}`);
   if (input.assessmentSummary) contextParts.push(`评估概要:\n${input.assessmentSummary}`);
   if (input.sessionNotes) contextParts.push(`近期会谈记录:\n${input.sessionNotes}`);
 

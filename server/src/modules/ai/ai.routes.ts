@@ -179,12 +179,16 @@ export async function aiRoutes(app: FastifyInstance) {
   }, async (request) => {
     const body = request.body as {
       chiefComplaint?: string;
-      riskLevel: string;
+      riskLevel?: string;
       assessmentSummary?: string;
       sessionNotes?: string;
+      clientContext?: {
+        name?: string;
+        age?: number;
+        gender?: string;
+        presentingIssues?: string[];
+      };
     };
-
-    if (!body.riskLevel) throw new ValidationError('riskLevel is required');
 
     const suggestion = await suggestTreatmentPlan(body);
     await logAudit(request, 'ai_call', 'suggest-treatment-plan');

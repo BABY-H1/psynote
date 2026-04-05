@@ -1,10 +1,16 @@
 import { aiClient } from '../providers/openai-compatible.js';
 
 interface SupervisionContext {
-  recentSOAP?: Record<string, string>; // latest note fields
   treatmentPlan?: { goals: { description: string; status: string }[]; approach?: string };
-  clientProfile?: { chiefComplaint?: string; riskLevel?: string };
+  clientProfile?: {
+    chiefComplaint?: string;
+    name?: string;
+    age?: number;
+    gender?: string;
+    presentingIssues?: string[];
+  };
   sessionHistory?: string;
+  assessmentSummary?: string;
 }
 
 /**
@@ -15,22 +21,30 @@ export async function supervisionChat(
   messages: { role: string; content: string }[],
   context: SupervisionContext,
 ): Promise<{ type: 'message'; content: string }> {
+  const cp = context.clientProfile;
   const contextParts: string[] = [];
-  if (context.clientProfile?.chiefComplaint) {
-    contextParts.push(`来访者主诉: ${context.clientProfile.chiefComplaint}`);
+
+  // Client demographics
+  const demographics: string[] = [];
+  if (cp?.name) demographics.push(cp.name);
+  if (cp?.gender) demographics.push(cp.gender === 'male' ? '男' : cp.gender === 'female' ? '女' : cp.gender);
+  if (cp?.age) demographics.push(`${cp.age}岁`);
+  if (demographics.length) contextParts.push(`来访者: ${demographics.join('，')}`);
+
+  if (cp?.chiefComplaint) contextParts.push(`主诉: ${cp.chiefComplaint}`);
+  if (cp?.presentingIssues?.length) contextParts.push(`现有问题: ${cp.presentingIssues.join('、')}`);
+
+  if (context.assessmentSummary) {
+    contextParts.push(`评估数据:\n${context.assessmentSummary}`);
   }
-  if (context.clientProfile?.riskLevel) {
-    contextParts.push(`当前风险: ${context.clientProfile.riskLevel}`);
-  }
-  if (context.recentSOAP) {
-    const noteContent = Object.entries(context.recentSOAP)
-      .map(([k, v]) => `${k}: ${v}`)
-      .join('\n');
-    contextParts.push(`最近的会谈记录:\n${noteContent}`);
+  if (context.sessionHistory) {
+    contextParts.push(`会谈历史:\n${context.sessionHistory}`);
   }
   if (context.treatmentPlan) {
     const goals = context.treatmentPlan.goals.map((g) => `- ${g.description} (${g.status})`).join('\n');
     contextParts.push(`治疗计划:\n取向: ${context.treatmentPlan.approach || '未指定'}\n${goals}`);
+  } else {
+    contextParts.push('治疗计划: 尚未制定（可引导咨询师思考治疗方向和目标）');
   }
 
   const systemPrompt = `你是一位资深的心理咨询督导师，正在和咨询师进行个别督导。

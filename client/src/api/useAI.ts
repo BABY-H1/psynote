@@ -127,9 +127,14 @@ export function useSuggestTreatmentPlan() {
   return useMutation({
     mutationFn: (data: {
       chiefComplaint?: string;
-      riskLevel: string;
       assessmentSummary?: string;
       sessionNotes?: string;
+      clientContext?: {
+        name?: string;
+        age?: number;
+        gender?: string;
+        presentingIssues?: string[];
+      };
     }) => api.post<{
       suggestedGoals: { description: string; rationale: string }[];
       suggestedInterventions: { description: string; frequency?: string; rationale: string }[];
@@ -194,7 +199,7 @@ export function useNoteGuidanceChat() {
       context: {
         format: string;
         fieldDefinitions: { key: string; label: string }[];
-        clientContext?: { chiefComplaint?: string; treatmentGoals?: string[]; previousNoteSummary?: string };
+        clientContext?: { chiefComplaint?: string; treatmentGoals?: string[]; previousNoteSummary?: string; name?: string; age?: number; gender?: string; presentingIssues?: string[] };
         currentFields?: Record<string, string>;
         attachmentTexts?: string[];
       };

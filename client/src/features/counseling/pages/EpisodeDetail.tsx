@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   useEpisode, useCloseEpisode, useReopenEpisode,
@@ -6,6 +6,7 @@ import {
 } from '../../../api/useCounseling';
 import { useTreatmentPlans } from '../../../api/useTreatmentPlan';
 import { useClientProfile } from '../../../api/useClientProfile';
+import { useResults } from '../../../api/useAssessments';
 
 import { WorkspaceLayout } from '../components/WorkspaceLayout';
 import { ChatWorkspace, type WorkMode } from '../components/ChatWorkspace';
@@ -27,6 +28,7 @@ export function EpisodeDetail() {
   const { data: plans } = useTreatmentPlans(episodeId);
   const { data: sessionNotes } = useSessionNotes({ careEpisodeId: episodeId });
   const { data: profile } = useClientProfile(episode?.clientId);
+  const { data: assessmentResults } = useResults({ userId: episode?.clientId });
   const closeEpisode = useCloseEpisode();
   const reopenEpisode = useReopenEpisode();
   const { toast } = useToast();
@@ -38,6 +40,49 @@ export function EpisodeDetail() {
   const [viewingNote, setViewingNote] = useState<SessionNote | null>(null);
   const [viewingResult, setViewingResult] = useState<any>(null);
   const [viewingConversation, setViewingConversation] = useState<any>(null);
+
+  // Build rich AI context from all available data (hooks must be before early return)
+  const clientContext = useMemo(() => {
+    if (!profile && !episode) return undefined;
+    const age = profile?.dateOfBirth
+      ? Math.floor((Date.now() - new Date(profile.dateOfBirth).getTime()) / 31557600000)
+      : undefined;
+    return {
+      name: episode?.client?.name,
+      age,
+      gender: profile?.gender,
+      occupation: profile?.occupation,
+      education: profile?.education,
+      presentingIssues: (profile?.presentingIssues as string[]) || [],
+      medicalHistory: profile?.medicalHistory,
+      familyBackground: profile?.familyBackground,
+    };
+  }, [profile, episode]);
+
+  // All session notes in chronological order (oldest first)
+  const sessionHistorySummary = useMemo(() => {
+    if (!sessionNotes?.length) return undefined;
+    return [...sessionNotes]
+      .reverse()
+      .map((n: any, i: number) => {
+        const date = n.sessionDate ? new Date(n.sessionDate).toLocaleDateString('zh-CN') : '';
+        return `第${i + 1}次(${date}): ${n.summary || '无摘要'}`;
+      })
+      .join('\n');
+  }, [sessionNotes]);
+
+  const assessmentSummary = useMemo(() => {
+    if (!assessmentResults?.length) return undefined;
+    return assessmentResults
+      .slice(0, 3)
+      .map((r: any) => {
+        const date = r.completedAt ? new Date(r.completedAt).toLocaleDateString('zh-CN') : '';
+        const scaleName = r.scaleTitles?.[0] || r.assessmentTitle || '量表';
+        const interps = (r.interpretations || []).map((d: any) => `${d.dimension}: ${d.score}分(${d.label})`).join(', ');
+        return `${scaleName}(${date}): 总分${r.totalScore}${interps ? `, ${interps}` : ''}`;
+      })
+      .join('\n');
+  }, [assessmentResults]);
 
   if (!episode) return <PageLoading />;
 
@@ -105,8 +150,11 @@ export function EpisodeDetail() {
             episodeId={episode.id}
             clientId={episode.clientId}
             chiefComplaint={episode.chiefComplaint}
-            currentRisk={episode.currentRisk}
             activePlan={activePlan}
+            clientContext={clientContext}
+            sessionHistorySummary={sessionHistorySummary}
+            assessmentSummary={assessmentSummary}
+            lastNoteSummary={lastNote?.summary}
             onModeChange={setCurrentMode}
             onNoteFormatChange={(format) => { setNoteFormat(format); setNoteFields({}); }}
             onNoteFieldsUpdate={(fields, format) => {
