@@ -1,6 +1,6 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, asc, desc } from 'drizzle-orm';
 import { db } from '../../config/database.js';
-import { groupInstances, groupEnrollments, users } from '../../db/schema.js';
+import { groupInstances, groupEnrollments, groupSchemeSessions, groupSessionRecords, users } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
 
 export async function listInstances(orgId: string, status?: string) {
@@ -56,9 +56,9 @@ export async function createInstance(input: {
   location?: string;
   status?: string;
   capacity?: number;
-  screeningAssessmentId?: string;
-  preAssessmentId?: string;
-  postAssessmentId?: string;
+  recruitmentAssessments?: string[];
+  overallAssessments?: string[];
+  screeningNotes?: string;
   createdBy: string;
 }) {
   const [instance] = await db.insert(groupInstances).values({
@@ -74,11 +74,32 @@ export async function createInstance(input: {
     location: input.location,
     status: input.status || 'draft',
     capacity: input.capacity,
-    screeningAssessmentId: input.screeningAssessmentId || null,
-    preAssessmentId: input.preAssessmentId || null,
-    postAssessmentId: input.postAssessmentId || null,
+    recruitmentAssessments: input.recruitmentAssessments || [],
+    overallAssessments: input.overallAssessments || [],
+    screeningNotes: input.screeningNotes,
     createdBy: input.createdBy,
   }).returning();
+
+  // Auto-generate session records from scheme if linked
+  if (input.schemeId) {
+    const schemeSessions = await db
+      .select()
+      .from(groupSchemeSessions)
+      .where(eq(groupSchemeSessions.schemeId, input.schemeId))
+      .orderBy(asc(groupSchemeSessions.sortOrder));
+
+    if (schemeSessions.length > 0) {
+      await db.insert(groupSessionRecords).values(
+        schemeSessions.map((ss, idx) => ({
+          instanceId: instance.id,
+          schemeSessionId: ss.id,
+          sessionNumber: idx + 1,
+          title: ss.title,
+          status: 'planned',
+        })),
+      );
+    }
+  }
 
   return instance;
 }
@@ -96,9 +117,9 @@ export async function updateInstance(
     location: string;
     status: string;
     capacity: number;
-    screeningAssessmentId: string;
-    preAssessmentId: string;
-    postAssessmentId: string;
+    recruitmentAssessments: string[];
+    overallAssessments: string[];
+    screeningNotes: string;
   }>,
 ) {
   const [updated] = await db
@@ -109,4 +130,14 @@ export async function updateInstance(
 
   if (!updated) throw new NotFoundError('GroupInstance', instanceId);
   return updated;
+}
+
+export async function deleteInstance(instanceId: string) {
+  const [deleted] = await db
+    .delete(groupInstances)
+    .where(eq(groupInstances.id, instanceId))
+    .returning();
+
+  if (!deleted) throw new NotFoundError('GroupInstance', instanceId);
+  return deleted;
 }

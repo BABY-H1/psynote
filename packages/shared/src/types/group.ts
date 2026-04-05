@@ -34,6 +34,10 @@ export interface GroupScheme {
   facilitatorRequirements?: string;
   evaluationMethod?: string;
   notes?: string;
+  // Assessment recommendations
+  recruitmentAssessments?: string[]; // assessment IDs for recruitment
+  overallAssessments?: string[];     // assessment IDs for longitudinal tracking
+  screeningNotes?: string;
   // Meta
   visibility: SchemeVisibility;
   createdBy?: string;
@@ -56,7 +60,7 @@ export interface GroupSchemeSession {
   sessionTheory?: string;
   sessionEvaluation?: string;
   sortOrder: number;
-  relatedAssessmentId?: string;
+  relatedAssessments?: string[]; // assessment IDs linked to this session
 }
 
 export interface GroupInstance {
@@ -73,9 +77,9 @@ export interface GroupInstance {
   location?: string;
   status: GroupStatus;
   capacity?: number;
-  screeningAssessmentId?: string;
-  preAssessmentId?: string;
-  postAssessmentId?: string;
+  recruitmentAssessments?: string[];
+  overallAssessments?: string[];
+  screeningNotes?: string;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

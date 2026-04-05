@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
 import {
-  useGroupSessions, useInitializeSessions, useCreateSessionRecord,
-  useUpdateSessionRecord, useRecordAttendance,
+  useGroupSessions, useCreateSessionRecord,
+  useUpdateSessionRecord, useRecordAttendance, useGroupScheme,
 } from '../../../../api/useGroups';
 import { PageLoading, EmptyState, useToast } from '../../../../shared/components';
 import {
-  CheckCircle2, Circle, XCircle, Plus, Download, Calendar,
-  ChevronDown, ChevronRight, Users, FileText,
+  CheckCircle2, Circle, XCircle, Plus, Calendar,
+  ChevronDown, ChevronRight, Users, FileText, ClipboardList, BookOpen, Link,
 } from 'lucide-react';
-import type { GroupInstance, GroupEnrollment } from '@psynote/shared';
+import type { GroupInstance, GroupEnrollment, GroupSchemeSession, SessionPhase } from '@psynote/shared';
 
 const sessionStatusConfig: Record<string, { icon: React.ReactNode; color: string; text: string }> = {
   planned: { icon: <Circle className="w-4 h-4" />, color: 'text-slate-400', text: '计划中' },
@@ -29,9 +29,8 @@ interface Props {
 
 export function SessionsTab({ instance }: Props) {
   const { data: sessions, isLoading } = useGroupSessions(instance.id);
-  const initSessions = useInitializeSessions();
+  const { data: scheme } = useGroupScheme(instance.schemeId || undefined);
   const updateSession = useUpdateSessionRecord();
-  const recordAttendance = useRecordAttendance();
   const { toast } = useToast();
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
@@ -43,12 +42,13 @@ export function SessionsTab({ instance }: Props) {
   const completedCount = sessions?.filter((s) => s.status === 'completed').length || 0;
   const totalCount = sessions?.length || 0;
 
-  const handleInitialize = () => {
-    initSessions.mutate(instance.id, {
-      onSuccess: () => toast('活动单元已从方案导入', 'success'),
-      onError: (err: any) => toast(err?.message || '初始化失败', 'error'),
-    });
-  };
+  // Build a map of scheme session data by ID for quick lookup
+  const schemeSessionMap = new Map<string, GroupSchemeSession>();
+  if (scheme?.sessions) {
+    for (const ss of scheme.sessions) {
+      schemeSessionMap.set(ss.id, ss);
+    }
+  }
 
   const handleStatusChange = (sessionId: string, status: string) => {
     updateSession.mutate({ instanceId: instance.id, sessionId, status }, {
@@ -60,7 +60,6 @@ export function SessionsTab({ instance }: Props) {
     updateSession.mutate({ instanceId: instance.id, sessionId, notes });
   };
 
-  // Approved enrollments for attendance
   const approvedEnrollments = (instance.enrollments || []).filter((e) => e.status === 'approved');
 
   return (
@@ -81,23 +80,13 @@ export function SessionsTab({ instance }: Props) {
         </div>
       )}
 
-      {/* Actions */}
+      {/* Add extra session button */}
       <div className="flex gap-2">
-        {instance.schemeId && (!sessions || sessions.length === 0) && (
-          <button
-            onClick={handleInitialize}
-            disabled={initSessions.isPending}
-            className="flex items-center gap-1.5 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-500 disabled:opacity-50"
-          >
-            <Download className="w-4 h-4" />
-            {initSessions.isPending ? '导入中...' : '从方案导入活动'}
-          </button>
-        )}
         <button
           onClick={() => setShowAddForm(true)}
           className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50"
         >
-          <Plus className="w-4 h-4" /> 新增活动
+          <Plus className="w-4 h-4" /> 添加临时活动
         </button>
       </div>
 
@@ -118,19 +107,24 @@ export function SessionsTab({ instance }: Props) {
           {sessions.map((sess) => {
             const config = sessionStatusConfig[sess.status] || sessionStatusConfig.planned;
             const isExpanded = expandedId === sess.id;
+            const schemeSess = sess.schemeSessionId ? schemeSessionMap.get(sess.schemeSessionId) : undefined;
 
             return (
               <div key={sess.id} className={`bg-white rounded-xl border border-slate-200 transition ${
                 sess.status === 'cancelled' ? 'opacity-60' : ''
               }`}>
+                {/* Header */}
                 <div className="p-4">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
+                    <button
+                      onClick={() => setExpandedId(isExpanded ? null : sess.id)}
+                      className="flex items-center gap-3 flex-1 min-w-0 text-left"
+                    >
                       <span className={config.color}>{config.icon}</span>
-                      <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 text-xs font-bold flex items-center justify-center">
+                      <span className="w-6 h-6 rounded-full bg-slate-100 text-slate-600 text-xs font-bold flex items-center justify-center shrink-0">
                         {sess.sessionNumber}
                       </span>
-                      <div>
+                      <div className="min-w-0">
                         <span className={`text-sm font-medium ${
                           sess.status === 'cancelled' ? 'line-through text-slate-400' : 'text-slate-900'
                         }`}>{sess.title}</span>
@@ -145,10 +139,18 @@ export function SessionsTab({ instance }: Props) {
                               <Users className="w-3 h-3" /> 出勤 {sess.attendanceCount}人
                             </span>
                           )}
+                          {schemeSess && (schemeSess as any).relatedAssessments?.length > 0 && (
+                            <span className="flex items-center gap-1 text-violet-400">
+                              <ClipboardList className="w-3 h-3" /> {(schemeSess as any).relatedAssessments.length}个评估
+                            </span>
+                          )}
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
+                      <span className="ml-auto text-slate-400">
+                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
+                      </span>
+                    </button>
+                    <div className="flex items-center gap-2 ml-3">
                       {sess.status === 'planned' && (
                         <>
                           <button
@@ -165,42 +167,98 @@ export function SessionsTab({ instance }: Props) {
                           </button>
                         </>
                       )}
+                      {(sess.status === 'planned' || sess.status === 'completed') && (
+                        <button
+                          onClick={() => {
+                            const url = `${window.location.origin}/checkin/${instance.id}/${sess.id}`;
+                            navigator.clipboard.writeText(url);
+                            toast('签到链接已复制', 'success');
+                          }}
+                          className="text-xs px-2.5 py-1 text-slate-400 rounded-lg hover:bg-slate-100 flex items-center gap-1"
+                          title="复制签到链接"
+                        >
+                          <Link className="w-3 h-3" /> 签到链接
+                        </button>
+                      )}
                       {sess.status === 'completed' && (
                         <button
                           onClick={() => setAttendanceModalId(sess.id)}
                           className="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 flex items-center gap-1"
                         >
-                          <Users className="w-3 h-3" /> 签到
+                          <Users className="w-3 h-3" /> 签到管理
                         </button>
                       )}
-                      <button
-                        onClick={() => setExpandedId(isExpanded ? null : sess.id)}
-                        className="text-slate-400 hover:text-slate-600"
-                      >
-                        {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-                      </button>
                     </div>
                   </div>
                 </div>
 
-                {/* Expanded: Notes */}
+                {/* Expanded: Scheme phases + notes + assessments */}
                 {isExpanded && (
-                  <div className="border-t border-slate-100 p-4">
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText className="w-3.5 h-3.5 text-slate-400" />
-                      <span className="text-xs text-slate-400">活动笔记</span>
+                  <div className="border-t border-slate-100">
+                    {/* Scheme phases (read-only reference) */}
+                    {schemeSess && schemeSess.phases && schemeSess.phases.length > 0 && (
+                      <div className="p-4 bg-violet-50/50">
+                        <div className="flex items-center gap-2 mb-2">
+                          <BookOpen className="w-3.5 h-3.5 text-violet-500" />
+                          <span className="text-xs font-medium text-violet-600">方案环节（参考）</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {schemeSess.phases.map((phase: SessionPhase, i: number) => (
+                            <div key={i} className="flex items-start gap-2 text-xs">
+                              <span className="w-4 h-4 rounded-full bg-violet-100 text-violet-600 text-[10px] font-bold flex items-center justify-center shrink-0 mt-0.5">
+                                {i + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <span className="font-medium text-slate-700">{phase.name}</span>
+                                {phase.duration && <span className="text-slate-400 ml-1">({phase.duration})</span>}
+                                {phase.description && (
+                                  <p className="text-slate-500 mt-0.5">{phase.description}</p>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Related assessments */}
+                    {schemeSess && (schemeSess as any).relatedAssessments?.length > 0 && (
+                      <div className="p-4 border-t border-slate-100">
+                        <div className="flex items-center gap-2 mb-2">
+                          <ClipboardList className="w-3.5 h-3.5 text-blue-500" />
+                          <span className="text-xs font-medium text-blue-600">关联评估</span>
+                        </div>
+                        <div className="space-y-1">
+                          {((schemeSess as any).relatedAssessments as string[]).map((aid: string) => (
+                            <div key={aid} className="text-xs text-slate-600 bg-blue-50 rounded-lg px-3 py-1.5">
+                              量表 ID: {aid.slice(0, 8)}...
+                              {sess.status === 'completed' && (
+                                <span className="text-blue-500 ml-2">[查看报告]</span>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Notes */}
+                    <div className="p-4 border-t border-slate-100">
+                      <div className="flex items-center gap-2 mb-2">
+                        <FileText className="w-3.5 h-3.5 text-slate-400" />
+                        <span className="text-xs text-slate-400">执行笔记</span>
+                      </div>
+                      <textarea
+                        defaultValue={sess.notes || ''}
+                        onBlur={(e) => {
+                          if (e.target.value !== (sess.notes || '')) {
+                            handleNotesChange(sess.id, e.target.value);
+                          }
+                        }}
+                        rows={3}
+                        placeholder="记录本次活动的观察和反思..."
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+                      />
                     </div>
-                    <textarea
-                      defaultValue={sess.notes || ''}
-                      onBlur={(e) => {
-                        if (e.target.value !== (sess.notes || '')) {
-                          handleNotesChange(sess.id, e.target.value);
-                        }
-                      }}
-                      rows={3}
-                      placeholder="记录本次活动的观察和反思..."
-                      className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
-                    />
                   </div>
                 )}
               </div>
@@ -240,7 +298,7 @@ function AddSessionForm({ instanceId, nextNumber, onClose }: {
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 p-4">
-      <h4 className="text-sm font-semibold text-slate-900 mb-3">新增活动 (第 {nextNumber} 次)</h4>
+      <h4 className="text-sm font-semibold text-slate-900 mb-3">添加临时活动 (第 {nextNumber} 次)</h4>
       <form onSubmit={handleSubmit} className="flex gap-3 items-end">
         <div className="flex-1">
           <input value={title} onChange={(e) => setTitle(e.target.value)} required

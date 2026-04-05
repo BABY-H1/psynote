@@ -35,9 +35,9 @@ export async function instanceRoutes(app: FastifyInstance) {
       location?: string;
       status?: string;
       capacity?: number;
-      screeningAssessmentId?: string;
-      preAssessmentId?: string;
-      postAssessmentId?: string;
+      recruitmentAssessments?: string[];
+      overallAssessments?: string[];
+      screeningNotes?: string;
     };
 
     if (!body.title) throw new ValidationError('title is required');
@@ -67,13 +67,22 @@ export async function instanceRoutes(app: FastifyInstance) {
       location: string;
       status: string;
       capacity: number;
-      screeningAssessmentId: string;
-      preAssessmentId: string;
-      postAssessmentId: string;
+      recruitmentAssessments: string[];
+      overallAssessments: string[];
+      screeningNotes: string;
     }>;
 
     const updated = await instanceService.updateInstance(instanceId, body);
     await logAudit(request, 'update', 'group_instances', instanceId);
     return updated;
+  });
+
+  app.delete('/:instanceId', {
+    preHandler: [requireRole('org_admin')],
+  }, async (request, reply) => {
+    const { instanceId } = request.params as { instanceId: string };
+    await instanceService.deleteInstance(instanceId);
+    await logAudit(request, 'delete', 'group_instances', instanceId);
+    return reply.status(204).send();
   });
 }

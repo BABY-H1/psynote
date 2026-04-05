@@ -91,9 +91,9 @@ export function useCreateGroupInstance() {
       startDate?: string;
       location?: string;
       capacity?: number;
-      screeningAssessmentId?: string;
-      preAssessmentId?: string;
-      postAssessmentId?: string;
+      recruitmentAssessments?: string[];
+      overallAssessments?: string[];
+      screeningNotes?: string;
     }) => api.post<GroupInstance>(`${orgPrefix()}/group-instances`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupInstances'] }); },
   });
@@ -104,8 +104,16 @@ export function useUpdateGroupInstance() {
   return useMutation({
     mutationFn: ({ instanceId, ...data }: { instanceId: string } & Partial<{
       title: string; status: string; capacity: number;
-      preAssessmentId: string; postAssessmentId: string;
+      recruitmentAssessments: string[]; overallAssessments: string[]; screeningNotes: string;
     }>) => api.patch<GroupInstance>(`${orgPrefix()}/group-instances/${instanceId}`, data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupInstances'] }); },
+  });
+}
+
+export function useDeleteGroupInstance() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (instanceId: string) => api.delete(`${orgPrefix()}/group-instances/${instanceId}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupInstances'] }); },
   });
 }

@@ -7,7 +7,7 @@ import { ValidationError } from '../../lib/errors.js';
 import { db } from '../../config/database.js';
 import {
   careEpisodes, careTimeline, assessmentResults, appointments,
-  groupInstances, groupEnrollments, courses, courseEnrollments,
+  groupInstances, groupEnrollments, groupSchemes, courses, courseEnrollments,
   notifications, orgMembers, users,
 } from '../../db/schema.js';
 import * as appointmentService from '../counseling/appointment.service.js';
@@ -135,8 +135,9 @@ export async function clientPortalRoutes(app: FastifyInstance) {
   /** Available groups to join */
   app.get('/groups', async (request) => {
     const orgId = request.org!.orgId;
+    const userId = request.user!.id;
 
-    return db
+    const instances = await db
       .select()
       .from(groupInstances)
       .where(and(
@@ -144,6 +145,48 @@ export async function clientPortalRoutes(app: FastifyInstance) {
         eq(groupInstances.status, 'recruiting'),
       ))
       .orderBy(desc(groupInstances.createdAt));
+
+    if (instances.length === 0) return [];
+
+    // Get enrollment counts and user's own enrollment status
+    const allEnrollments = await db
+      .select()
+      .from(groupEnrollments)
+      .where(or(...instances.map((i) => eq(groupEnrollments.instanceId, i.id))));
+
+    // Get linked scheme info
+    const schemeIds = [...new Set(instances.map((i) => i.schemeId).filter(Boolean))] as string[];
+    let schemeMap = new Map<string, any>();
+    if (schemeIds.length > 0) {
+      const schemes = await db
+        .select({ id: groupSchemes.id, title: groupSchemes.title, overallGoal: groupSchemes.overallGoal, targetAudience: groupSchemes.targetAudience, totalSessions: groupSchemes.totalSessions, sessionDuration: groupSchemes.sessionDuration, frequency: groupSchemes.frequency, theory: groupSchemes.theory })
+        .from(groupSchemes)
+        .where(or(...schemeIds.map((id) => eq(groupSchemes.id, id))));
+      for (const s of schemes) schemeMap.set(s.id, s);
+    }
+
+    return instances.map((inst) => {
+      const instEnrollments = allEnrollments.filter((e) => e.instanceId === inst.id);
+      const approvedCount = instEnrollments.filter((e) => e.status === 'approved').length;
+      const myEnrollment = instEnrollments.find((e) => e.userId === userId);
+      const scheme = inst.schemeId ? schemeMap.get(inst.schemeId) : null;
+
+      return {
+        ...inst,
+        approvedCount,
+        spotsLeft: inst.capacity ? Math.max(0, inst.capacity - approvedCount) : null,
+        myEnrollmentStatus: myEnrollment?.status || null,
+        scheme: scheme ? {
+          title: scheme.title,
+          overallGoal: scheme.overallGoal,
+          targetAudience: scheme.targetAudience,
+          totalSessions: scheme.totalSessions,
+          sessionDuration: scheme.sessionDuration,
+          frequency: scheme.frequency,
+          theory: scheme.theory,
+        } : null,
+      };
+    });
   });
 
   /** Available courses (published only) */

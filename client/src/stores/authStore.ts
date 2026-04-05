@@ -26,7 +26,8 @@ export const useAuthStore = create<AuthState>()(
 
       setAuth: (user, accessToken, refreshToken) => {
         api.setToken(accessToken);
-        set({ user, accessToken, refreshToken });
+        // Clear org/role so OrgSelector re-fetches for the new user
+        set({ user, accessToken, refreshToken, currentOrgId: null, currentRole: null });
       },
 
       setOrg: (orgId, role) => {

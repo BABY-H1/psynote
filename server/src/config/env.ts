@@ -3,9 +3,7 @@ import 'dotenv/config';
 
 const envSchema = z.object({
   DATABASE_URL: z.string().url(),
-  SUPABASE_URL: z.string().url().optional(),
-  SUPABASE_SERVICE_KEY: z.string().min(1).optional(),
-  SUPABASE_JWT_SECRET: z.string().min(1).optional(),
+  JWT_SECRET: z.string().default('psynote-dev-secret-change-in-production'),
   REDIS_URL: z.string().default('redis://localhost:6379'),
   AI_API_KEY: z.string().optional(),
   AI_BASE_URL: z.string().default('https://api.openai.com/v1'),
@@ -25,8 +23,8 @@ if (!parsed.success) {
 
 export const env = parsed.data;
 
-// Hard-fail if production is missing critical auth secrets
-if (env.NODE_ENV === 'production' && !env.SUPABASE_JWT_SECRET) {
-  console.error('FATAL: SUPABASE_JWT_SECRET is required in production');
+// Hard-fail if production is missing JWT secret
+if (env.NODE_ENV === 'production' && env.JWT_SECRET === 'psynote-dev-secret-change-in-production') {
+  console.error('FATAL: JWT_SECRET must be set to a secure value in production');
   process.exit(1);
 }

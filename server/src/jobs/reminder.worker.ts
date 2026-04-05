@@ -47,6 +47,7 @@ async function processReminder(job: Job<ReminderJobData>) {
 
   // Send email
   const emailConfig = (settings?.emailConfig as any) || {};
+  if (!client.email) return;
   await sendEmail(emailConfig, { to: client.email, subject, body });
 
   // Mark as sent

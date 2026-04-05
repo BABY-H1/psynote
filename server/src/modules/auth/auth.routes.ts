@@ -1,14 +1,29 @@
 import type { FastifyInstance } from 'fastify';
-import { createClient } from '@supabase/supabase-js';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 import { eq } from 'drizzle-orm';
 import { env } from '../../config/env.js';
 import { db } from '../../config/database.js';
 import { users } from '../../db/schema.js';
 import { ValidationError } from '../../lib/errors.js';
 
-const supabase = env.SUPABASE_URL && env.SUPABASE_SERVICE_KEY
-  ? createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_KEY)
-  : null;
+const JWT_SECRET = env.JWT_SECRET || 'psynote-dev-secret-change-in-production';
+const ACCESS_TOKEN_EXPIRY = '7d';
+const REFRESH_TOKEN_EXPIRY = '30d';
+
+function signTokens(user: { id: string; email: string | null }) {
+  const accessToken = jwt.sign(
+    { sub: user.id, email: user.email },
+    JWT_SECRET,
+    { expiresIn: ACCESS_TOKEN_EXPIRY },
+  );
+  const refreshToken = jwt.sign(
+    { sub: user.id, type: 'refresh' },
+    JWT_SECRET,
+    { expiresIn: REFRESH_TOKEN_EXPIRY },
+  );
+  return { accessToken, refreshToken };
+}
 
 export async function authRoutes(app: FastifyInstance) {
   /** Register a new user */
@@ -23,29 +38,30 @@ export async function authRoutes(app: FastifyInstance) {
       throw new ValidationError('email, password, and name are required');
     }
 
-    if (!supabase) throw new ValidationError('Auth service not configured (Supabase not set up)');
+    // Check if email already exists
+    const [existing] = await db
+      .select()
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
 
-    // Create in Supabase Auth
-    const { data, error } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: true,
-      user_metadata: { name },
-    });
-
-    if (error) {
-      throw new ValidationError(error.message);
+    if (existing) {
+      throw new ValidationError('该邮箱已注册');
     }
 
-    // Sync to our users table
-    await db.insert(users).values({
-      id: data.user.id,
-      email: data.user.email!,
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    const [user] = await db.insert(users).values({
+      email,
       name,
-    }).onConflictDoNothing();
+      passwordHash,
+    }).returning();
+
+    const tokens = signTokens(user);
 
     return reply.status(201).send({
-      user: { id: data.user.id, email: data.user.email, name },
+      ...tokens,
+      user: { id: user.id, email: user.email, name: user.name },
     });
   });
 
@@ -60,40 +76,29 @@ export async function authRoutes(app: FastifyInstance) {
       throw new ValidationError('email and password are required');
     }
 
-    if (!supabase) throw new ValidationError('Auth service not configured (Supabase not set up)');
-
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
-    if (error) {
-      throw new ValidationError(error.message);
-    }
-
-    // Ensure user record exists in our table
-    const [existing] = await db
+    const [user] = await db
       .select()
       .from(users)
-      .where(eq(users.id, data.user.id))
+      .where(eq(users.email, email))
       .limit(1);
 
-    if (!existing) {
-      await db.insert(users).values({
-        id: data.user.id,
-        email: data.user.email!,
-        name: data.user.user_metadata?.name || email.split('@')[0],
-      });
+    if (!user) {
+      throw new ValidationError('邮箱或密码错误');
     }
 
+    // Verify password (if user has no password_hash, accept any password for migration)
+    if (user.passwordHash) {
+      const valid = await bcrypt.compare(password, user.passwordHash);
+      if (!valid) {
+        throw new ValidationError('邮箱或密码错误');
+      }
+    }
+
+    const tokens = signTokens(user);
+
     return reply.send({
-      accessToken: data.session.access_token,
-      refreshToken: data.session.refresh_token,
-      user: {
-        id: data.user.id,
-        email: data.user.email,
-        name: existing?.name || data.user.user_metadata?.name,
-      },
+      ...tokens,
+      user: { id: user.id, email: user.email, name: user.name },
     });
   });
 
@@ -105,25 +110,33 @@ export async function authRoutes(app: FastifyInstance) {
       throw new ValidationError('refreshToken is required');
     }
 
-    if (!supabase) throw new ValidationError('Auth service not configured (Supabase not set up)');
+    try {
+      const payload = jwt.verify(refreshToken, JWT_SECRET) as { sub: string; type?: string };
 
-    const { data, error } = await supabase.auth.refreshSession({
-      refresh_token: refreshToken,
-    });
+      if (payload.type !== 'refresh') {
+        throw new ValidationError('Invalid refresh token');
+      }
 
-    if (error) {
-      throw new ValidationError(error.message);
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, payload.sub))
+        .limit(1);
+
+      if (!user) {
+        throw new ValidationError('用户不存在');
+      }
+
+      const tokens = signTokens(user);
+      return reply.send(tokens);
+    } catch (err) {
+      if (err instanceof ValidationError) throw err;
+      throw new ValidationError('Refresh token expired or invalid');
     }
-
-    return reply.send({
-      accessToken: data.session!.access_token,
-      refreshToken: data.session!.refresh_token,
-    });
   });
 
   /** Logout */
-  app.post('/logout', async (request, reply) => {
-    // Client should discard tokens; server-side we can revoke via admin API if needed
+  app.post('/logout', async (_request, reply) => {
     return reply.send({ ok: true });
   });
 }

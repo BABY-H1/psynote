@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
 import {
   useGroupSchemes, useGroupInstances, useCreateGroupInstance,
+  useUpdateGroupInstance, useDeleteGroupInstance,
 } from '../../../api/useGroups';
 import { useAssessments } from '../../../api/useAssessments';
 import { PageLoading, EmptyState, useToast } from '../../../shared/components';
 import { GroupInstanceDetail } from '../components/GroupInstanceDetail';
-import { Plus, Search } from 'lucide-react';
+import { Plus, Search, UserPlus, UserMinus, Send, Edit3, Trash2, X, Copy, Check } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 const statusLabels: Record<string, { text: string; color: string }> = {
   draft: { text: '草稿', color: 'bg-slate-100 text-slate-600' },
@@ -30,8 +32,12 @@ export function GroupCenter() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState('');
   const [search, setSearch] = useState('');
+  const [shareModalId, setShareModalId] = useState<string | null>(null);
 
   const { data: instances, isLoading } = useGroupInstances(statusFilter || undefined);
+  const updateInstance = useUpdateGroupInstance();
+  const deleteInstance = useDeleteGroupInstance();
+  const { toast } = useToast();
 
   const filteredInstances = instances?.filter((inst) =>
     !search || inst.title.toLowerCase().includes(search.toLowerCase()),
@@ -98,29 +104,138 @@ export function GroupCenter() {
         <div className="grid gap-4 md:grid-cols-2">
           {filteredInstances.map((inst) => {
             const st = statusLabels[inst.status] || statusLabels.draft;
+            const isRecruiting = inst.status === 'recruiting';
             return (
-              <button
-                key={inst.id}
-                onClick={() => { setSelectedId(inst.id); setView('detail'); }}
-                className="text-left bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm hover:border-slate-300 transition"
-              >
-                <div className="flex items-center justify-between mb-2">
-                  <h3 className="font-semibold text-slate-900 truncate">{inst.title}</h3>
-                  <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${st.color}`}>{st.text}</span>
+              <div key={inst.id} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm hover:border-slate-300 transition flex">
+                <button
+                  onClick={() => { setSelectedId(inst.id); setView('detail'); }}
+                  className="flex-1 min-w-0 text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-semibold text-slate-900 truncate">{inst.title}</h3>
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${st.color}`}>{st.text}</span>
+                  </div>
+                  {inst.description && (
+                    <p className="text-sm text-slate-500 mt-1 line-clamp-2">{inst.description}</p>
+                  )}
+                  <div className="flex gap-4 mt-2 text-xs text-slate-400">
+                    {inst.startDate && <span>{inst.startDate}</span>}
+                    {inst.location && <span>{inst.location}</span>}
+                    {inst.capacity && <span>容量: {inst.capacity}</span>}
+                  </div>
+                </button>
+                {/* Action buttons */}
+                <div className="flex gap-1 ml-4 shrink-0">
+                  {/* Recruit toggle */}
+                  {(inst.status === 'draft' || inst.status === 'recruiting') && (
+                    <button
+                      onClick={() => updateInstance.mutate(
+                        { instanceId: inst.id, status: isRecruiting ? 'draft' : 'recruiting' },
+                        { onSuccess: () => toast(isRecruiting ? '已停止招募' : '已开始招募', 'success') },
+                      )}
+                      className={`p-2 rounded-lg transition ${isRecruiting ? 'text-green-500 hover:text-amber-600 hover:bg-amber-50' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`}
+                      title={isRecruiting ? '停止招募' : '开始招募'}
+                    >
+                      {isRecruiting ? <UserMinus className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                    </button>
+                  )}
+                  {/* Share/publish recruitment */}
+                  {inst.status === 'recruiting' && (
+                    <button
+                      onClick={() => setShareModalId(inst.id)}
+                      className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                      title="发布招募链接"
+                    >
+                      <Send className="w-4 h-4" />
+                    </button>
+                  )}
+                  {/* Edit */}
+                  <button
+                    onClick={() => { setSelectedId(inst.id); setView('detail'); }}
+                    className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                    title="编辑"
+                  >
+                    <Edit3 className="w-4 h-4" />
+                  </button>
+                  {/* Delete */}
+                  <button
+                    onClick={() => {
+                      if (confirm('确定删除此团辅活动？相关的报名和出勤记录也将被删除。')) {
+                        deleteInstance.mutate(inst.id, {
+                          onSuccess: () => toast('已删除', 'success'),
+                          onError: (err: any) => toast(err.message || '删除失败', 'error'),
+                        });
+                      }
+                    }}
+                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                    title="删除"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-                {inst.description && (
-                  <p className="text-sm text-slate-500 line-clamp-2">{inst.description}</p>
-                )}
-                <div className="flex gap-4 mt-3 text-xs text-slate-400">
-                  {inst.startDate && <span>{inst.startDate}</span>}
-                  {inst.location && <span>{inst.location}</span>}
-                  {inst.capacity && <span>容量: {inst.capacity}</span>}
-                </div>
-              </button>
+              </div>
             );
           })}
         </div>
       )}
+
+      {/* Share Modal */}
+      {shareModalId && (
+        <RecruitmentShareModal instanceId={shareModalId} onClose={() => setShareModalId(null)} />
+      )}
+    </div>
+  );
+}
+
+function RecruitmentShareModal({ instanceId, onClose }: { instanceId: string; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const enrollUrl = `${window.location.origin}/enroll/${instanceId}`;
+
+  const handleCopy = async () => {
+    await navigator.clipboard.writeText(enrollUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-md mx-4 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="font-semibold text-slate-900">招募链接</h3>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <p className="text-sm text-slate-500 mb-4">
+          分享以下链接或二维码，来访者无需登录即可查看活动介绍并报名。
+        </p>
+
+        {/* Link */}
+        <div className="flex items-center gap-2 mb-4">
+          <input
+            readOnly
+            value={enrollUrl}
+            className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-600 truncate"
+          />
+          <button
+            onClick={handleCopy}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition ${
+              copied ? 'bg-green-100 text-green-700' : 'bg-brand-600 text-white hover:bg-brand-500'
+            }`}
+          >
+            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+          </button>
+        </div>
+
+        {/* QR Code */}
+        <div className="bg-slate-50 border border-slate-200 rounded-xl p-8 flex flex-col items-center">
+          <div className="bg-white p-3 rounded-xl shadow-sm">
+            <QRCodeSVG value={enrollUrl} size={160} level="M" />
+          </div>
+          <p className="text-xs text-slate-400 mt-3">扫描二维码报名</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -140,16 +255,21 @@ function CreateInstancePage({ onClose }: { onClose: () => void }) {
   const [capacity, setCapacity] = useState(12);
   const [startDate, setStartDate] = useState('');
   const [schedule, setSchedule] = useState('');
-  const [preAssessmentId, setPreAssessmentId] = useState('');
-  const [postAssessmentId, setPostAssessmentId] = useState('');
+  const [recruitmentAssessments, setRecruitmentAssessments] = useState<string[]>([]);
+  const [overallAssessments, setOverallAssessments] = useState<string[]>([]);
 
   const selectedScheme = schemes?.find((s) => s.id === schemeId);
 
   const handleSchemeChange = (sid: string) => {
     setSchemeId(sid);
-    const scheme = schemes?.find((s) => s.id === sid);
-    if (scheme && !title) setTitle(scheme.title);
-    if (scheme && !description) setDescription(scheme.description || '');
+    const scheme = schemes?.find((s: any) => s.id === sid);
+    if (scheme) {
+      if (!title) setTitle(scheme.title);
+      if (!description) setDescription(scheme.description || '');
+      // Inherit assessment config from scheme
+      setRecruitmentAssessments((scheme as any).recruitmentAssessments || []);
+      setOverallAssessments((scheme as any).overallAssessments || []);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -163,8 +283,8 @@ function CreateInstancePage({ onClose }: { onClose: () => void }) {
         capacity,
         startDate: startDate || undefined,
         schedule: schedule || undefined,
-        preAssessmentId: preAssessmentId || undefined,
-        postAssessmentId: postAssessmentId || undefined,
+        recruitmentAssessments: recruitmentAssessments.length > 0 ? recruitmentAssessments : undefined,
+        overallAssessments: overallAssessments.length > 0 ? overallAssessments : undefined,
       });
       toast('活动发布成功', 'success');
       onClose();
@@ -250,28 +370,49 @@ function CreateInstancePage({ onClose }: { onClose: () => void }) {
 
         {/* Assessment Binding */}
         <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-slate-900">前后测评（可选）</h3>
-          <p className="text-xs text-slate-400">绑定测评量表用于评估团辅效果</p>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">前测量表</label>
-              <select value={preAssessmentId} onChange={(e) => setPreAssessmentId(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                <option value="">不设置</option>
-                {activeAssessments.map((a: any) => (
-                  <option key={a.id} value={a.id}>{a.title}</option>
-                ))}
-              </select>
+          <h3 className="text-sm font-semibold text-slate-900">评估量表配置（可选）</h3>
+          <p className="text-xs text-slate-400">
+            {schemeId ? '已从方案继承，可调整' : '绑定量表用于招募筛选和效果评估'}
+          </p>
+
+          {/* Recruitment assessments */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-2">招募量表</label>
+            <p className="text-xs text-slate-400 mb-2">报名时来访者需要填写的量表</p>
+            <div className="space-y-1">
+              {activeAssessments.map((a: any) => (
+                <label key={a.id} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={recruitmentAssessments.includes(a.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) setRecruitmentAssessments([...recruitmentAssessments, a.id]);
+                      else setRecruitmentAssessments(recruitmentAssessments.filter((id) => id !== a.id));
+                    }}
+                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+                  {a.title}
+                </label>
+              ))}
             </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">后测量表</label>
-              <select value={postAssessmentId} onChange={(e) => setPostAssessmentId(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                <option value="">不设置</option>
-                {activeAssessments.map((a: any) => (
-                  <option key={a.id} value={a.id}>{a.title}</option>
-                ))}
-              </select>
+            {activeAssessments.length === 0 && (
+              <p className="text-xs text-slate-400 italic">暂无可用量表，请先在测评管理中创建</p>
+            )}
+          </div>
+
+          {/* Overall assessments (longitudinal tracking) */}
+          <div>
+            <label className="block text-xs text-slate-500 mb-2">整体评估量表</label>
+            <p className="text-xs text-slate-400 mb-2">用于纵向追踪（入组时测 + 结束时测，对比效果）</p>
+            <div className="space-y-1">
+              {activeAssessments.map((a: any) => (
+                <label key={a.id} className="flex items-center gap-2 text-sm text-slate-700">
+                  <input type="checkbox" checked={overallAssessments.includes(a.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) setOverallAssessments([...overallAssessments, a.id]);
+                      else setOverallAssessments(overallAssessments.filter((id) => id !== a.id));
+                    }}
+                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
+                  {a.title}
+                </label>
+              ))}
             </div>
           </div>
         </div>

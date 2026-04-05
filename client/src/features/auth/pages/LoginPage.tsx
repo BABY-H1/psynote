@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../stores/authStore';
 import { api } from '../../../api/client';
 import { Shield, Zap, BarChart3 } from 'lucide-react';
@@ -9,7 +10,13 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
-  const { setAuth } = useAuthStore();
+  const { user, setAuth } = useAuthStore();
+  const navigate = useNavigate();
+
+  // Already logged in → redirect
+  if (user) {
+    return <Navigate to="/select-org" replace />;
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,11 +34,27 @@ export function LoginPage() {
         user: { id: string; email: string; name: string };
       }>('/auth/login', { email, password });
 
+      // Set token first so subsequent API calls are authenticated
+      api.setToken(data.accessToken);
+
+      // Fetch user's orgs to get role
+      const orgs = await api.get<{ id: string; myRole: string }[]>('/orgs');
+
+      // Set auth + org in one go
       setAuth(
         { id: data.user.id, email: data.user.email, name: data.user.name, createdAt: '' },
         data.accessToken,
         data.refreshToken,
       );
+
+      if (orgs.length > 0) {
+        const { setOrg } = useAuthStore.getState();
+        setOrg(orgs[0].id, orgs[0].myRole as any);
+      }
+
+      // Navigate based on role
+      const role = orgs[0]?.myRole;
+      navigate(role === 'client' ? '/portal' : '/', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : '登录失败，请检查账号密码');
     } finally {

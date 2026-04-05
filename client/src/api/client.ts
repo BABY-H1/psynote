@@ -28,17 +28,6 @@ class ApiClient {
       headers['Authorization'] = `Bearer ${this.accessToken}`;
     }
 
-    // In dev mode, add user info headers for the dev auth bypass
-    if (import.meta.env.DEV && this.accessToken === 'demo-token-not-real') {
-      try {
-        const stored = JSON.parse(localStorage.getItem('psynote-auth') || '{}');
-        const state = stored.state || {};
-        if (state.user?.id) headers['X-Dev-User-Id'] = state.user.id;
-        if (state.user?.email) headers['X-Dev-User-Email'] = state.user.email;
-        if (state.currentRole) headers['X-Dev-Role'] = state.currentRole;
-      } catch { /* ignore */ }
-    }
-
     const response = await fetch(`${API_BASE}${path}`, {
       ...rest,
       headers,

@@ -2,6 +2,7 @@ import React from 'react';
 import { Routes, Route, Navigate, NavLink, Outlet } from 'react-router-dom';
 import { Providers } from './providers';
 import { useAuthStore } from '../stores/authStore';
+import { api } from '../api/client';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { ScaleLibrary } from '../features/assessment/pages/ScaleLibrary';
 import { AssessmentManagement } from '../features/assessment/pages/AssessmentManagement';
@@ -33,6 +34,8 @@ import { CoursesTab } from '../features/knowledge/pages/PlaceholderTabs';
 import { SchemeLibrary } from '../features/knowledge/pages/SchemeLibrary';
 import { NoteTemplateLibrary } from '../features/knowledge/pages/NoteTemplateLibrary';
 import { AgreementLibrary } from '../features/knowledge/pages/AgreementLibrary';
+import { PublicEnrollment } from '../features/groups/pages/PublicEnrollment';
+import { PublicCheckin } from '../features/groups/pages/PublicCheckin';
 
 function AppRoutes() {
   const { user, currentOrgId, currentRole } = useAuthStore();
@@ -42,6 +45,8 @@ function AppRoutes() {
     <Routes>
       {/* Public routes (no auth required) */}
       <Route path="/assess/:assessmentId" element={<AssessmentRunner />} />
+      <Route path="/enroll/:instanceId" element={<PublicEnrollment />} />
+      <Route path="/checkin/:instanceId/:sessionId" element={<PublicCheckin />} />
       <Route path="/login" element={<LoginPage />} />
 
       {/* Auth required */}
@@ -100,14 +105,44 @@ function AppRoutes() {
   );
 }
 
-/** Temporary placeholder for org selection */
 function OrgSelector() {
+  const { setOrg, logout } = useAuthStore();
+  const [error, setError] = React.useState('');
+
+  React.useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const orgs = await api.get<{ id: string; name: string; myRole: string }[]>('/orgs');
+        if (cancelled) return;
+        if (orgs.length === 0) {
+          setError('您尚未加入任何机构');
+          return;
+        }
+        // setOrg triggers re-render → AppRoutes sees currentOrgId → routes to correct view
+        setOrg(orgs[0].id, orgs[0].myRole as any);
+      } catch (err) {
+        if (!cancelled) setError(err instanceof Error ? err.message : '加载机构失败');
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [setOrg]);
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <h1 className="text-xl font-bold text-slate-900 mb-2">无法进入</h1>
+          <p className="text-slate-500 text-sm mb-4">{error}</p>
+          <button onClick={logout} className="text-sm text-brand-600 hover:underline">退出登录</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50">
-      <div className="text-center">
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">选择机构</h1>
-        <p className="text-slate-500">机构选择页面开发中...</p>
-      </div>
+      <p className="text-slate-400 text-sm">正在加载...</p>
     </div>
   );
 }

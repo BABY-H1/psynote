@@ -74,6 +74,9 @@ interface SchemeInput {
   facilitatorRequirements?: string;
   evaluationMethod?: string;
   notes?: string;
+  recruitmentAssessments?: string[];
+  overallAssessments?: string[];
+  screeningNotes?: string;
   visibility?: string;
   createdBy: string;
   sessions?: SessionInput[];
@@ -91,7 +94,7 @@ interface SessionInput {
   sessionTheory?: string;
   sessionEvaluation?: string;
   sortOrder?: number;
-  relatedAssessmentId?: string;
+  relatedAssessments?: string[];
 }
 
 export async function createScheme(input: SchemeInput) {
@@ -112,6 +115,9 @@ export async function createScheme(input: SchemeInput) {
     facilitatorRequirements: input.facilitatorRequirements,
     evaluationMethod: input.evaluationMethod,
     notes: input.notes,
+    recruitmentAssessments: input.recruitmentAssessments || [],
+    overallAssessments: input.overallAssessments || [],
+    screeningNotes: input.screeningNotes,
     visibility: input.visibility || 'personal',
     createdBy: input.createdBy,
   }).returning();
@@ -131,7 +137,7 @@ export async function createScheme(input: SchemeInput) {
         sessionTheory: s.sessionTheory,
         sessionEvaluation: s.sessionEvaluation,
         sortOrder: s.sortOrder ?? idx,
-        relatedAssessmentId: s.relatedAssessmentId || null,
+        relatedAssessments: s.relatedAssessments || [],
       })),
     );
   }

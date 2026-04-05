@@ -18,9 +18,10 @@ export const organizations = pgTable('organizations', {
 });
 
 export const users = pgTable('users', {
-  id: uuid('id').primaryKey(), // references auth.users(id)
-  email: text('email').notNull().unique(),
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').unique(),
   name: text('name').notNull(),
+  passwordHash: text('password_hash'),
   avatarUrl: text('avatar_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -486,6 +487,10 @@ export const groupSchemes = pgTable('group_schemes', {
   facilitatorRequirements: text('facilitator_requirements'),
   evaluationMethod: text('evaluation_method'),
   notes: text('notes'), // ethics, exit mechanism, crisis plan
+  // Assessment recommendations
+  recruitmentAssessments: jsonb('recruitment_assessments').default([]), // uuid[] — recommended recruitment assessments
+  overallAssessments: jsonb('overall_assessments').default([]), // uuid[] — recommended overall assessments (longitudinal tracking)
+  screeningNotes: text('screening_notes'), // screening criteria description
   // Meta
   visibility: text('visibility').notNull().default('personal'), // personal | organization | public
   createdBy: uuid('created_by').references(() => users.id),
@@ -507,7 +512,7 @@ export const groupSchemeSessions = pgTable('group_scheme_sessions', {
   sessionTheory: text('session_theory'),
   sessionEvaluation: text('session_evaluation'),
   sortOrder: integer('sort_order').notNull().default(0),
-  relatedAssessmentId: uuid('related_assessment_id').references(() => assessments.id),
+  relatedAssessments: jsonb('related_assessments').default([]), // uuid[] — assessments linked to this session
 });
 
 export const groupInstances = pgTable('group_instances', {
@@ -524,9 +529,9 @@ export const groupInstances = pgTable('group_instances', {
   location: text('location'),
   status: text('status').notNull().default('draft'),
   capacity: integer('capacity'),
-  screeningAssessmentId: uuid('screening_assessment_id').references(() => assessments.id),
-  preAssessmentId: uuid('pre_assessment_id').references(() => assessments.id),
-  postAssessmentId: uuid('post_assessment_id').references(() => assessments.id),
+  recruitmentAssessments: jsonb('recruitment_assessments').default([]), // uuid[] — actual recruitment assessments
+  overallAssessments: jsonb('overall_assessments').default([]), // uuid[] — actual overall assessments (longitudinal)
+  screeningNotes: text('screening_notes'),
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

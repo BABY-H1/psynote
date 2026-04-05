@@ -76,21 +76,25 @@ export function OverviewTab({ instance }: Props) {
         </div>
       )}
 
-      {/* Pre/Post Assessment Info */}
-      {(instance.preAssessmentId || instance.postAssessmentId) && (
+      {/* Assessment Info */}
+      {((instance as any).recruitmentAssessments?.length > 0 || (instance as any).overallAssessments?.length > 0) && (
         <div className="bg-white rounded-xl border border-slate-200 p-5">
           <div className="flex items-center gap-2 mb-3">
             <ClipboardCheck className="w-4 h-4 text-blue-500" />
-            <h3 className="text-sm font-semibold text-slate-900">前后测评</h3>
+            <h3 className="text-sm font-semibold text-slate-900">评估量表</h3>
           </div>
-          <div className="flex gap-6 text-sm text-slate-600">
+          <div className="space-y-2 text-sm text-slate-600">
             <div>
-              <span className="text-xs text-slate-400">前测: </span>
-              {instance.preAssessmentId ? '已绑定' : '未设置'}
+              <span className="text-xs text-slate-400">招募量表: </span>
+              {(instance as any).recruitmentAssessments?.length > 0
+                ? `已配置 ${(instance as any).recruitmentAssessments.length} 个`
+                : '未设置'}
             </div>
             <div>
-              <span className="text-xs text-slate-400">后测: </span>
-              {instance.postAssessmentId ? '已绑定' : '未设置'}
+              <span className="text-xs text-slate-400">整体评估: </span>
+              {(instance as any).overallAssessments?.length > 0
+                ? `已配置 ${(instance as any).overallAssessments.length} 个`
+                : '未设置'}
             </div>
           </div>
         </div>

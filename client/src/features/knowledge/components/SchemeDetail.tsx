@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
   useGroupScheme, useUpdateGroupScheme, useDeleteGroupScheme,
 } from '../../../api/useGroups';
+import { useAssessments } from '../../../api/useAssessments';
 import {
   useRefineSchemeOverall, useRefineSessionDetail, useGenerateSessionDetail,
 } from '../../../api/useAI';
@@ -28,6 +29,7 @@ interface EditSession {
   relatedGoals: number[];
   sessionTheory: string;
   sessionEvaluation: string;
+  relatedAssessments: string[];
 }
 
 interface EditData {
@@ -46,6 +48,9 @@ interface EditData {
   facilitatorRequirements: string;
   evaluationMethod: string;
   notes: string;
+  recruitmentAssessments: string[];
+  overallAssessments: string[];
+  screeningNotes: string;
   visibility: string;
   sessions: EditSession[];
 }
@@ -68,6 +73,9 @@ function schemeToEditData(scheme: any): EditData {
     totalSessions: scheme.totalSessions || undefined, sessionDuration: scheme.sessionDuration || '',
     frequency: scheme.frequency || '', facilitatorRequirements: scheme.facilitatorRequirements || '',
     evaluationMethod: scheme.evaluationMethod || '', notes: scheme.notes || '',
+    recruitmentAssessments: scheme.recruitmentAssessments || [],
+    overallAssessments: scheme.overallAssessments || [],
+    screeningNotes: scheme.screeningNotes || '',
     visibility: scheme.visibility || 'personal',
     sessions: (scheme.sessions || []).map((s: any) => ({
       id: s.id, title: s.title || '', goal: s.goal || '', phases: s.phases || [],
@@ -75,6 +83,7 @@ function schemeToEditData(scheme: any): EditData {
       homework: s.homework || '', assessmentNotes: s.assessmentNotes || '',
       relatedGoals: s.relatedGoals || [], sessionTheory: s.sessionTheory || '',
       sessionEvaluation: s.sessionEvaluation || '',
+      relatedAssessments: s.relatedAssessments || [],
     })),
   };
 }
@@ -128,7 +137,7 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
     });
   };
   const addSession = () => {
-    setEditData((p) => p ? { ...p, sessions: [...p.sessions, { title: '', goal: '', phases: [], materials: '', duration: '', homework: '', assessmentNotes: '', relatedGoals: [], sessionTheory: '', sessionEvaluation: '' }] } : p);
+    setEditData((p) => p ? { ...p, sessions: [...p.sessions, { title: '', goal: '', phases: [], materials: '', duration: '', homework: '', assessmentNotes: '', relatedGoals: [], sessionTheory: '', sessionEvaluation: '', relatedAssessments: [] }] } : p);
   };
   const removeSession = (i: number) => {
     setEditData((p) => p ? { ...p, sessions: p.sessions.filter((_, j) => j !== i) } : p);
@@ -633,6 +642,13 @@ function LeftPanel({ data, editing, editData, uf }: {
         <InfoField label="注意事项" value={data.notes} editing={editing} onChange={(v) => uf('notes', v)} type="textarea" />
       </div>
 
+      <div className="border-t border-slate-100 pt-3">
+        <p className="text-xs font-semibold text-slate-500 mb-2">推荐量表</p>
+        <AssessmentListField label="招募量表" description="报名时来访者需填写" ids={data.recruitmentAssessments || []} editing={editing} onChange={(v) => uf('recruitmentAssessments', v)} />
+        <AssessmentListField label="整体评估量表" description="用于纵向追踪（入组+结束）" ids={data.overallAssessments || []} editing={editing} onChange={(v) => uf('overallAssessments', v)} />
+        <InfoField label="筛选标准说明" value={data.screeningNotes || ''} editing={editing} onChange={(v) => uf('screeningNotes', v)} type="textarea" />
+      </div>
+
       {editing && (
         <div className="border-t border-slate-100 pt-3">
           <label className="text-xs text-slate-400 block mb-1">可见范围</label>
@@ -776,6 +792,47 @@ function InfoField({ label, value, editing, onChange, type = 'input' }: {
         )
       ) : (
         <p className="text-xs text-slate-600 whitespace-pre-wrap">{value}</p>
+      )}
+    </div>
+  );
+}
+
+function AssessmentListField({ label, description, ids, editing, onChange }: {
+  label: string; description: string; ids: string[]; editing: boolean; onChange: (v: string[]) => void;
+}) {
+  const { data: assessments } = useAssessments();
+  const activeAssessments = (assessments || []).filter((a: any) => a.status !== 'archived');
+  const getTitle = (id: string) => activeAssessments.find((a: any) => a.id === id)?.title || id.slice(0, 8) + '...';
+
+  if (!editing && ids.length === 0) return null;
+
+  return (
+    <div className="mb-2">
+      <label className="text-xs text-slate-400 block mb-0.5">{label}</label>
+      {editing ? (
+        <div>
+          <p className="text-xs text-slate-400 mb-1">{description}</p>
+          <div className="space-y-1 max-h-32 overflow-y-auto">
+            {activeAssessments.map((a: any) => (
+              <label key={a.id} className="flex items-center gap-1.5 text-xs text-slate-600">
+                <input type="checkbox" checked={ids.includes(a.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) onChange([...ids, a.id]);
+                    else onChange(ids.filter((id) => id !== a.id));
+                  }}
+                  className="rounded border-slate-300 text-brand-600 focus:ring-brand-500 w-3 h-3" />
+                {a.title}
+              </label>
+            ))}
+          </div>
+          {activeAssessments.length === 0 && <p className="text-xs text-slate-400 italic">暂无可用量表</p>}
+        </div>
+      ) : (
+        <div className="space-y-0.5">
+          {ids.map((id) => (
+            <p key={id} className="text-xs text-slate-600">{getTitle(id)}</p>
+          ))}
+        </div>
       )}
     </div>
   );

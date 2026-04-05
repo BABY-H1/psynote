@@ -33,6 +33,7 @@ import { complianceReviewRoutes } from './modules/compliance/compliance-review.r
 import { notificationRoutes } from './modules/notification/notification.routes.js';
 import { reminderSettingsRoutes, publicAppointmentRoutes } from './modules/notification/reminder-settings.routes.js';
 import { clientPortalRoutes } from './modules/client-portal/client.routes.js';
+import { publicEnrollRoutes } from './modules/group/public-enroll.routes.js';
 
 const app = Fastify({
   logger: {
@@ -105,6 +106,9 @@ await app.register(reminderSettingsRoutes, { prefix: '/api/orgs/:orgId/reminder-
 
 // Public appointment confirm/cancel (no auth)
 await app.register(publicAppointmentRoutes, { prefix: '/api/public/appointments' });
+
+// Public group enrollment (no auth)
+await app.register(publicEnrollRoutes, { prefix: '/api/public/groups' });
 
 // Client self-service portal
 await app.register(clientPortalRoutes, { prefix: '/api/orgs/:orgId/client' });
