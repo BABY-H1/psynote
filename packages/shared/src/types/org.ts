@@ -17,6 +17,7 @@ export interface User {
   email: string;
   name: string;
   avatarUrl?: string;
+  isSystemAdmin?: boolean;
   createdAt: string;
 }
 
@@ -28,6 +29,8 @@ export interface OrgMember {
   permissions: UserPermissions;
   status: MemberStatus;
   validUntil?: string;
+  supervisorId?: string;
+  fullPracticeAccess?: boolean;
   createdAt: string;
 }
 

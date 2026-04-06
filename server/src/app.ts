@@ -34,6 +34,9 @@ import { notificationRoutes } from './modules/notification/notification.routes.j
 import { reminderSettingsRoutes, publicAppointmentRoutes } from './modules/notification/reminder-settings.routes.js';
 import { clientPortalRoutes } from './modules/client-portal/client.routes.js';
 import { publicEnrollRoutes } from './modules/group/public-enroll.routes.js';
+import { adminRoutes } from './modules/admin/admin.routes.js';
+import { clientAssignmentRoutes } from './modules/counseling/client-assignment.routes.js';
+import { clientAccessGrantRoutes } from './modules/counseling/client-access-grant.routes.js';
 
 const app = Fastify({
   logger: {
@@ -112,6 +115,13 @@ await app.register(publicEnrollRoutes, { prefix: '/api/public/groups' });
 
 // Client self-service portal
 await app.register(clientPortalRoutes, { prefix: '/api/orgs/:orgId/client' });
+
+// System admin
+await app.register(adminRoutes, { prefix: '/api/admin' });
+
+// Client assignment & access grants
+await app.register(clientAssignmentRoutes, { prefix: '/api/orgs/:orgId/client-assignments' });
+await app.register(clientAccessGrantRoutes, { prefix: '/api/orgs/:orgId/client-access-grants' });
 
 // Start
 try {

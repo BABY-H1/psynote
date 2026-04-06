@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { dataScopeGuard } from '../../middleware/data-scope.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as followUpService from './follow-up.service.js';
@@ -9,13 +10,14 @@ import * as followUpService from './follow-up.service.js';
 export async function followUpRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', dataScopeGuard);
 
   // ─── Plans ───────────────────────────────────────────────────
 
   /** List follow-up plans */
   app.get('/plans', async (request) => {
     const query = request.query as { careEpisodeId?: string };
-    return followUpService.listFollowUpPlans(request.org!.orgId, query.careEpisodeId);
+    return followUpService.listFollowUpPlans(request.org!.orgId, query.careEpisodeId, request.dataScope);
   });
 
   /** Create a follow-up plan */

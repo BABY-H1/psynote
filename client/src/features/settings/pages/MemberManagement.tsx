@@ -1,17 +1,20 @@
 import React, { useState } from 'react';
 import { useOrgMembers, useInviteMember, useUpdateMember, useRemoveMember } from '../../../api/useOrg';
+import { useAuthStore } from '../../../stores/authStore';
 import { PageLoading, StatusBadge, useToast } from '../../../shared/components';
 import { UserPlus, MoreVertical, Search } from 'lucide-react';
 
 const roleLabels: Record<string, string> = {
   org_admin: '管理员',
   counselor: '咨询师',
+  admin_staff: '行政人员',
   client: '来访者',
 };
 
-const roleBadgeVariant: Record<string, 'purple' | 'blue' | 'green'> = {
+const roleBadgeVariant: Record<string, 'purple' | 'blue' | 'green' | 'yellow'> = {
   org_admin: 'purple',
   counselor: 'blue',
+  admin_staff: 'yellow',
   client: 'green',
 };
 
@@ -27,7 +30,7 @@ const statusVariant: Record<string, 'green' | 'yellow' | 'slate'> = {
   disabled: 'slate',
 };
 
-type FilterTab = 'all' | 'counselor' | 'client' | 'org_admin';
+type FilterTab = 'all' | 'counselor' | 'client' | 'org_admin' | 'admin_staff';
 
 export function MemberManagement() {
   const { data: members, isLoading } = useOrgMembers();
@@ -47,12 +50,14 @@ export function MemberManagement() {
     counselor: members?.filter((m) => m.role === 'counselor').length || 0,
     client: members?.filter((m) => m.role === 'client').length || 0,
     org_admin: members?.filter((m) => m.role === 'org_admin').length || 0,
+    admin_staff: members?.filter((m) => m.role === 'admin_staff').length || 0,
   };
 
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: `全部 (${counts.all})` },
     { key: 'client', label: `来访者 (${counts.client})` },
     { key: 'counselor', label: `咨询师 (${counts.counselor})` },
+    { key: 'admin_staff', label: `行政人员 (${counts.admin_staff})` },
     { key: 'org_admin', label: `管理员 (${counts.org_admin})` },
   ];
 
@@ -209,6 +214,11 @@ function MemberRow({ member }: { member: { id: string; userId: string; email: st
                   设为咨询师
                 </button>
               )}
+              {member.role !== 'admin_staff' && (
+                <button onClick={() => handleRoleChange('admin_staff')} className="block w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
+                  设为行政人员
+                </button>
+              )}
               {member.role !== 'org_admin' && (
                 <button onClick={() => handleRoleChange('org_admin')} className="block w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
                   设为管理员
@@ -231,10 +241,16 @@ function MemberRow({ member }: { member: { id: string; userId: string; email: st
 
 function InviteForm({ onDone }: { onDone: () => void }) {
   const inviteMember = useInviteMember();
+  const { data: members } = useOrgMembers();
+  const { currentRole } = useAuthStore();
   const { toast } = useToast();
   const [emails, setEmails] = useState('');
   const [name, setName] = useState('');
   const [role, setRole] = useState('client');
+  const [supervisorId, setSupervisorId] = useState('');
+  const [fullPracticeAccess, setFullPracticeAccess] = useState(false);
+
+  const counselors = (members || []).filter((m) => m.role === 'counselor');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -245,7 +261,13 @@ function InviteForm({ onDone }: { onDone: () => void }) {
     let fail = 0;
     for (const email of emailList) {
       try {
-        await inviteMember.mutateAsync({ email, role, name: emailList.length === 1 ? name || undefined : undefined });
+        await inviteMember.mutateAsync({
+          email,
+          role,
+          name: emailList.length === 1 ? name || undefined : undefined,
+          supervisorId: supervisorId || undefined,
+          fullPracticeAccess: fullPracticeAccess || undefined,
+        });
         success++;
       } catch {
         fail++;
@@ -282,6 +304,7 @@ function InviteForm({ onDone }: { onDone: () => void }) {
             >
               <option value="client">来访者</option>
               <option value="counselor">咨询师</option>
+              <option value="admin_staff">行政人员</option>
               <option value="org_admin">管理员</option>
             </select>
           </div>
@@ -292,10 +315,41 @@ function InviteForm({ onDone }: { onDone: () => void }) {
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="来访者姓名"
+              placeholder="成员姓名"
               className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
+        )}
+        {/* Supervisor selector - shown for counselor role */}
+        {role === 'counselor' && counselors.length > 0 && (
+          <div>
+            <label className="block text-xs text-slate-500 mb-1">督导师（可选）</label>
+            <select
+              value={supervisorId}
+              onChange={(e) => setSupervisorId(e.target.value)}
+              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+            >
+              <option value="">无</option>
+              {counselors.map((c) => (
+                <option key={c.userId} value={c.userId}>
+                  {c.name} ({c.email})
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+        {/* Full practice access toggle - only visible to org_admin */}
+        {currentRole === 'org_admin' && (role === 'counselor' || role === 'admin_staff') && (
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={fullPracticeAccess}
+              onChange={(e) => setFullPracticeAccess(e.target.checked)}
+              className="w-4 h-4 rounded border-slate-300 text-brand-500 focus:ring-brand-500/30"
+            />
+            <span className="text-sm text-slate-700">全机构可见</span>
+            <span className="text-xs text-slate-400">（可查看机构内所有来访者和咨询记录）</span>
+          </label>
         )}
         <div className="flex gap-3 justify-end">
           <button type="button" onClick={onDone} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">

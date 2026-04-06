@@ -147,7 +147,14 @@
       "Bash(findstr \":4000 :5174 :5173\")",
       "Bash(ADMIN_TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMWZlODA4Yy03MmRhLThiODEtMjQyYy1lYTZjMDc2ZDgyMDUiLCJlbWFpbCI6ImFkbWluQGRlbW8ucHN5bm90ZS5jbiIsImlhdCI6MTc3NTQwODY4MywiZXhwIjoxNzc2MDEzNDgzfQ.c0Mg4Q9bm6Rm6b-dIhn4xBLef_U3YRzFGT-OG7CqzLY\")",
       "Bash(COUNSELOR_TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJiZWYwMGVlNC04MzY1LWQ5N2EtNDNlNi01NTI0YWY1ZjE5YjQiLCJlbWFpbCI6ImNvdW5zZWxvckBkZW1vLnBzeW5vdGUuY24iLCJpYXQiOjE3NzU0MDg2ODQsImV4cCI6MTc3NjAxMzQ4NH0.06JLTyA2GhBP3yQZJtFKqa7u_hke7_8Ge_fxCcoU26g\")",
-      "Bash(CLIENT_TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlMmEzYjcxZi0zNjZmLTBiMTgtNDBmYS05YzhkNDRkZDlkZWUiLCJlbWFpbCI6ImNsaWVudEBkZW1vLnBzeW5vdGUuY24iLCJpYXQiOjE3NzU0MDg2ODQsImV4cCI6MTc3NjAxMzQ4NH0.0JLGutqxEYntaPa1N1Ck_NFYDkeylahB6Y5peKfSChk\")"
+      "Bash(CLIENT_TOKEN=\"eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJlMmEzYjcxZi0zNjZmLTBiMTgtNDBmYS05YzhkNDRkZDlkZWUiLCJlbWFpbCI6ImNsaWVudEBkZW1vLnBzeW5vdGUuY24iLCJpYXQiOjE3NzU0MDg2ODQsImV4cCI6MTc3NjAxMzQ4NH0.0JLGutqxEYntaPa1N1Ck_NFYDkeylahB6Y5peKfSChk\")",
+      "Bash(find /d/Desktop/psynote -type f \\\\\\(-name *auth* -o -name *permission* -o -name *role* -o -name *guard* \\\\\\))",
+      "WebFetch(domain:support.simplepractice.com)",
+      "WebFetch(domain:www.simplepractice.com)",
+      "WebFetch(domain:jane.app)",
+      "WebFetch(domain:carepaths.com)",
+      "Bash(find /d/Desktop/psynote -type f -name *.routes.ts)",
+      "Bash(find /d/Desktop/psynote/server/src/modules -name \"*.routes.ts\" -exec grep -l \"export\\\\|post\\\\|get\\\\|put\\\\|delete\" {})"
     ]
   }
 }

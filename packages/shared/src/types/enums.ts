@@ -1,5 +1,8 @@
 /** Organization member roles */
-export type OrgRole = 'org_admin' | 'counselor' | 'client';
+export type OrgRole = 'org_admin' | 'counselor' | 'admin_staff' | 'client';
+
+/** Session note status (supervision workflow) */
+export type NoteStatus = 'draft' | 'finalized' | 'submitted_for_review' | 'reviewed';
 
 /** Member status */
 export type MemberStatus = 'active' | 'pending' | 'disabled';

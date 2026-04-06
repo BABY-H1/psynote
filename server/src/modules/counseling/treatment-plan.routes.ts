@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requireRole, requireClinicalAccess } from '../../middleware/rbac.js';
+import { dataScopeGuard } from '../../middleware/data-scope.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as planService from './treatment-plan.service.js';
@@ -9,6 +10,8 @@ import * as planService from './treatment-plan.service.js';
 export async function treatmentPlanRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', dataScopeGuard);
+  app.addHook('preHandler', requireClinicalAccess());
 
   /** List treatment plans for an episode */
   app.get('/', async (request) => {

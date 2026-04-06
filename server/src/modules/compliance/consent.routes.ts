@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { dataScopeGuard } from '../../middleware/data-scope.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as consentService from './consent.service.js';
@@ -9,6 +10,7 @@ import * as consentService from './consent.service.js';
 export async function consentRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', dataScopeGuard);
 
   // ─── Templates (counselor/admin) ────────────────────────────
 

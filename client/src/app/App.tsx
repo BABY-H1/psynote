@@ -36,9 +36,10 @@ import { NoteTemplateLibrary } from '../features/knowledge/pages/NoteTemplateLib
 import { AgreementLibrary } from '../features/knowledge/pages/AgreementLibrary';
 import { PublicEnrollment } from '../features/groups/pages/PublicEnrollment';
 import { PublicCheckin } from '../features/groups/pages/PublicCheckin';
+import { AdminDashboard } from '../features/admin/pages/AdminDashboard';
 
 function AppRoutes() {
-  const { user, currentOrgId, currentRole } = useAuthStore();
+  const { user, currentOrgId, currentRole, isSystemAdmin } = useAuthStore();
   const isClient = currentRole === 'client';
 
   return (
@@ -98,6 +99,9 @@ function AppRoutes() {
           <Route path="courses/:courseId/requirements" element={<CourseRequirementsConfig />} />
           <Route path="courses/:courseId/blueprint" element={<CourseBlueprintEditor />} />
           <Route path="courses/:courseId/chapters/:chapterId/edit" element={<LessonEditor />} />
+          {isSystemAdmin && (
+            <Route path="admin" element={<AdminDashboard />} />
+          )}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       )}
@@ -147,7 +151,7 @@ function OrgSelector() {
   );
 }
 
-const navItems: { to: string; label: string; end?: boolean; disabled?: boolean }[] = [
+const allNavItems: { to: string; label: string; end?: boolean; disabled?: boolean }[] = [
   { to: '/', label: '首页', end: true },
   { to: '/knowledge', label: '知识库' },
   { to: '/assessments', label: '测评管理' },
@@ -155,11 +159,23 @@ const navItems: { to: string; label: string; end?: boolean; disabled?: boolean }
   { to: '/episodes', label: '个体咨询' },
   { to: '/groups', label: '团辅中心' },
   { to: '/courses', label: '课程中心' },
+  { to: '/appointments', label: '预约管理' },
   { to: '/settings/members', label: '成员管理' },
 ];
 
+const adminStaffPaths = new Set(['/', '/appointments', '/settings/members']);
+
+function getNavItems(role: string | null) {
+  if (role === 'admin_staff') {
+    return allNavItems.filter((item) => adminStaffPaths.has(item.to));
+  }
+  // counselor, org_admin: show everything
+  return allNavItems;
+}
+
 function AppShell() {
-  const { user, currentRole, logout } = useAuthStore();
+  const { user, currentRole, isSystemAdmin, logout } = useAuthStore();
+  const navItems = getNavItems(currentRole);
   return (
     <div className="min-h-screen bg-slate-50 flex">
       {/* Sidebar */}
@@ -193,6 +209,23 @@ function AppShell() {
                 {item.label}
               </NavLink>
             ),
+          )}
+          {isSystemAdmin && (
+            <>
+              <div className="border-t border-slate-100 my-2" />
+              <NavLink
+                to="/admin"
+                className={({ isActive }) =>
+                  `block px-3 py-2 rounded-lg text-sm font-medium transition ${
+                    isActive
+                      ? 'bg-red-50 text-red-700'
+                      : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                  }`
+                }
+              >
+                系统管理
+              </NavLink>
+            </>
           )}
         </nav>
         <div className="px-4 py-4 border-t border-slate-100">

@@ -1,11 +1,20 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { referrals, careTimeline } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
+import type { DataScope } from '../../middleware/data-scope.js';
+import { clientScopeCondition } from '../../lib/data-scope-filter.js';
 
-export async function listReferrals(orgId: string, careEpisodeId?: string) {
+export async function listReferrals(orgId: string, careEpisodeId?: string, scope?: DataScope) {
   const conditions = [eq(referrals.orgId, orgId)];
   if (careEpisodeId) conditions.push(eq(referrals.careEpisodeId, careEpisodeId));
+
+  if (scope && scope.type === 'assigned') {
+    if (!scope.allowedClientIds || scope.allowedClientIds.length === 0) {
+      return [];
+    }
+    conditions.push(inArray(referrals.clientId, scope.allowedClientIds));
+  }
 
   return db
     .select()

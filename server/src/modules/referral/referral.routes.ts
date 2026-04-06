@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { dataScopeGuard } from '../../middleware/data-scope.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as referralService from './referral.service.js';
@@ -9,11 +10,12 @@ import * as referralService from './referral.service.js';
 export async function referralRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', dataScopeGuard);
 
   /** List referrals */
   app.get('/', async (request) => {
     const query = request.query as { careEpisodeId?: string };
-    return referralService.listReferrals(request.org!.orgId, query.careEpisodeId);
+    return referralService.listReferrals(request.org!.orgId, query.careEpisodeId, request.dataScope);
   });
 
   /** Get a single referral */

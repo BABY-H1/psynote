@@ -1,11 +1,13 @@
-import { eq, and, asc, desc } from 'drizzle-orm';
+import { eq, and, asc, desc, inArray } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { groupInstances, groupEnrollments, groupSchemeSessions, groupSessionRecords, users } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
 
-export async function listInstances(orgId: string, status?: string) {
+export async function listInstances(orgId: string, status?: string, leaderId?: string, leaderIds?: string[]) {
   const conditions = [eq(groupInstances.orgId, orgId)];
   if (status) conditions.push(eq(groupInstances.status, status));
+  if (leaderId) conditions.push(eq(groupInstances.leaderId, leaderId));
+  if (leaderIds && leaderIds.length > 0) conditions.push(inArray(groupInstances.leaderId, leaderIds));
 
   return db
     .select()

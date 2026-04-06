@@ -9,7 +9,8 @@ interface AuthState {
   refreshToken: string | null;
   currentOrgId: string | null;
   currentRole: OrgRole | null;
-  setAuth: (user: User, accessToken: string, refreshToken: string) => void;
+  isSystemAdmin: boolean;
+  setAuth: (user: User, accessToken: string, refreshToken: string, isSystemAdmin?: boolean) => void;
   setOrg: (orgId: string, role: OrgRole) => void;
   updateTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
@@ -23,11 +24,12 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       currentOrgId: null,
       currentRole: null,
+      isSystemAdmin: false,
 
-      setAuth: (user, accessToken, refreshToken) => {
+      setAuth: (user, accessToken, refreshToken, isSystemAdmin = false) => {
         api.setToken(accessToken);
         // Clear org/role so OrgSelector re-fetches for the new user
-        set({ user, accessToken, refreshToken, currentOrgId: null, currentRole: null });
+        set({ user, accessToken, refreshToken, currentOrgId: null, currentRole: null, isSystemAdmin });
       },
 
       setOrg: (orgId, role) => {
@@ -47,6 +49,7 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: null,
           currentOrgId: null,
           currentRole: null,
+          isSystemAdmin: false,
         });
       },
     }),
@@ -58,6 +61,7 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         currentOrgId: state.currentOrgId,
         currentRole: state.currentRole,
+        isSystemAdmin: state.isSystemAdmin,
       }),
     },
   ),

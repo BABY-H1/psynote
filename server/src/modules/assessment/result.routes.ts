@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { dataScopeGuard } from '../../middleware/data-scope.js';
 import { logAudit, logPhiAccess } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as resultService from './result.service.js';
@@ -9,6 +10,7 @@ import * as resultService from './result.service.js';
 export async function resultRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', dataScopeGuard);
 
   /** List results with optional filters */
   app.get('/', async (request) => {
@@ -20,7 +22,7 @@ export async function resultRoutes(app: FastifyInstance) {
       riskLevel?: string;
     };
 
-    return resultService.listResults(request.org!.orgId, query);
+    return resultService.listResults(request.org!.orgId, { ...query, scope: request.dataScope });
   });
 
   /** Get a single result */

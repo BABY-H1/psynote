@@ -23,6 +23,7 @@ export const users = pgTable('users', {
   name: text('name').notNull(),
   passwordHash: text('password_hash'),
   avatarUrl: text('avatar_url'),
+  isSystemAdmin: boolean('is_system_admin').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -30,10 +31,12 @@ export const orgMembers = pgTable('org_members', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(), // org_admin | counselor | client
+  role: text('role').notNull(), // org_admin | counselor | admin_staff | client
   permissions: jsonb('permissions').notNull().default({}),
   status: text('status').notNull().default('active'),
   validUntil: timestamp('valid_until', { withTimezone: true }),
+  supervisorId: uuid('supervisor_id'),
+  fullPracticeAccess: boolean('full_practice_access').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_org_members_org_user').on(t.orgId, t.userId),
@@ -323,6 +326,9 @@ export const sessionNotes = pgTable('session_notes', {
   fields: jsonb('fields').notNull().default({}), // for non-SOAP formats: {key: value}
   summary: text('summary'),
   tags: jsonb('tags').default([]),
+  status: text('status').notNull().default('draft'), // draft | finalized | submitted_for_review | reviewed
+  supervisorAnnotation: text('supervisor_annotation'),
+  submittedForReviewAt: timestamp('submitted_for_review_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -745,3 +751,32 @@ export const consentRecords = pgTable('consent_records', {
   status: text('status').notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Permission & Data Isolation ─────────────────────────────────
+
+export const clientAssignments = pgTable('client_assignments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  clientId: uuid('client_id').notNull().references(() => users.id),
+  counselorId: uuid('counselor_id').notNull().references(() => users.id),
+  isPrimary: boolean('is_primary').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_client_assignments_org_client_counselor').on(t.orgId, t.clientId, t.counselorId),
+  index('idx_client_assignments_counselor').on(t.orgId, t.counselorId),
+  index('idx_client_assignments_client').on(t.orgId, t.clientId),
+]);
+
+export const clientAccessGrants = pgTable('client_access_grants', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  clientId: uuid('client_id').notNull().references(() => users.id),
+  grantedToCounselorId: uuid('granted_to_counselor_id').notNull().references(() => users.id),
+  grantedBy: uuid('granted_by').notNull().references(() => users.id),
+  reason: text('reason').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_client_access_grants_org_client_counselor').on(t.orgId, t.clientId, t.grantedToCounselorId),
+]);

@@ -2,12 +2,15 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { sessionNotes, careTimeline } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
+import type { DataScope } from '../../middleware/data-scope.js';
+import { clientScopeCondition } from '../../lib/data-scope-filter.js';
 
 export async function listSessionNotes(
   orgId: string,
-  filters?: { counselorId?: string; clientId?: string; careEpisodeId?: string },
+  filters?: { counselorId?: string; clientId?: string; careEpisodeId?: string; scope?: DataScope },
 ) {
   const conditions = [eq(sessionNotes.orgId, orgId)];
+  if (filters?.scope) conditions.push(clientScopeCondition(filters.scope, sessionNotes.clientId, sessionNotes.orgId, orgId));
   if (filters?.counselorId) conditions.push(eq(sessionNotes.counselorId, filters.counselorId));
   if (filters?.clientId) conditions.push(eq(sessionNotes.clientId, filters.clientId));
   if (filters?.careEpisodeId) conditions.push(eq(sessionNotes.careEpisodeId, filters.careEpisodeId));

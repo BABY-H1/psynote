@@ -2,12 +2,33 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { followUpPlans, followUpReviews, careTimeline, careEpisodes } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
+import type { DataScope } from '../../middleware/data-scope.js';
+import { clientScopeCondition } from '../../lib/data-scope-filter.js';
 
 // ─── Plans ───────────────────────────────────────────────────────
 
-export async function listFollowUpPlans(orgId: string, careEpisodeId?: string) {
+export async function listFollowUpPlans(orgId: string, careEpisodeId?: string, scope?: DataScope) {
   const conditions = [eq(followUpPlans.orgId, orgId)];
   if (careEpisodeId) conditions.push(eq(followUpPlans.careEpisodeId, careEpisodeId));
+
+  if (scope && scope.type === 'assigned') {
+    // Filter by counselorId — counselors only see their own follow-up plans
+    // For supervisor scope, allowedClientIds includes supervisees' clients,
+    // so we join to careEpisodes to check clientId
+    if (!scope.allowedClientIds || scope.allowedClientIds.length === 0) {
+      return [];
+    }
+    return db
+      .select({ followUpPlan: followUpPlans })
+      .from(followUpPlans)
+      .innerJoin(careEpisodes, eq(followUpPlans.careEpisodeId, careEpisodes.id))
+      .where(and(
+        ...conditions,
+        clientScopeCondition(scope, careEpisodes.clientId, careEpisodes.orgId, orgId),
+      ))
+      .orderBy(desc(followUpPlans.createdAt))
+      .then((rows) => rows.map((r) => r.followUpPlan));
+  }
 
   return db
     .select()

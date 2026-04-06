@@ -2,12 +2,15 @@ import { eq, and, desc, asc, gt, sql, count as drizzleCount } from 'drizzle-orm'
 import { db } from '../../config/database.js';
 import { careEpisodes, careTimeline, users, appointments, sessionNotes } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
+import type { DataScope } from '../../middleware/data-scope.js';
+import { clientScopeCondition } from '../../lib/data-scope-filter.js';
 
 export async function listEpisodes(
   orgId: string,
-  filters?: { counselorId?: string; clientId?: string; status?: string },
+  filters?: { counselorId?: string; clientId?: string; status?: string; scope?: DataScope },
 ) {
   const conditions = [eq(careEpisodes.orgId, orgId)];
+  if (filters?.scope) conditions.push(clientScopeCondition(filters.scope, careEpisodes.clientId, careEpisodes.orgId, orgId));
   if (filters?.counselorId) conditions.push(eq(careEpisodes.counselorId, filters.counselorId));
   if (filters?.clientId) conditions.push(eq(careEpisodes.clientId, filters.clientId));
   if (filters?.status) conditions.push(eq(careEpisodes.status, filters.status));

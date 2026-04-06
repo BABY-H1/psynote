@@ -1,4 +1,4 @@
-import { eq, and, isNull, desc, or, asc } from 'drizzle-orm';
+import { eq, and, isNull, desc, or, asc, inArray } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import {
   assessmentResults, assessments, assessmentScales,
@@ -6,6 +6,8 @@ import {
 } from '../../db/schema.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 import { generateIndividualSingleReport } from './report.service.js';
+import type { DataScope } from '../../middleware/data-scope.js';
+import { clientScopeCondition } from '../../lib/data-scope-filter.js';
 
 /** List results for an org, optionally filtered.
  *  Joins assessment → assessment_scales → scales to include scale titles. */
@@ -17,12 +19,20 @@ export async function listResults(
     careEpisodeId?: string;
     batchId?: string;
     riskLevel?: string;
+    scope?: DataScope;
   },
 ) {
   const conditions = [
     eq(assessmentResults.orgId, orgId),
     isNull(assessmentResults.deletedAt),
   ];
+
+  if (filters?.scope && filters.scope.type === 'assigned') {
+    if (!filters.scope.allowedClientIds || filters.scope.allowedClientIds.length === 0) {
+      return [];
+    }
+    conditions.push(inArray(assessmentResults.userId, filters.scope.allowedClientIds));
+  }
 
   if (filters?.assessmentId) {
     conditions.push(eq(assessmentResults.assessmentId, filters.assessmentId));

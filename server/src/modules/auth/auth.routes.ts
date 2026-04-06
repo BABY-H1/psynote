@@ -11,9 +11,9 @@ const JWT_SECRET = env.JWT_SECRET || 'psynote-dev-secret-change-in-production';
 const ACCESS_TOKEN_EXPIRY = '7d';
 const REFRESH_TOKEN_EXPIRY = '30d';
 
-function signTokens(user: { id: string; email: string | null }) {
+function signTokens(user: { id: string; email: string | null; isSystemAdmin?: boolean | null }) {
   const accessToken = jwt.sign(
-    { sub: user.id, email: user.email },
+    { sub: user.id, email: user.email, isSystemAdmin: user.isSystemAdmin ?? false },
     JWT_SECRET,
     { expiresIn: ACCESS_TOKEN_EXPIRY },
   );
@@ -61,7 +61,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     return reply.status(201).send({
       ...tokens,
-      user: { id: user.id, email: user.email, name: user.name },
+      user: { id: user.id, email: user.email, name: user.name, isSystemAdmin: user.isSystemAdmin },
     });
   });
 
@@ -98,7 +98,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     return reply.send({
       ...tokens,
-      user: { id: user.id, email: user.email, name: user.name },
+      user: { id: user.id, email: user.email, name: user.name, isSystemAdmin: user.isSystemAdmin },
     });
   });
 

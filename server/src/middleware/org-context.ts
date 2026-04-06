@@ -11,6 +11,9 @@ export interface OrgContext {
   orgId: string;
   role: OrgRole;
   memberId: string;
+  supervisorId: string | null;
+  fullPracticeAccess: boolean;
+  superviseeUserIds: string[];
 }
 
 declare module 'fastify' {
@@ -34,6 +37,21 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     throw new ForbiddenError('Authentication required before org context');
   }
 
+  // System admin bypass: full access to any org without membership
+  if (request.user?.isSystemAdmin) {
+    request.org = {
+      orgId,
+      role: 'org_admin',
+      memberId: 'system-admin',
+      supervisorId: null,
+      fullPracticeAccess: true,
+      superviseeUserIds: [],
+    };
+    await queryClient`SELECT set_config('app.current_org_id', ${orgId}, true)`;
+    await queryClient`SELECT set_config('app.current_user_id', ${userId}, true)`;
+    return;
+  }
+
   // Look up membership
   const [member] = await db
     .select()
@@ -52,6 +70,9 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
       orgId,
       role: devRole as OrgRole,
       memberId: 'dev-member',
+      supervisorId: null,
+      fullPracticeAccess: devRole === 'org_admin',
+      superviseeUserIds: [],
     };
     await queryClient`SELECT set_config('app.current_org_id', ${orgId}, true)`;
     await queryClient`SELECT set_config('app.current_user_id', ${userId}, true)`;
@@ -67,10 +88,27 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     throw new ForbiddenError('Your membership has expired');
   }
 
+  // Load supervisee user IDs (people this member supervises)
+  let superviseeUserIds: string[] = [];
+  if (member.role === 'counselor' || member.role === 'org_admin') {
+    const supervisees = await db
+      .select({ userId: orgMembers.userId })
+      .from(orgMembers)
+      .where(and(
+        eq(orgMembers.supervisorId, member.id),
+        eq(orgMembers.orgId, orgId),
+        eq(orgMembers.status, 'active'),
+      ));
+    superviseeUserIds = supervisees.map((s) => s.userId);
+  }
+
   request.org = {
     orgId,
     role: member.role as OrgRole,
     memberId: member.id,
+    supervisorId: member.supervisorId ?? null,
+    fullPracticeAccess: member.fullPracticeAccess ?? (member.role === 'org_admin'),
+    superviseeUserIds,
   };
 
   // Set PostgreSQL session variables for RLS

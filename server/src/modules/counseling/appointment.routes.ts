@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { dataScopeGuard } from '../../middleware/data-scope.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as appointmentService from './appointment.service.js';
@@ -9,6 +10,7 @@ import * as appointmentService from './appointment.service.js';
 export async function appointmentRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', dataScopeGuard);
 
   /** List appointments */
   app.get('/', async (request) => {
@@ -25,6 +27,7 @@ export async function appointmentRoutes(app: FastifyInstance) {
       status: query.status,
       from: query.from ? new Date(query.from) : undefined,
       to: query.to ? new Date(query.to) : undefined,
+      scope: request.dataScope,
     });
   });
 
@@ -36,7 +39,7 @@ export async function appointmentRoutes(app: FastifyInstance) {
 
   /** Create appointment */
   app.post('/', {
-    preHandler: [requireRole('org_admin', 'counselor')],
+    preHandler: [requireRole('org_admin', 'counselor', 'admin_staff')],
   }, async (request, reply) => {
     const body = request.body as {
       careEpisodeId?: string;
@@ -69,7 +72,9 @@ export async function appointmentRoutes(app: FastifyInstance) {
   });
 
   /** Update appointment status */
-  app.patch('/:appointmentId/status', async (request) => {
+  app.patch('/:appointmentId/status', {
+    preHandler: [requireRole('org_admin', 'counselor', 'admin_staff')],
+  }, async (request) => {
     const { appointmentId } = request.params as { appointmentId: string };
     const body = request.body as { status: string };
 

@@ -8,6 +8,7 @@ const JWT_SECRET = env.JWT_SECRET || 'psynote-dev-secret-change-in-production';
 export interface AuthUser {
   id: string;
   email: string;
+  isSystemAdmin: boolean;
 }
 
 declare module 'fastify' {
@@ -28,7 +29,11 @@ export async function authGuard(request: FastifyRequest, _reply: FastifyReply) {
   const token = authHeader.slice(7);
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { sub: string; email?: string };
+    const payload = jwt.verify(token, JWT_SECRET) as {
+      sub: string;
+      email?: string;
+      isSystemAdmin?: boolean;
+    };
 
     if (!payload.sub) {
       throw new UnauthorizedError('Invalid token payload');
@@ -37,6 +42,7 @@ export async function authGuard(request: FastifyRequest, _reply: FastifyReply) {
     request.user = {
       id: payload.sub,
       email: (payload.email as string) || '',
+      isSystemAdmin: payload.isSystemAdmin ?? false,
     };
   } catch (err) {
     if (err instanceof UnauthorizedError) throw err;

@@ -31,7 +31,7 @@ export function LoginPage() {
       const data = await api.post<{
         accessToken: string;
         refreshToken: string;
-        user: { id: string; email: string; name: string };
+        user: { id: string; email: string; name: string; isSystemAdmin?: boolean };
       }>('/auth/login', { email, password });
 
       // Set token first so subsequent API calls are authenticated
@@ -45,6 +45,7 @@ export function LoginPage() {
         { id: data.user.id, email: data.user.email, name: data.user.name, createdAt: '' },
         data.accessToken,
         data.refreshToken,
+        data.user.isSystemAdmin ?? false,
       );
 
       if (orgs.length > 0) {

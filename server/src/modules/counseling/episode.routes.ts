@@ -2,7 +2,8 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
-import { requireRole } from '../../middleware/rbac.js';
+import { requireRole, requireClinicalAccess } from '../../middleware/rbac.js';
+import { dataScopeGuard } from '../../middleware/data-scope.js';
 import { logAudit, logPhiAccess } from '../../middleware/audit.js';
 import { validate } from '../../lib/validate.js';
 import * as episodeService from './episode.service.js';
@@ -45,11 +46,13 @@ const EpisodeIdParam = z.object({ episodeId: z.string().uuid() });
 export async function episodeRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', dataScopeGuard);
+  app.addHook('preHandler', requireClinicalAccess());
 
   /** List episodes with optional filters */
   app.get('/', async (request) => {
     const query = validate(ListEpisodesQuery, request.query);
-    return episodeService.listEpisodes(request.org!.orgId, query);
+    return episodeService.listEpisodes(request.org!.orgId, { ...query, scope: request.dataScope });
   });
 
   /** Get a single episode */

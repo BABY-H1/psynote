@@ -32,7 +32,7 @@ export function useOrgMembers() {
 export function useInviteMember() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { email: string; role: string; name?: string }) =>
+    mutationFn: (data: { email: string; role: string; name?: string; supervisorId?: string; fullPracticeAccess?: boolean }) =>
       api.post<OrgMember>(`${orgPrefix()}/members/invite`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['members'] }); },
   });

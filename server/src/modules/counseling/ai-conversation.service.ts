@@ -1,13 +1,40 @@
-import { eq, and, desc } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { db } from '../../config/database.js';
-import { aiConversations } from '../../db/schema.js';
+import { aiConversations, careEpisodes } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
+import type { DataScope } from '../../middleware/data-scope.js';
 
 export async function listConversations(
   orgId: string,
-  filters: { careEpisodeId?: string; counselorId?: string; mode?: string },
+  filters: { careEpisodeId?: string; counselorId?: string; mode?: string; scope?: DataScope },
 ) {
   const conditions = [eq(aiConversations.orgId, orgId)];
+  if (filters.scope?.type === 'assigned' && filters.scope.allowedClientIds) {
+    // AI conversations don't have a direct clientId column — filter by counselorId ownership
+    // For assigned scope, restrict to conversations where the counselor is the current user
+    // (the scope's allowedClientIds are already resolved from assignments)
+    if (filters.counselorId) {
+      // Already filtered by counselorId below, no extra condition needed
+    } else {
+      // Subquery: only conversations linked to episodes whose client is in allowedClientIds
+      const allowedEpisodes = await db
+        .select({ id: careEpisodes.id })
+        .from(careEpisodes)
+        .where(and(
+          eq(careEpisodes.orgId, orgId),
+          inArray(careEpisodes.clientId, filters.scope.allowedClientIds),
+        ));
+      const episodeIds = allowedEpisodes.map((e) => e.id);
+      if (episodeIds.length > 0) {
+        conditions.push(inArray(aiConversations.careEpisodeId, episodeIds));
+      } else {
+        conditions.push(eq(aiConversations.careEpisodeId, 'no-access'));
+      }
+    }
+  } else if (filters.scope?.type === 'basic_only' || filters.scope?.type === 'none') {
+    // No clinical access
+    conditions.push(eq(aiConversations.careEpisodeId, 'no-access'));
+  }
   if (filters.careEpisodeId) conditions.push(eq(aiConversations.careEpisodeId, filters.careEpisodeId));
   if (filters.counselorId) conditions.push(eq(aiConversations.counselorId, filters.counselorId));
   if (filters.mode) conditions.push(eq(aiConversations.mode, filters.mode));

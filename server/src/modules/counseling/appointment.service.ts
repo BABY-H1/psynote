@@ -3,6 +3,8 @@ import { db } from '../../config/database.js';
 import { appointments, careTimeline, users } from '../../db/schema.js';
 import { NotFoundError, ConflictError, ValidationError } from '../../lib/errors.js';
 import { getAvailableTimeSlots } from './availability.service.js';
+import type { DataScope } from '../../middleware/data-scope.js';
+import { clientScopeCondition } from '../../lib/data-scope-filter.js';
 
 export async function listAppointments(
   orgId: string,
@@ -12,9 +14,11 @@ export async function listAppointments(
     status?: string;
     from?: Date;
     to?: Date;
+    scope?: DataScope;
   },
 ) {
   const conditions = [eq(appointments.orgId, orgId)];
+  if (filters?.scope) conditions.push(clientScopeCondition(filters.scope, appointments.clientId, appointments.orgId, orgId));
   if (filters?.counselorId) conditions.push(eq(appointments.counselorId, filters.counselorId));
   if (filters?.clientId) conditions.push(eq(appointments.clientId, filters.clientId));
   if (filters?.status) conditions.push(eq(appointments.status, filters.status));
