@@ -1,6 +1,9 @@
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
+import fastifyMultipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
+import { join } from 'path';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
@@ -37,6 +40,12 @@ import { publicEnrollRoutes } from './modules/group/public-enroll.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
 import { clientAssignmentRoutes } from './modules/counseling/client-assignment.routes.js';
 import { clientAccessGrantRoutes } from './modules/counseling/client-access-grant.routes.js';
+import { uploadRoutes } from './modules/upload/upload.routes.js';
+import { courseInstanceRoutes } from './modules/course/instance.routes.js';
+import { courseEnrollmentRoutes } from './modules/course/course-enrollment.routes.js';
+import { publicCourseEnrollRoutes } from './modules/course/public-course-enroll.routes.js';
+import { feedbackRoutes as courseFeedbackRoutes } from './modules/course/feedback.routes.js';
+import { homeworkRoutes as courseHomeworkRoutes } from './modules/course/homework.routes.js';
 
 const app = Fastify({
   logger: {
@@ -50,6 +59,8 @@ const app = Fastify({
 // Plugins
 await app.register(cors, { origin: env.CLIENT_URL, credentials: true });
 await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
+await app.register(fastifyMultipart, { limits: { fileSize: 200 * 1024 * 1024 } }); // 200MB max
+await app.register(fastifyStatic, { root: join(process.cwd(), 'uploads'), prefix: '/uploads/', decorateReply: false });
 
 // Error handler
 app.setErrorHandler(errorHandler);
@@ -96,6 +107,13 @@ await app.register(sessionRoutes, { prefix: '/api/orgs/:orgId/group-instances' }
 
 // Course domain
 await app.register(courseRoutes, { prefix: '/api/orgs/:orgId/courses' });
+await app.register(courseInstanceRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
+await app.register(courseEnrollmentRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
+await app.register(courseFeedbackRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
+await app.register(courseHomeworkRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
+
+// File upload
+await app.register(uploadRoutes, { prefix: '/api/orgs/:orgId/upload' });
 
 // Compliance
 await app.register(consentRoutes, { prefix: '/api/orgs/:orgId/compliance' });
@@ -112,6 +130,9 @@ await app.register(publicAppointmentRoutes, { prefix: '/api/public/appointments'
 
 // Public group enrollment (no auth)
 await app.register(publicEnrollRoutes, { prefix: '/api/public/groups' });
+
+// Public course enrollment (no auth)
+await app.register(publicCourseEnrollRoutes, { prefix: '/api/public/courses' });
 
 // Client self-service portal
 await app.register(clientPortalRoutes, { prefix: '/api/orgs/:orgId/client' });

@@ -5,6 +5,7 @@ import {
   useArchiveCourse, useCloneCourse, useUpdateCourse,
 } from '../../../api/useCourses';
 import { PageLoading, EmptyState, useToast } from '../../../shared/components';
+import { ManualCourseEditor } from './ManualCourseEditor';
 import type { Course, CourseStatus } from '@psynote/shared';
 
 const STATUS_TABS: { key: string; label: string }[] = [
@@ -44,6 +45,7 @@ export function CourseCenter() {
   const [tab, setTab] = useState('all');
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showManualEditor, setShowManualEditor] = useState(false);
 
   const filters = {
     status: tab === 'template' ? undefined : (tab === 'all' ? undefined : tab),
@@ -58,6 +60,10 @@ export function CourseCenter() {
   const updateCourse = useUpdateCourse();
   const { toast } = useToast();
 
+  if (showManualEditor) {
+    return <ManualCourseEditor onClose={() => setShowManualEditor(false)} />;
+  }
+
   if (selectedId) {
     return <CourseDetail courseId={selectedId} onBack={() => setSelectedId(null)} />;
   }
@@ -67,15 +73,21 @@ export function CourseCenter() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">课程中心</h2>
-          <p className="text-sm text-slate-500 mt-1">管理课程项目、AI创作与模板</p>
+          <h2 className="text-xl font-bold text-slate-900">课程方案库</h2>
+          <p className="text-sm text-slate-500 mt-1">创作与管理课程方案模板</p>
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setShowManualEditor(true)}
+            className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition"
+          >
+            + 手动创建
+          </button>
           <button
             onClick={() => navigate('/courses/new/requirements')}
             className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition"
           >
-            + 新建课程项目
+            + AI 辅助创建
           </button>
         </div>
       </div>

@@ -10,6 +10,7 @@ interface AuthState {
   currentOrgId: string | null;
   currentRole: OrgRole | null;
   isSystemAdmin: boolean;
+  _hydrated: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string, isSystemAdmin?: boolean) => void;
   setOrg: (orgId: string, role: OrgRole) => void;
   updateTokens: (accessToken: string, refreshToken: string) => void;
@@ -25,6 +26,7 @@ export const useAuthStore = create<AuthState>()(
       currentOrgId: null,
       currentRole: null,
       isSystemAdmin: false,
+      _hydrated: false,
 
       setAuth: (user, accessToken, refreshToken, isSystemAdmin = false) => {
         api.setToken(accessToken);
@@ -63,12 +65,15 @@ export const useAuthStore = create<AuthState>()(
         currentRole: state.currentRole,
         isSystemAdmin: state.isSystemAdmin,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (state) {
+          state._hydrated = true;
+          if (state.accessToken) {
+            api.setToken(state.accessToken);
+          }
+        }
+      },
     },
   ),
 );
 
-// Restore token on app load
-const stored = useAuthStore.getState();
-if (stored.accessToken) {
-  api.setToken(stored.accessToken);
-}

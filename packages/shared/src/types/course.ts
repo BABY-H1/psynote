@@ -4,6 +4,14 @@ import type {
   CourseType,
   TargetAudience,
   LessonBlockType,
+  CourseInstanceStatus,
+  CoursePublishMode,
+  CourseEnrollmentSource,
+  CourseApprovalStatus,
+  CourseCreationMode,
+  HomeworkQuestionType,
+  HomeworkSubmissionStatus,
+  FeedbackQuestionType,
 } from './enums';
 
 export interface Course {
@@ -23,6 +31,7 @@ export interface Course {
   responsibleId?: string;
   isTemplate: boolean;
   sourceTemplateId?: string;
+  creationMode: CourseCreationMode;
   requirementsConfig?: CourseRequirementsConfig;
   blueprintData?: CourseBlueprintData;
   tags?: string[];
@@ -117,28 +126,117 @@ export interface CourseBlueprintSession {
   homeworkSuggestion: string;
 }
 
-/** Labels for block types (Chinese UI) */
+// ─── Course Instance Types ──────────────────────────────────────
+
+export interface CourseInstance {
+  id: string;
+  orgId: string;
+  courseId: string;
+  title: string;
+  description?: string;
+  publishMode: CoursePublishMode;
+  status: CourseInstanceStatus;
+  capacity?: number;
+  targetGroupLabel?: string;
+  responsibleId?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  // Populated
+  course?: Course;
+  enrollmentCount?: number;
+  completedCount?: number;
+}
+
+export interface CourseAttachment {
+  id: string;
+  chapterId: string;
+  fileName: string;
+  fileUrl: string;
+  fileType: string;
+  fileSize?: number;
+  sortOrder: number;
+  uploadedBy?: string;
+  createdAt: string;
+}
+
+// ─── Feedback & Homework Types ──────────────────────────────────
+
+export interface FeedbackQuestion {
+  id: string;
+  type: FeedbackQuestionType;
+  prompt: string;
+  options?: string[];
+  required?: boolean;
+}
+
+export interface CourseFeedbackForm {
+  id: string;
+  instanceId: string;
+  chapterId?: string;
+  title?: string;
+  questions: FeedbackQuestion[];
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface CourseFeedbackResponse {
+  id: string;
+  formId: string;
+  enrollmentId: string;
+  answers: { questionId: string; value: string | number }[];
+  submittedAt: string;
+}
+
+export interface CourseHomeworkDef {
+  id: string;
+  instanceId: string;
+  chapterId?: string;
+  title?: string;
+  description?: string;
+  questionType: HomeworkQuestionType;
+  options?: string[];
+  isRequired: boolean;
+  sortOrder: number;
+  createdAt: string;
+}
+
+export interface CourseHomeworkSubmission {
+  id: string;
+  homeworkDefId: string;
+  enrollmentId: string;
+  content?: string;
+  selectedOptions?: string[];
+  status: HomeworkSubmissionStatus;
+  reviewComment?: string;
+  reviewedBy?: string;
+  reviewedAt?: string;
+  submittedAt: string;
+  updatedAt: string;
+}
+
+/** Labels for block types (Chinese UI - 教案格式) */
 export const LESSON_BLOCK_LABELS: Record<LessonBlockType, string> = {
-  opening: '开场导入',
-  objectives: '目标说明',
-  core_content: '核心讲解',
-  case_demo: '案例演示',
-  interaction: '互动问题',
-  practice: '练习活动',
-  homework: '作业布置',
-  post_reminder: '课后提醒',
-  counselor_notes: '咨询师备注',
+  objectives: '教学目标',
+  key_points: '重点难点',
+  preparation: '教学准备',
+  warmup: '暖身活动',
+  main_activity: '主题探索',
+  experience: '体验活动',
+  sharing: '分享总结',
+  extension: '课后延伸',
+  reflection: '教学反思',
 };
 
-/** Ordered list of block types */
+/** Ordered list of block types (教案顺序) */
 export const LESSON_BLOCK_ORDER: LessonBlockType[] = [
-  'opening',
   'objectives',
-  'core_content',
-  'case_demo',
-  'interaction',
-  'practice',
-  'homework',
-  'post_reminder',
-  'counselor_notes',
+  'key_points',
+  'preparation',
+  'warmup',
+  'main_activity',
+  'experience',
+  'sharing',
+  'extension',
+  'reflection',
 ];

@@ -595,6 +595,7 @@ export const courses = pgTable('courses', {
   isPublic: boolean('is_public').notNull().default(false),
   // New lifecycle fields
   status: text('status').notNull().default('draft'), // draft | blueprint | content_authoring | published | archived
+  creationMode: text('creation_mode').notNull().default('manual'), // ai_assisted | manual
   courseType: text('course_type'), // micro_course | series | group_facilitation | workshop
   targetAudience: text('target_audience'), // parent | student | counselor | teacher
   scenario: text('scenario'),
@@ -628,9 +629,13 @@ export const courseChapters = pgTable('course_chapters', {
 export const courseEnrollments = pgTable('course_enrollments', {
   id: uuid('id').primaryKey().defaultRandom(),
   courseId: uuid('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  instanceId: uuid('instance_id').references((): any => courseInstances.id),
   userId: uuid('user_id').notNull().references(() => users.id),
   careEpisodeId: uuid('care_episode_id').references(() => careEpisodes.id),
-  assignedBy: uuid('assigned_by').references(() => users.id), // Counselor who assigned, null if self-enrolled
+  assignedBy: uuid('assigned_by').references(() => users.id),
+  enrollmentSource: text('enrollment_source').default('self_enroll'), // assigned | class_batch | public_apply | self_enroll
+  approvalStatus: text('approval_status').default('auto_approved'), // pending | approved | rejected | auto_approved
+  approvedBy: uuid('approved_by').references(() => users.id),
   progress: jsonb('progress').notNull().default({}),
   status: text('status').notNull().default('enrolled'),
   enrolledAt: timestamp('enrolled_at', { withTimezone: true }).notNull().defaultNow(),
@@ -661,6 +666,104 @@ export const courseTemplateTags = pgTable('course_template_tags', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_course_template_tags_org_name').on(t.orgId, t.name),
+]);
+
+export const courseAttachments = pgTable('course_attachments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  chapterId: uuid('chapter_id').notNull().references(() => courseChapters.id, { onDelete: 'cascade' }),
+  fileName: text('file_name').notNull(),
+  fileUrl: text('file_url').notNull(),
+  fileType: text('file_type').notNull(),
+  fileSize: integer('file_size'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  uploadedBy: uuid('uploaded_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_course_attachments_chapter').on(t.chapterId),
+]);
+
+export const courseInstances = pgTable('course_instances', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  courseId: uuid('course_id').notNull().references(() => courses.id, { onDelete: 'cascade' }),
+  title: text('title').notNull(),
+  description: text('description'),
+  publishMode: text('publish_mode').notNull().default('assign'), // assign | class | public
+  status: text('status').notNull().default('draft'), // draft | active | closed | archived
+  capacity: integer('capacity'),
+  targetGroupLabel: text('target_group_label'),
+  responsibleId: uuid('responsible_id').references(() => users.id),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_course_instances_org').on(t.orgId, t.status),
+  index('idx_course_instances_course').on(t.courseId),
+]);
+
+export const courseFeedbackForms = pgTable('course_feedback_forms', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  instanceId: uuid('instance_id').notNull().references(() => courseInstances.id, { onDelete: 'cascade' }),
+  chapterId: uuid('chapter_id').references(() => courseChapters.id),
+  title: text('title'),
+  questions: jsonb('questions').notNull().default([]),
+  isActive: boolean('is_active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_course_feedback_forms_instance').on(t.instanceId, t.chapterId),
+]);
+
+export const courseFeedbackResponses = pgTable('course_feedback_responses', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  formId: uuid('form_id').notNull().references(() => courseFeedbackForms.id, { onDelete: 'cascade' }),
+  enrollmentId: uuid('enrollment_id').notNull().references(() => courseEnrollments.id, { onDelete: 'cascade' }),
+  answers: jsonb('answers').notNull().default([]),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_feedback_response_form_enrollment').on(t.formId, t.enrollmentId),
+]);
+
+export const courseHomeworkDefs = pgTable('course_homework_defs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  instanceId: uuid('instance_id').notNull().references(() => courseInstances.id, { onDelete: 'cascade' }),
+  chapterId: uuid('chapter_id').references(() => courseChapters.id),
+  title: text('title'),
+  description: text('description'),
+  questionType: text('question_type').notNull().default('text'), // text | single_choice | multi_choice
+  options: jsonb('options'),
+  isRequired: boolean('is_required').notNull().default(true),
+  sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_course_homework_defs_instance').on(t.instanceId, t.chapterId),
+]);
+
+export const courseHomeworkSubmissions = pgTable('course_homework_submissions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  homeworkDefId: uuid('homework_def_id').notNull().references(() => courseHomeworkDefs.id, { onDelete: 'cascade' }),
+  enrollmentId: uuid('enrollment_id').notNull().references(() => courseEnrollments.id, { onDelete: 'cascade' }),
+  content: text('content'),
+  selectedOptions: jsonb('selected_options'),
+  status: text('status').notNull().default('submitted'), // submitted | reviewed
+  reviewComment: text('review_comment'),
+  reviewedBy: uuid('reviewed_by').references(() => users.id),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  submittedAt: timestamp('submitted_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_homework_submission_def_enrollment').on(t.homeworkDefId, t.enrollmentId),
+]);
+
+export const courseInteractionResponses = pgTable('course_interaction_responses', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  blockId: uuid('block_id').notNull().references(() => courseLessonBlocks.id, { onDelete: 'cascade' }),
+  instanceId: uuid('instance_id').references(() => courseInstances.id),
+  enrollmentId: uuid('enrollment_id').references(() => courseEnrollments.id),
+  responseType: text('response_type').notNull(), // poll | emotion_checkin | anonymous_qa
+  responseData: jsonb('response_data').notNull().default({}),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_course_interaction_responses_block').on(t.blockId, t.instanceId),
 ]);
 
 // ─── Notification & Compliance ────────────────────────────────────

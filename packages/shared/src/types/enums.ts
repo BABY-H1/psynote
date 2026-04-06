@@ -52,17 +52,41 @@ export type CourseType = 'micro_course' | 'series' | 'group_facilitation' | 'wor
 /** Course target audience */
 export type TargetAudience = 'parent' | 'student' | 'counselor' | 'teacher';
 
-/** Lesson block types (fixed 9 types) */
+/** Lesson block types (教案格式 9 types) */
 export type LessonBlockType =
-  | 'opening'
   | 'objectives'
-  | 'core_content'
-  | 'case_demo'
-  | 'interaction'
-  | 'practice'
-  | 'homework'
-  | 'post_reminder'
-  | 'counselor_notes';
+  | 'key_points'
+  | 'preparation'
+  | 'warmup'
+  | 'main_activity'
+  | 'experience'
+  | 'sharing'
+  | 'extension'
+  | 'reflection';
+
+/** Course instance status */
+export type CourseInstanceStatus = 'draft' | 'active' | 'closed' | 'archived';
+
+/** Course publish mode */
+export type CoursePublishMode = 'assign' | 'class' | 'public';
+
+/** Course enrollment source */
+export type CourseEnrollmentSource = 'assigned' | 'class_batch' | 'public_apply' | 'self_enroll';
+
+/** Course enrollment approval status */
+export type CourseApprovalStatus = 'pending' | 'approved' | 'rejected' | 'auto_approved';
+
+/** Course creation mode */
+export type CourseCreationMode = 'ai_assisted' | 'manual';
+
+/** Homework question type */
+export type HomeworkQuestionType = 'text' | 'single_choice' | 'multi_choice';
+
+/** Homework submission status */
+export type HomeworkSubmissionStatus = 'submitted' | 'reviewed';
+
+/** Feedback question type */
+export type FeedbackQuestionType = 'text' | 'rating' | 'choice';
 
 /** Gender */
 export type Gender = 'male' | 'female' | 'other' | 'prefer_not_to_say';

@@ -15,7 +15,7 @@ import { ReminderSettings } from '../features/settings/pages/ReminderSettings';
 import { AvailabilitySettings } from '../features/counseling/pages/AvailabilitySettings';
 import { AppointmentManagement } from '../features/counseling/pages/AppointmentManagement';
 import { GroupCenter } from '../features/groups/pages/GroupCenter';
-import { CourseCenter } from '../features/courses/pages/CourseCenter';
+import { CourseManagement } from '../features/courses/pages/CourseManagement';
 import { CourseRequirementsConfig } from '../features/courses/pages/CourseRequirementsConfig';
 import { CourseBlueprintEditor } from '../features/courses/pages/CourseBlueprintEditor';
 import { LessonEditor } from '../features/courses/pages/LessonEditor';
@@ -37,16 +37,23 @@ import { AgreementLibrary } from '../features/knowledge/pages/AgreementLibrary';
 import { PublicEnrollment } from '../features/groups/pages/PublicEnrollment';
 import { PublicCheckin } from '../features/groups/pages/PublicCheckin';
 import { AdminDashboard } from '../features/admin/pages/AdminDashboard';
+import { PublicCourseEnrollment } from '../features/courses/pages/PublicCourseEnrollment';
 
 function AppRoutes() {
-  const { user, currentOrgId, currentRole, isSystemAdmin } = useAuthStore();
+  const { user, currentOrgId, currentRole, isSystemAdmin, _hydrated } = useAuthStore();
   const isClient = currentRole === 'client';
+
+  // Wait for Zustand to rehydrate from localStorage before routing decisions
+  if (!_hydrated) {
+    return null;
+  }
 
   return (
     <Routes>
       {/* Public routes (no auth required) */}
       <Route path="/assess/:assessmentId" element={<AssessmentRunner />} />
       <Route path="/enroll/:instanceId" element={<PublicEnrollment />} />
+      <Route path="/course-enroll/:instanceId" element={<PublicCourseEnrollment />} />
       <Route path="/checkin/:instanceId/:sessionId" element={<PublicCheckin />} />
       <Route path="/login" element={<LoginPage />} />
 
@@ -101,7 +108,7 @@ function AppRoutes() {
           <Route path="appointments" element={<AppointmentManagement />} />
           <Route path="availability" element={<AvailabilitySettings />} />
           <Route path="groups" element={<GroupCenter />} />
-          <Route path="courses" element={<CourseCenter />} />
+          <Route path="courses" element={<CourseManagement />} />
           <Route path="courses/new/requirements" element={<CourseRequirementsConfig />} />
           <Route path="courses/:courseId/requirements" element={<CourseRequirementsConfig />} />
           <Route path="courses/:courseId/blueprint" element={<CourseBlueprintEditor />} />

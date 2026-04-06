@@ -197,6 +197,7 @@ export function CourseRequirementsConfig() {
         const created = await createCourse.mutateAsync({
           title: title.trim(),
           status: 'draft' as const,
+          creationMode: 'ai_assisted',
           requirementsConfig: requirements,
         });
         activeCourseId = created.id;

@@ -77,6 +77,7 @@ export async function createCourse(input: {
   responsibleId?: string;
   isTemplate?: boolean;
   sourceTemplateId?: string;
+  creationMode?: string;
   requirementsConfig?: Record<string, any>;
   blueprintData?: Record<string, any>;
   tags?: string[];
@@ -108,6 +109,7 @@ export async function createCourse(input: {
     responsibleId: input.responsibleId,
     isTemplate: input.isTemplate || false,
     sourceTemplateId: input.sourceTemplateId,
+    creationMode: input.creationMode || 'manual',
     requirementsConfig: input.requirementsConfig || {},
     blueprintData: input.blueprintData || {},
     tags: input.tags || [],

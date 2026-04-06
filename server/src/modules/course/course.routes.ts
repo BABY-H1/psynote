@@ -47,6 +47,7 @@ export async function courseRoutes(app: FastifyInstance) {
       targetAudience?: string;
       scenario?: string;
       isTemplate?: boolean;
+      creationMode?: string;
       requirementsConfig?: Record<string, any>;
       blueprintData?: Record<string, any>;
       tags?: string[];
@@ -104,7 +105,7 @@ export async function courseRoutes(app: FastifyInstance) {
   });
 
   app.delete('/:courseId', {
-    preHandler: [requireRole('org_admin')],
+    preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request, reply) => {
     const { courseId } = request.params as { courseId: string };
     await courseService.deleteCourse(courseId);

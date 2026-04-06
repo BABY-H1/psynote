@@ -112,28 +112,28 @@ export async function generateAllLessonBlocks(input: {
   if (!session) throw new Error(`Session index ${input.sessionIndex} out of range`);
 
   const systemPrompt = `你是一位心理健康课程内容撰写专家。
-请为以下课程节次撰写完整的教学内容，按9个固定块输出。
+请为以下课程节次撰写完整的教案内容，按9个固定模块输出。
 
 内容要求：
 1. 使用Markdown格式
 2. 语言生动、专业但不枯燥
 3. 案例要具体、贴近实际
-4. 互动问题要能引发思考
-5. 练习活动要可操作
+4. 互动环节要能引发思考和体验
+5. 活动设计要可操作、有明确步骤
 ${input.requirements?.expressionStyle === '温和陪伴型' ? '6. 语气温和、支持性强，像一位理解你的朋友' : ''}
 ${input.requirements?.expressionStyle === '机构招生型' ? '6. 突出专业性和效果，适合对外宣传' : ''}
 
-返回JSON数组：
+返回JSON数组（标准教案格式）：
 [
-  { "blockType": "opening", "content": "开场导入内容（Markdown）" },
-  { "blockType": "objectives", "content": "目标说明内容" },
-  { "blockType": "core_content", "content": "核心讲解内容" },
-  { "blockType": "case_demo", "content": "案例演示内容" },
-  { "blockType": "interaction", "content": "互动问题内容" },
-  { "blockType": "practice", "content": "练习活动内容" },
-  { "blockType": "homework", "content": "作业布置内容" },
-  { "blockType": "post_reminder", "content": "课后提醒内容" },
-  { "blockType": "counselor_notes", "content": "咨询师备注/注意事项" }
+  { "blockType": "objectives", "content": "教学目标（知识/技能/情感三维目标）" },
+  { "blockType": "key_points", "content": "教学重点和难点" },
+  { "blockType": "preparation", "content": "教学准备（教具、课件、场地要求）" },
+  { "blockType": "warmup", "content": "暖身活动（5-10分钟，破冰/导入主题）" },
+  { "blockType": "main_activity", "content": "主题探索（15-20分钟，核心知识讲解、案例分析）" },
+  { "blockType": "experience", "content": "体验活动（10-15分钟，角色扮演/小组讨论/实操练习）" },
+  { "blockType": "sharing", "content": "分享总结（5-10分钟，学生分享/教师总结升华）" },
+  { "blockType": "extension", "content": "课后延伸（作业/自我观察任务）" },
+  { "blockType": "reflection", "content": "教学反思（教后反思要点，仅教师参考）" }
 ]
 
 语言：中文。`;
@@ -170,15 +170,15 @@ export async function generateSingleLessonBlock(input: {
   if (!session) throw new Error(`Session index ${input.sessionIndex} out of range`);
 
   const blockLabels: Record<string, string> = {
-    opening: '开场导入',
-    objectives: '目标说明',
-    core_content: '核心讲解',
-    case_demo: '案例演示',
-    interaction: '互动问题',
-    practice: '练习活动',
-    homework: '作业布置',
-    post_reminder: '课后提醒',
-    counselor_notes: '咨询师备注',
+    objectives: '教学目标',
+    key_points: '重点难点',
+    preparation: '教学准备',
+    warmup: '暖身活动',
+    main_activity: '主题探索',
+    experience: '体验活动',
+    sharing: '分享总结',
+    extension: '课后延伸',
+    reflection: '教学反思',
   };
 
   const existingContext = input.existingBlocks

@@ -7,15 +7,21 @@ const UPLOAD_DIR = join(process.cwd(), 'uploads');
 const ALLOWED_TYPES: Record<string, string[]> = {
   text: ['.txt', '.md'],
   audio: ['.mp3', '.wav', '.m4a', '.ogg', '.webm'],
-  image: ['.jpg', '.jpeg', '.png'],
+  image: ['.jpg', '.jpeg', '.png', '.gif', '.webp'],
   pdf: ['.pdf'],
+  presentation: ['.ppt', '.pptx'],
+  video: ['.mp4', '.mov', '.avi', '.mkv'],
+  document: ['.doc', '.docx', '.xls', '.xlsx'],
 };
 
 const MAX_SIZES: Record<string, number> = {
-  text: 2 * 1024 * 1024,    // 2MB
-  audio: 50 * 1024 * 1024,  // 50MB
-  image: 5 * 1024 * 1024,   // 5MB
-  pdf: 10 * 1024 * 1024,    // 10MB
+  text: 2 * 1024 * 1024,           // 2MB
+  audio: 50 * 1024 * 1024,         // 50MB
+  image: 10 * 1024 * 1024,         // 10MB
+  pdf: 20 * 1024 * 1024,           // 20MB
+  presentation: 50 * 1024 * 1024,  // 50MB
+  video: 200 * 1024 * 1024,        // 200MB
+  document: 20 * 1024 * 1024,      // 20MB
 };
 
 function detectFileType(fileName: string): string | null {

@@ -93,21 +93,23 @@ class ApiClient {
     }
   }
 
-  private forceLogout() {
+  private async forceLogout() {
     this.accessToken = null;
-    // Clear persisted auth state
+    // Clear auth via Zustand store (handles both in-memory and localStorage)
     try {
-      const stored = JSON.parse(localStorage.getItem('psynote-auth') || '{}');
-      if (stored.state) {
-        stored.state.accessToken = null;
-        stored.state.refreshToken = null;
-        stored.state.user = null;
-        localStorage.setItem('psynote-auth', JSON.stringify(stored));
-      }
-    } catch { /* ignore */ }
-    // Redirect to login
-    if (window.location.pathname !== '/login') {
-      window.location.href = '/login';
+      const { useAuthStore } = await import('../stores/authStore');
+      useAuthStore.getState().logout();
+    } catch {
+      // Fallback: clear localStorage manually
+      try {
+        const stored = JSON.parse(localStorage.getItem('psynote-auth') || '{}');
+        if (stored.state) {
+          stored.state.accessToken = null;
+          stored.state.refreshToken = null;
+          stored.state.user = null;
+          localStorage.setItem('psynote-auth', JSON.stringify(stored));
+        }
+      } catch { /* ignore */ }
     }
   }
 
