@@ -43,14 +43,12 @@ const AUDIENCE_LABELS: Record<string, string> = {
 export function CourseCenter() {
   const navigate = useNavigate();
   const [tab, setTab] = useState('all');
-  const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showManualEditor, setShowManualEditor] = useState(false);
 
   const filters = {
     status: tab === 'template' ? undefined : (tab === 'all' ? undefined : tab),
     isTemplate: tab === 'template' ? true : undefined,
-    search: search || undefined,
   };
   const { data: courses, isLoading } = useCourses(filters);
   const deleteCourse = useDeleteCourse();
@@ -69,31 +67,29 @@ export function CourseCenter() {
   }
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">课程方案库</h2>
-          <p className="text-sm text-slate-500 mt-1">创作与管理课程方案模板</p>
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-slate-500">
+          创作与管理课程方案模板，可用于心理健康教育
         </div>
         <div className="flex gap-2">
           <button
             onClick={() => setShowManualEditor(true)}
-            className="px-4 py-2 border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition"
+            className="px-3 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"
           >
             + 手动创建
           </button>
           <button
             onClick={() => navigate('/courses/new/requirements')}
-            className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition"
+            className="px-3 py-2 border border-amber-200 text-amber-700 bg-amber-50 rounded-lg text-sm font-medium hover:bg-amber-100 flex items-center gap-1.5"
           >
             + AI 辅助创建
           </button>
         </div>
       </div>
 
-      {/* Filter bar */}
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      {/* Status tabs */}
+      <div className="flex flex-wrap items-center gap-3">
         <div className="flex bg-slate-100 rounded-lg p-0.5">
           {STATUS_TABS.map((t) => (
             <button
@@ -107,12 +103,6 @@ export function CourseCenter() {
             </button>
           ))}
         </div>
-        <input
-          placeholder="搜索课程..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          className="px-3 py-1.5 border border-slate-200 rounded-lg text-sm w-48 focus:outline-none focus:ring-2 focus:ring-brand-500"
-        />
       </div>
 
       {/* Course grid */}

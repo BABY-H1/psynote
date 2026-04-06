@@ -32,7 +32,6 @@ export interface ConsentTemplate {
   title: string;
   consentType: ConsentType;
   content: string;
-  isDefault: boolean;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

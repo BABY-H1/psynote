@@ -4,8 +4,8 @@ import type { ScaleListItem } from '../../../api/useScales';
 import { ScaleEditor } from '../components/ScaleEditor';
 import { AIScaleCreator } from '../components/AIScaleCreator';
 import { ScaleImporter } from '../components/ScaleImporter';
-import { Sparkles, FileText, Trash2, Edit3, Eye, ClipboardList, X, Search } from 'lucide-react';
-import { PageLoading, EmptyState, StatusBadge, PageHeader, useToast } from '../../../shared/components';
+import { Sparkles, FileText, Trash2, Edit3, Eye, ClipboardList, X } from 'lucide-react';
+import { PageLoading, EmptyState, StatusBadge, useToast } from '../../../shared/components';
 
 interface ScaleInitialData {
   title: string;
@@ -61,8 +61,6 @@ export function ScaleLibrary() {
   const { toast } = useToast();
   const [view, setView] = useState<View>({ type: 'list' });
   const [modal, setModal] = useState<ModalView>(null);
-  const [search, setSearch] = useState('');
-
   if (isLoading) {
     return <PageLoading text="加载量表库中..." />;
   }
@@ -104,42 +102,28 @@ export function ScaleLibrary() {
   }
 
   return (
-    <div>
-      <PageHeader
-        title="量表库"
-        description="管理心理测评量表"
-        actions={
-          <>
-            <button
-              onClick={() => setView({ type: 'import' })}
-              className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition flex items-center gap-1.5"
-            >
-              <FileText className="w-4 h-4 text-slate-500" />
-              文本导入
-            </button>
-            <button
-              onClick={() => setView({ type: 'ai-create' })}
-              className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition flex items-center gap-1.5"
-            >
-              <Sparkles className="w-4 h-4" />
-              AI 创建量表
-            </button>
-          </>
-        }
-      />
-
-      {/* Search bar */}
-      {scales && scales.length > 0 && (
-        <div className="relative mb-4">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="搜索量表名称或描述..."
-            className="w-full pl-9 pr-4 py-2.5 border border-slate-200 rounded-lg text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-brand-500 focus:border-transparent"
-          />
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="text-sm text-slate-500">
+          管理心理测评量表，在个案中可发起测评
         </div>
-      )}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setView({ type: 'import' })}
+            className="px-3 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"
+          >
+            <FileText className="w-4 h-4" />
+            文本导入
+          </button>
+          <button
+            onClick={() => setView({ type: 'ai-create' })}
+            className="px-3 py-2 border border-amber-200 text-amber-700 bg-amber-50 rounded-lg text-sm font-medium hover:bg-amber-100 flex items-center gap-1.5"
+          >
+            <Sparkles className="w-4 h-4" />
+            AI 生成
+          </button>
+        </div>
+      </div>
 
       {!scales || scales.length === 0 ? (
         <EmptyState
@@ -151,11 +135,7 @@ export function ScaleLibrary() {
         />
       ) : (
         <div className="grid gap-4">
-          {scales.filter((s) => {
-            if (!search.trim()) return true;
-            const q = search.toLowerCase();
-            return s.title.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q);
-          }).map((scale) => (
+          {scales.map((scale) => (
             <div
               key={scale.id}
               className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm transition"

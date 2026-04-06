@@ -20,7 +20,6 @@ export async function createTemplate(input: {
   title: string;
   consentType: string;
   content: string;
-  isDefault?: boolean;
   createdBy?: string;
 }) {
   const [template] = await db
@@ -32,7 +31,7 @@ export async function createTemplate(input: {
 
 export async function updateTemplate(
   templateId: string,
-  updates: { title?: string; content?: string; consentType?: string; isDefault?: boolean },
+  updates: { title?: string; content?: string; consentType?: string },
 ) {
   const [updated] = await db
     .update(consentTemplates)

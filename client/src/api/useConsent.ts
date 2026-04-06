@@ -23,7 +23,7 @@ export function useConsentTemplates() {
 export function useCreateConsentTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { title: string; consentType: string; content: string; isDefault?: boolean }) =>
+    mutationFn: (data: { title: string; consentType: string; content: string }) =>
       api.post<ConsentTemplate>(`${orgPrefix()}/compliance/consent-templates`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['consentTemplates'] }); },
   });
@@ -32,7 +32,7 @@ export function useCreateConsentTemplate() {
 export function useUpdateConsentTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ templateId, ...data }: { templateId: string; title?: string; consentType?: string; content?: string; isDefault?: boolean }) =>
+    mutationFn: ({ templateId, ...data }: { templateId: string; title?: string; consentType?: string; content?: string }) =>
       api.patch<ConsentTemplate>(`${orgPrefix()}/compliance/consent-templates/${templateId}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['consentTemplates'] }); },
   });

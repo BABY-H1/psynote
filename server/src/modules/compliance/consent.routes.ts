@@ -26,7 +26,6 @@ export async function consentRoutes(app: FastifyInstance) {
         title: string;
         consentType: string;
         content: string;
-        isDefault?: boolean;
       };
       if (!body.title || !body.consentType || !body.content) {
         throw new ValidationError('title, consentType, and content are required');

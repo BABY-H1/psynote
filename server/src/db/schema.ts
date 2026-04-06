@@ -833,7 +833,6 @@ export const consentTemplates = pgTable('consent_templates', {
   title: text('title').notNull(),
   consentType: text('consent_type').notNull(), // treatment | data_collection | ai_processing | data_sharing | research
   content: text('content').notNull(), // full text of the consent document
-  isDefault: boolean('is_default').notNull().default(false),
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

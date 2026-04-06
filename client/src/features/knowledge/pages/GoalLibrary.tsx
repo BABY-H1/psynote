@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useGoalLibrary, useCreateGoal, useDeleteGoal } from '../../../api/useGoalLibrary';
+import type { TreatmentGoalLibraryItem } from '@psynote/shared';
 import { PageLoading, EmptyState, StatusBadge, useToast } from '../../../shared/components';
-import { Plus, Search, Trash2 } from 'lucide-react';
+import { Plus, Trash2 } from 'lucide-react';
 
 const problemAreaLabels: Record<string, string> = {
   anxiety: '焦虑', depression: '抑郁', relationship: '人际关系', trauma: '创伤',
@@ -16,44 +17,23 @@ const visibilityLabels: Record<string, string> = {
 };
 
 export function GoalLibrary() {
-  const [problemFilter, setProblemFilter] = useState('');
-  const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const { data: goals, isLoading } = useGoalLibrary(problemFilter ? { problemArea: problemFilter } : undefined);
+  const { data: goals, isLoading } = useGoalLibrary();
   const { toast } = useToast();
 
-  const filtered = (goals || []).filter((g) =>
-    !search || g.title.toLowerCase().includes(search.toLowerCase()) || g.description?.toLowerCase().includes(search.toLowerCase()),
-  );
-
   // Group by problem area
-  const grouped = filtered.reduce((acc, g) => {
+  const grouped = (goals || []).reduce((acc, g) => {
     const area = g.problemArea;
     if (!acc[area]) acc[area] = [];
     acc[area].push(g);
     return acc;
-  }, {} as Record<string, typeof filtered>);
+  }, {} as Record<string, TreatmentGoalLibraryItem[]>);
 
   return (
     <div className="space-y-4">
-      {/* Filters */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="relative flex-1 max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="搜索目标..."
-              className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-          </div>
-          <select
-            value={problemFilter}
-            onChange={(e) => setProblemFilter(e.target.value)}
-            className="px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            <option value="">全部问题领域</option>
-            {Object.entries(problemAreaLabels).map(([v, l]) => (
-              <option key={v} value={v}>{l}</option>
-            ))}
-          </select>
+        <div className="text-sm text-slate-500">
+          管理治疗目标模板，在制定个案治疗计划时可直接选用
         </div>
         <button onClick={() => setShowCreate(!showCreate)}
           className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 flex items-center gap-2">
@@ -63,7 +43,7 @@ export function GoalLibrary() {
 
       {showCreate && <CreateGoalForm onDone={() => setShowCreate(false)} />}
 
-      {isLoading ? <PageLoading /> : filtered.length === 0 ? (
+      {isLoading ? <PageLoading /> : !goals || goals.length === 0 ? (
         <EmptyState title="暂无治疗目标" action={{ label: '+ 新建目标', onClick: () => setShowCreate(true) }} />
       ) : (
         <div className="space-y-6">

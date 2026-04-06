@@ -79,7 +79,6 @@ export function SendConsentForm({ clientId, careEpisodeId, onDone }: Props) {
               <div className="text-sm font-medium text-slate-900">{t.title}</div>
               <div className="text-xs text-slate-400">
                 {consentTypeLabels[t.consentType] || t.consentType}
-                {t.isDefault && <span className="ml-2 text-brand-600">默认</span>}
               </div>
             </div>
             <button
