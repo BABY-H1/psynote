@@ -53,6 +53,13 @@ function AppRoutes() {
       {/* Auth required */}
       {!user ? (
         <Route path="*" element={<Navigate to="/login" replace />} />
+      ) : isSystemAdmin && !currentOrgId ? (
+        /* System admin without org → admin dashboard */
+        <>
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/select-org" element={<OrgSelector />} />
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </>
       ) : !currentOrgId ? (
         <>
           <Route path="/select-org" element={<OrgSelector />} />

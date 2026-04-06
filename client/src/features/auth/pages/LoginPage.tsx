@@ -10,12 +10,12 @@ export function LoginPage() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [agreed, setAgreed] = useState(false);
-  const { user, setAuth } = useAuthStore();
+  const { user, isSystemAdmin, setAuth } = useAuthStore();
   const navigate = useNavigate();
 
   // Already logged in → redirect
   if (user) {
-    return <Navigate to="/select-org" replace />;
+    return <Navigate to={isSystemAdmin ? '/admin' : '/select-org'} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -37,16 +37,22 @@ export function LoginPage() {
       // Set token first so subsequent API calls are authenticated
       api.setToken(data.accessToken);
 
-      // Fetch user's orgs to get role
-      const orgs = await api.get<{ id: string; myRole: string }[]>('/orgs');
-
-      // Set auth + org in one go
+      // Set auth state
       setAuth(
         { id: data.user.id, email: data.user.email, name: data.user.name, createdAt: '' },
         data.accessToken,
         data.refreshToken,
         data.user.isSystemAdmin ?? false,
       );
+
+      // System admin → go directly to admin dashboard (no org needed)
+      if (data.user.isSystemAdmin) {
+        navigate('/admin', { replace: true });
+        return;
+      }
+
+      // Fetch user's orgs to get role
+      const orgs = await api.get<{ id: string; myRole: string }[]>('/orgs');
 
       if (orgs.length > 0) {
         const { setOrg } = useAuthStore.getState();
