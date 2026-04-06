@@ -175,6 +175,7 @@ export async function updateScheme(
           sessionTheory: s.sessionTheory,
           sessionEvaluation: s.sessionEvaluation,
           sortOrder: s.sortOrder ?? idx,
+          relatedAssessments: s.relatedAssessments || [],
         })),
       );
     }

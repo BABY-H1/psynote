@@ -107,7 +107,10 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
   const handleCancel = () => { setEditing(false); setEditData(null); };
 
   const handleSave = async () => {
-    if (!editData) return;
+    if (!editData) {
+      toast('没有可保存的修改', 'error');
+      return;
+    }
     try {
       const { sessions, ...rest } = editData;
       await updateScheme.mutateAsync({
@@ -117,7 +120,10 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
       toast('方案已更新', 'success');
       setEditing(false);
       setEditData(null);
-    } catch { toast('保存失败', 'error'); }
+    } catch (err) {
+      console.error('保存团辅方案失败:', err);
+      toast('保存失败', 'error');
+    }
   };
 
   const handleDelete = async () => {
@@ -178,11 +184,11 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
   }, [editing, toast]);
 
   const applySessionChange = useCallback((index: number, sessionData: Partial<EditSession>) => {
-    if (!editing && scheme) {
+    if ((!editing || !editData) && scheme) {
       const base = schemeToEditData(scheme);
       if (base.sessions[index]) base.sessions[index] = { ...base.sessions[index], ...sessionData };
       setEditData(base);
-      setEditing(true);
+      if (!editing) setEditing(true);
     } else {
       setEditData((p) => {
         if (!p) return p;
@@ -192,7 +198,7 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
       });
     }
     toast('AI 已更新该活动', 'success');
-  }, [editing, scheme, toast]);
+  }, [editing, editData, scheme, toast]);
 
   if (isLoading || !scheme) return <PageLoading text="加载方案详情..." />;
 
@@ -218,7 +224,7 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
           {editing ? (
             <>
               <button onClick={handleCancel} className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50"><X className="w-4 h-4" /> 取消</button>
-              <button onClick={handleSave} disabled={updateScheme.isPending} className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50"><Save className="w-4 h-4" /> {updateScheme.isPending ? '保存中...' : '保存'}</button>
+              <button onClick={handleSave} disabled={updateScheme.isPending || !editData} className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50"><Save className="w-4 h-4" /> {updateScheme.isPending ? '保存中...' : '保存'}</button>
             </>
           ) : (
             <>

@@ -559,7 +559,7 @@ export const groupEnrollments = pgTable('group_enrollments', {
 export const groupSessionRecords = pgTable('group_session_records', {
   id: uuid('id').primaryKey().defaultRandom(),
   instanceId: uuid('instance_id').notNull().references(() => groupInstances.id, { onDelete: 'cascade' }),
-  schemeSessionId: uuid('scheme_session_id').references(() => groupSchemeSessions.id),
+  schemeSessionId: uuid('scheme_session_id').references(() => groupSchemeSessions.id, { onDelete: 'set null' }),
   sessionNumber: integer('session_number').notNull(),
   title: text('title').notNull(),
   date: date('date'),
