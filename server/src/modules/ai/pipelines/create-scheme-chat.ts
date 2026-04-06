@@ -17,7 +17,7 @@ interface GeneratedScheme {
   description: string;
   theory: string;
   overallGoal: string;
-  specificGoals: string[];
+  specificGoals: { title: string; metric?: string }[];
   targetAudience: string;
   ageRange?: string;
   selectionCriteria?: string;
@@ -72,7 +72,7 @@ const SYSTEM_PROMPT = `你是一位专业的团体咨询治疗师和课程设计
     "description": "方案简介",
     "theory": "理论依据",
     "overallGoal": "总目标",
-    "specificGoals": ["具体目标1", "具体目标2"],
+    "specificGoals": [{"title": "具体目标1", "metric": "衡量方式（如：前后测对比）"}, {"title": "具体目标2", "metric": "衡量方式"}],
     "targetAudience": "目标人群",
     "ageRange": "适用年龄",
     "selectionCriteria": "筛选标准",

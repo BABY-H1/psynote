@@ -1,11 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
-  useGroupSchemes, useCreateGroupScheme,
+  useGroupSchemes, useCreateGroupScheme, useDeleteGroupScheme,
 } from '../../../api/useGroups';
 import { useExtractScheme, useCreateSchemeChat } from '../../../api/useAI';
 import { PageLoading, useToast } from '../../../shared/components';
 import {
-  BookOpen, Upload, Sparkles, Loader2, Send, ArrowLeft,
+  BookOpen, Upload, Sparkles, Loader2, Send, ArrowLeft, Eye, Edit3, Trash2,
 } from 'lucide-react';
 import { SchemeDetail } from '../components/SchemeDetail';
 
@@ -19,6 +19,7 @@ type ViewMode = 'list' | 'detail' | 'import' | 'ai';
 
 export function SchemeLibrary() {
   const { data: schemes, isLoading } = useGroupSchemes();
+  const deleteScheme = useDeleteGroupScheme();
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedSchemeId, setSelectedSchemeId] = useState<string | null>(null);
@@ -32,11 +33,16 @@ export function SchemeLibrary() {
     );
   }
 
+  const goToDetail = (schemeId: string) => {
+    setSelectedSchemeId(schemeId);
+    setViewMode('detail');
+  };
+
   if (viewMode === 'import') {
-    return <SchemeImporter onClose={() => setViewMode('list')} />;
+    return <SchemeImporter onClose={() => setViewMode('list')} onCreated={goToDetail} />;
   }
   if (viewMode === 'ai') {
-    return <SchemeAICreator onClose={() => setViewMode('list')} />;
+    return <SchemeAICreator onClose={() => setViewMode('list')} onCreated={goToDetail} />;
   }
 
   return (
@@ -66,42 +72,60 @@ export function SchemeLibrary() {
           暂无团辅方案，点击上方按钮创建
         </div>
       ) : (
-        <div className="grid gap-3 md:grid-cols-2">
+        <div className="grid gap-3">
           {schemes.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => { setSelectedSchemeId(s.id); setViewMode('detail'); }}
-              className="text-left bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm hover:border-slate-300 transition group"
-            >
-              <div className="flex items-center gap-2 mb-1.5">
-                <BookOpen className="w-4 h-4 text-violet-500 flex-shrink-0" />
-                <span className="text-sm font-semibold text-slate-900 truncate group-hover:text-violet-700 transition">
-                  {s.title}
-                </span>
+            <div key={s.id} className="bg-white rounded-xl border border-slate-200 p-4">
+              <div className="flex items-start justify-between">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-violet-500 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-slate-900">{s.title}</span>
+                    {s.targetAudience && (
+                      <span className="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded-full">
+                        {s.targetAudience}
+                      </span>
+                    )}
+                    <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
+                      {visibilityLabels[s.visibility] || s.visibility}
+                    </span>
+                    {s.sessions && s.sessions.length > 0 && (
+                      <span className="text-xs text-slate-400">{s.sessions.length} 次活动</span>
+                    )}
+                  </div>
+                  {s.description && (
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{s.description}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 ml-3">
+                  <button
+                    onClick={() => goToDetail(s.id)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
+                    title="查看"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => goToDetail(s.id)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
+                    title="编辑"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (confirm(`确定删除"${s.title}"？`)) {
+                        try { await deleteScheme.mutateAsync(s.id); toast('已删除', 'success'); }
+                        catch { toast('删除失败', 'error'); }
+                      }
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-red-500 rounded"
+                    title="删除"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
-              <div className="flex items-center gap-1.5 mb-2">
-                {s.targetAudience && (
-                  <span className="text-xs px-2 py-0.5 bg-violet-50 text-violet-600 rounded-full">
-                    {s.targetAudience}
-                  </span>
-                )}
-                <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
-                  {visibilityLabels[s.visibility] || s.visibility}
-                </span>
-                {s.sessions && s.sessions.length > 0 && (
-                  <span className="text-xs text-slate-400">{s.sessions.length} 次活动</span>
-                )}
-                {s.totalSessions && (
-                  <span className="text-xs text-slate-400">共{s.totalSessions}次</span>
-                )}
-              </div>
-              {s.description && (
-                <p className="text-xs text-slate-500 line-clamp-2">{s.description}</p>
-              )}
-              {s.theory && (
-                <p className="text-xs text-slate-400 mt-1 line-clamp-1">理论: {s.theory}</p>
-              )}
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -111,7 +135,7 @@ export function SchemeLibrary() {
 
 // ─── Scheme Importer (Text Import + AI Extract) ─────────────
 
-function SchemeImporter({ onClose }: { onClose: () => void }) {
+function SchemeImporter({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const { toast } = useToast();
   const extractScheme = useExtractScheme();
   const createScheme = useCreateGroupScheme();
@@ -138,7 +162,7 @@ function SchemeImporter({ onClose }: { onClose: () => void }) {
       visibility: 'personal',
       sessions: result.sessions.map((s: any, i: number) => ({ ...s, sortOrder: i })),
     }, {
-      onSuccess: () => { toast('方案导入成功', 'success'); onClose(); },
+      onSuccess: (scheme: any) => { toast('方案导入成功', 'success'); onCreated(scheme.id); },
       onError: () => toast('保存失败', 'error'),
     });
   };
@@ -214,7 +238,7 @@ function SchemeImporter({ onClose }: { onClose: () => void }) {
 
 // ─── Scheme AI Creator (Chat-based) ─────────────────────────
 
-function SchemeAICreator({ onClose }: { onClose: () => void }) {
+function SchemeAICreator({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const { toast } = useToast();
   const chatMutation = useCreateSchemeChat();
   const createScheme = useCreateGroupScheme();
@@ -270,7 +294,7 @@ function SchemeAICreator({ onClose }: { onClose: () => void }) {
       visibility: 'personal',
       sessions: scheme.sessions.map((s: any, i: number) => ({ ...s, sortOrder: i })),
     }, {
-      onSuccess: () => { toast('方案已保存到知识库', 'success'); onClose(); },
+      onSuccess: (scheme: any) => { toast('方案已保存', 'success'); onCreated(scheme.id); },
       onError: () => toast('保存失败', 'error'),
     });
   };

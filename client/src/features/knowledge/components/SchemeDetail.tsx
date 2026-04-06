@@ -9,8 +9,8 @@ import {
 import { PageLoading, useToast } from '../../../shared/components';
 import type { SessionPhase, KeyResult } from '@psynote/shared';
 import {
-  ArrowLeft, Edit3, Trash2, Save, X, Plus, BookOpen,
-  Sparkles, Send, Loader2, Check, ChevronDown, ChevronRight, Clock, Target, Package,
+  ArrowLeft, Edit3, Trash2, Save, X, Plus,
+  Sparkles, Send, Loader2, Check, ChevronDown, ChevronRight, Clock,
 } from 'lucide-react';
 
 const visibilityLabels: Record<string, string> = {
@@ -64,10 +64,15 @@ function stripSessionPrefix(title: string): string {
   return title.replace(/^第[一二三四五六七八九十\d]+次[：:]\s*/, '');
 }
 
+function normalizeGoals(goals: any[]): KeyResult[] {
+  if (!goals || goals.length === 0) return [];
+  return goals.map((g: any) => typeof g === 'string' ? { title: g } : g);
+}
+
 function schemeToEditData(scheme: any): EditData {
   return {
     title: scheme.title || '', description: scheme.description || '', theory: scheme.theory || '',
-    overallGoal: scheme.overallGoal || '', specificGoals: scheme.specificGoals || [],
+    overallGoal: scheme.overallGoal || '', specificGoals: normalizeGoals(scheme.specificGoals),
     targetAudience: scheme.targetAudience || '', ageRange: scheme.ageRange || '',
     selectionCriteria: scheme.selectionCriteria || '', recommendedSize: scheme.recommendedSize || '',
     totalSessions: scheme.totalSessions || undefined, sessionDuration: scheme.sessionDuration || '',
@@ -96,7 +101,7 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
 
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState<EditData | null>(null);
-  const [selectedSessionIndex, setSelectedSessionIndex] = useState<number | null>(null);
+  const [activeTab, setActiveTab] = useState<'overview' | number>('overview');
 
   const handleEdit = useCallback(() => {
     if (!scheme) return;
@@ -147,7 +152,6 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
   };
   const removeSession = (i: number) => {
     setEditData((p) => p ? { ...p, sessions: p.sessions.filter((_, j) => j !== i) } : p);
-    if (selectedSessionIndex === i) setSelectedSessionIndex(null);
   };
   const addPhase = (si: number) => {
     setEditData((p) => {
@@ -176,12 +180,39 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
     });
   };
 
-  // AI direct apply — based on right panel state
+  // AI direct apply — merge AI response with existing editData to preserve local-only fields
   const applySchemeChange = useCallback((newData: EditData) => {
-    setEditData(newData);
+    setEditData((prev) => {
+      const base = prev || schemeToEditData(scheme);
+      return {
+        ...base,
+        // Only overwrite fields that AI actually returns
+        title: newData.title || base.title,
+        description: newData.description || base.description,
+        theory: newData.theory || base.theory,
+        overallGoal: newData.overallGoal || base.overallGoal,
+        specificGoals: newData.specificGoals.length > 0 ? newData.specificGoals : base.specificGoals,
+        targetAudience: newData.targetAudience || base.targetAudience,
+        ageRange: newData.ageRange || base.ageRange,
+        selectionCriteria: newData.selectionCriteria || base.selectionCriteria,
+        recommendedSize: newData.recommendedSize || base.recommendedSize,
+        totalSessions: newData.totalSessions ?? base.totalSessions,
+        sessionDuration: newData.sessionDuration || base.sessionDuration,
+        frequency: newData.frequency || base.frequency,
+        facilitatorRequirements: newData.facilitatorRequirements || base.facilitatorRequirements,
+        evaluationMethod: newData.evaluationMethod || base.evaluationMethod,
+        notes: newData.notes || base.notes,
+        // Preserve local-only fields
+        recruitmentAssessments: base.recruitmentAssessments,
+        overallAssessments: base.overallAssessments,
+        screeningNotes: base.screeningNotes,
+        visibility: base.visibility,
+        sessions: newData.sessions.length > 0 ? newData.sessions : base.sessions,
+      };
+    });
     if (!editing) setEditing(true);
     toast('AI 已更新方案', 'success');
-  }, [editing, toast]);
+  }, [editing, scheme, toast]);
 
   const applySessionChange = useCallback((index: number, sessionData: Partial<EditSession>) => {
     if ((!editing || !editData) && scheme) {
@@ -203,181 +234,111 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
   if (isLoading || !scheme) return <PageLoading text="加载方案详情..." />;
 
   const data = editing && editData ? editData : schemeToEditData(scheme);
+  const activeSessionIndex = activeTab === 'overview' ? null : activeTab;
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3 min-w-0">
-          <button onClick={onBack} className="text-slate-400 hover:text-slate-600"><ArrowLeft className="w-5 h-5" /></button>
-          {editing ? (
-            <input value={editData?.title || ''} onChange={(e) => uf('title', e.target.value)}
-              className="text-xl font-bold text-slate-900 border-b-2 border-violet-300 focus:border-violet-500 focus:outline-none bg-transparent px-1" />
-          ) : (
-            <h2 className="text-xl font-bold text-slate-900 truncate">{data.title}</h2>
-          )}
-          <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full flex-shrink-0">
-            {visibilityLabels[data.visibility] || data.visibility}
-          </span>
+    <div className="flex -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
+      {/* LEFT: AI Chat panel */}
+      <div className="w-[420px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
+          <button onClick={onBack} className="text-slate-400 hover:text-slate-600">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <Sparkles className="w-5 h-5 text-amber-500" />
+          <h3 className="font-bold text-slate-900 truncate">{data.title}</h3>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          {editing ? (
-            <>
-              <button onClick={handleCancel} className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50"><X className="w-4 h-4" /> 取消</button>
-              <button onClick={handleSave} disabled={updateScheme.isPending || !editData} className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50"><Save className="w-4 h-4" /> {updateScheme.isPending ? '保存中...' : '保存'}</button>
-            </>
-          ) : (
-            <>
-              <button onClick={handleEdit} className="flex items-center gap-1.5 px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm hover:bg-slate-50"><Edit3 className="w-4 h-4" /> 编辑</button>
-              <button onClick={handleDelete} className="flex items-center gap-1.5 px-4 py-2 border border-red-200 text-red-600 rounded-lg text-sm hover:bg-red-50"><Trash2 className="w-4 h-4" /> 删除</button>
-            </>
-          )}
-        </div>
+
+        {/* AI chat */}
+        <AIChatPanel scheme={scheme} editData={editing ? editData : null}
+          activeTab={activeTab}
+          onApplyScheme={applySchemeChange}
+          onApplySession={applySessionChange} />
       </div>
 
-      {/* Three-column layout */}
-      <div className="flex h-[calc(100vh-11rem)] rounded-xl border border-slate-200 overflow-hidden">
-        {/* LEFT — Scheme info */}
-        <div className="w-72 flex-shrink-0 border-r border-slate-200 overflow-y-auto bg-white">
-          <LeftPanel data={data} editing={editing} editData={editData} uf={uf} />
-        </div>
+      {/* RIGHT: Tabbed content */}
+      <div className="flex-1 flex flex-col bg-slate-50">
+        {/* Top bar with tabs + actions */}
+        <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-slate-200 flex-shrink-0">
+          {/* Tab bar */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setActiveTab('overview')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+                activeTab === 'overview'
+                  ? 'bg-violet-100 text-violet-700'
+                  : 'text-slate-500 hover:bg-slate-100 hover:text-slate-700'
+              }`}
+            >
+              总
+            </button>
+            {data.sessions.map((_, i) => (
+              <button
+                key={i}
+                onClick={() => setActiveTab(i)}
+                className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center transition ${
+                  activeTab === i
+                    ? 'bg-violet-600 text-white shadow-sm'
+                    : 'bg-slate-100 text-slate-600 hover:bg-violet-100 hover:text-violet-700'
+                }`}
+              >
+                {i + 1}
+              </button>
+            ))}
+            {editing && (
+              <button onClick={addSession} className="w-7 h-7 rounded-full bg-slate-50 text-slate-400 hover:bg-violet-100 hover:text-violet-600 flex items-center justify-center transition">
+                <Plus className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
 
-        {/* CENTER — AI chat */}
-        <div className="w-80 flex-shrink-0 border-r border-slate-200 bg-slate-50 flex flex-col">
-          <AIChatPanel scheme={scheme} editData={editing ? editData : null}
-            selectedSessionIndex={selectedSessionIndex}
-            onApplyScheme={applySchemeChange}
-            onApplySession={applySessionChange} />
-        </div>
-
-        {/* RIGHT — Session nav + content */}
-        <div className="flex-1 flex flex-col bg-slate-50">
-          {/* Top number nav bar */}
-          <SessionNavBar
-            count={data.sessions.length}
-            selected={selectedSessionIndex}
-            onSelect={(i) => setSelectedSessionIndex(i === selectedSessionIndex ? null : i)}
-            editing={editing}
-            onAdd={addSession}
-          />
-
-          {/* Content area */}
-          <div className="flex-1 overflow-y-auto">
-            {selectedSessionIndex !== null && selectedSessionIndex < data.sessions.length ? (
-              /* Normal session detail */
-              <SessionDetailView
-                session={data.sessions[selectedSessionIndex]}
-                index={selectedSessionIndex}
-                editing={editing}
-                specificGoals={data.specificGoals}
-                onUpdate={(f, v) => us(selectedSessionIndex, f, v)}
-                onRemove={() => removeSession(selectedSessionIndex)}
-                onAddPhase={() => addPhase(selectedSessionIndex)}
-                onUpdatePhase={(pi, f, v) => updatePhase(selectedSessionIndex, pi, f, v)}
-                onRemovePhase={(pi) => removePhase(selectedSessionIndex, pi)}
-              />
+          {/* Actions */}
+          <div className="flex items-center gap-2">
+            {editing ? (
+              <>
+                <button onClick={handleCancel} className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50">取消</button>
+                <button onClick={handleSave} disabled={updateScheme.isPending || !editData}
+                  className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-500 disabled:opacity-50 flex items-center gap-1.5">
+                  {updateScheme.isPending ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 保存中...</> : <><Save className="w-3.5 h-3.5" /> 保存</>}
+                </button>
+              </>
             ) : (
-              /* Session list */
-              <SessionListView
-                sessions={data.sessions}
-                editing={editing}
-                onSelect={setSelectedSessionIndex}
-                onAdd={addSession}
-              />
+              <>
+                <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
+                  {visibilityLabels[data.visibility] || data.visibility}
+                </span>
+                <button onClick={handleEdit} className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-1.5"><Edit3 className="w-3.5 h-3.5" /> 编辑</button>
+                <button onClick={handleDelete} className="px-3 py-1.5 border border-red-200 text-red-600 rounded-lg text-xs font-medium hover:bg-red-50 flex items-center gap-1.5"><Trash2 className="w-3.5 h-3.5" /> 删除</button>
+              </>
             )}
           </div>
         </div>
-      </div>
-    </div>
-  );
-}
 
-// ─── Session Nav Bar (top of right panel) ───────────────────
-
-function SessionNavBar({ count, selected, onSelect, editing, onAdd }: {
-  count: number; selected: number | null;
-  onSelect: (i: number) => void; editing: boolean; onAdd: () => void;
-}) {
-  if (count === 0 && !editing) return null;
-
-  return (
-    <div className="flex items-center gap-1 px-4 py-2.5 border-b border-slate-200 bg-white flex-shrink-0">
-      <span className="text-xs text-slate-400 mr-1.5">活动单元</span>
-      <div className="flex items-center gap-1 flex-wrap">
-        {Array.from({ length: count }, (_, i) => (
-          <button
-            key={i}
-            onClick={() => onSelect(i)}
-            className={`w-7 h-7 rounded-full text-xs font-bold flex items-center justify-center transition ${
-              selected === i
-                ? 'bg-violet-600 text-white shadow-sm'
-                : 'bg-slate-100 text-slate-600 hover:bg-violet-100 hover:text-violet-700'
-            }`}
-          >
-            {i + 1}
-          </button>
-        ))}
-        {editing && (
-          <button onClick={onAdd} className="w-7 h-7 rounded-full bg-slate-50 text-slate-400 hover:bg-violet-100 hover:text-violet-600 flex items-center justify-center transition">
-            <Plus className="w-3.5 h-3.5" />
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Session List View ──────────────────────────────────────
-
-function SessionListView({ sessions, editing, onSelect, onAdd }: {
-  sessions: EditSession[]; editing: boolean;
-  onSelect: (i: number) => void; onAdd: () => void;
-}) {
-  if (sessions.length === 0) {
-    return (
-      <div className="text-center py-16">
-        <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-3" />
-        <p className="text-sm text-slate-400">暂无活动单元</p>
-        {editing && <button onClick={onAdd} className="mt-3 px-4 py-2 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-500">添加第一个活动单元</button>}
-      </div>
-    );
-  }
-
-  return (
-    <div className="p-5 space-y-2">
-      {sessions.map((sess, i) => {
-        const displayTitle = stripSessionPrefix(sess.title) || `活动 ${i + 1}`;
-        const phaseNames = (sess.phases || []).map((p) => p.name).filter((n) => n && n !== '活动流程');
-        const phaseFlow = phaseNames.join(' → ');
-
-        return (
-          <button key={sess.id || i} onClick={() => onSelect(i)}
-            className="w-full text-left bg-white rounded-xl border border-slate-200 p-4 hover:shadow-sm hover:border-slate-300 transition group">
-            <div className="flex items-center gap-3">
-              <span className="w-8 h-8 rounded-full bg-violet-100 text-violet-700 text-sm font-bold flex items-center justify-center flex-shrink-0">{i + 1}</span>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-semibold text-slate-900 truncate group-hover:text-violet-700 transition">{displayTitle}</span>
-                  {sess.duration && <span className="text-xs text-slate-400 flex items-center gap-0.5 flex-shrink-0"><Clock className="w-3 h-3" /> {sess.duration}</span>}
-                </div>
-                {sess.goal && <p className="text-xs text-slate-500 mt-0.5 truncate">{sess.goal}</p>}
-                {phaseFlow ? (
-                  <p className="text-xs text-violet-400 mt-1 truncate">{phaseFlow}</p>
-                ) : (sess.phases || []).length > 0 ? (
-                  <p className="text-xs text-slate-400 mt-1">{sess.phases!.length} 个环节</p>
-                ) : null}
-              </div>
-              <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-slate-500 flex-shrink-0" />
+        {/* Content area */}
+        <div className="flex-1 overflow-y-auto">
+          {activeTab === 'overview' ? (
+            <div className="max-w-3xl mx-auto p-6">
+              <LeftPanel data={data} editing={editing} editData={editData} uf={uf} />
             </div>
-          </button>
-        );
-      })}
-      {editing && (
-        <button onClick={onAdd}
-          className="w-full py-3 border-2 border-dashed border-slate-300 rounded-xl text-sm text-slate-400 hover:text-violet-600 hover:border-violet-300 transition flex items-center justify-center gap-1.5">
-          <Plus className="w-4 h-4" /> 添加活动单元
-        </button>
-      )}
+          ) : activeSessionIndex !== null && activeSessionIndex < data.sessions.length ? (
+            <SessionDetailView
+              session={data.sessions[activeSessionIndex]}
+              index={activeSessionIndex}
+              editing={editing}
+              specificGoals={data.specificGoals}
+              onUpdate={(f, v) => us(activeSessionIndex, f, v)}
+              onRemove={() => { removeSession(activeSessionIndex); setActiveTab('overview'); }}
+              onAddPhase={() => addPhase(activeSessionIndex)}
+              onUpdatePhase={(pi, f, v) => updatePhase(activeSessionIndex, pi, f, v)}
+              onRemovePhase={(pi) => removePhase(activeSessionIndex, pi)}
+            />
+          ) : (
+            <div className="max-w-3xl mx-auto p-6">
+              <LeftPanel data={data} editing={editing} editData={editData} uf={uf} />
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -676,12 +637,13 @@ type AIChatMsg = {
   applied?: boolean;
 };
 
-function AIChatPanel({ scheme, editData, selectedSessionIndex, onApplyScheme, onApplySession }: {
+function AIChatPanel({ scheme, editData, activeTab, onApplyScheme, onApplySession }: {
   scheme: any; editData: EditData | null;
-  selectedSessionIndex: number | null;
+  activeTab: 'overview' | number;
   onApplyScheme: (data: EditData) => void;
   onApplySession: (index: number, session: Partial<EditSession>) => void;
 }) {
+  const selectedSessionIndex = activeTab === 'overview' ? null : activeTab;
   const refineScheme = useRefineSchemeOverall();
   const refineSession = useRefineSessionDetail();
   const generateDetail = useGenerateSessionDetail();
@@ -698,9 +660,9 @@ function AIChatPanel({ scheme, editData, selectedSessionIndex, onApplyScheme, on
   const currentScheme = editData || schemeToEditData(scheme);
 
   // Context hint shown above input
-  const contextHint = selectedSessionIndex !== null
-    ? `当前: 第${selectedSessionIndex + 1}次 — ${stripSessionPrefix(currentScheme.sessions[selectedSessionIndex]?.title || '')}`
-    : '当前: 整体方案';
+  const contextHint = activeTab !== 'overview' && activeTab < currentScheme.sessions.length
+    ? `当前: 第${activeTab + 1}次 — ${stripSessionPrefix(currentScheme.sessions[activeTab]?.title || '')}`
+    : '当前: 总体方案';
 
   const handleSend = () => {
     const text = input.trim();

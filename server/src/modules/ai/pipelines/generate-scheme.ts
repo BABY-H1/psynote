@@ -25,7 +25,7 @@ interface GeneratedScheme {
   description: string;
   theory: string;
   overallGoal: string;
-  specificGoals: string[];
+  specificGoals: { title: string; metric?: string }[];
   targetAudience: string;
   recommendedSize: string;
   totalSessions: number;
@@ -39,12 +39,17 @@ interface SchemeOverview {
   description: string;
   theory: string;
   overallGoal: string;
-  specificGoals: string[];
+  specificGoals: { title: string; metric?: string }[];
   targetAudience: string;
+  ageRange?: string;
+  selectionCriteria?: string;
   recommendedSize: string;
   totalSessions: number;
   sessionDuration: string;
   frequency: string;
+  facilitatorRequirements?: string;
+  evaluationMethod?: string;
+  notes?: string;
   sessionCount: number;
   sessions: { title: string; goal: string; duration: string }[];
 }
@@ -67,7 +72,7 @@ export async function generateGroupScheme(input: { prompt: string }): Promise<Ge
   "description": "方案描述",
   "theory": "理论基础",
   "overallGoal": "总目标",
-  "specificGoals": ["具体目标1", "具体目标2"],
+  "specificGoals": [{"title": "具体目标1", "metric": "衡量方式"}, {"title": "具体目标2", "metric": "衡量方式"}],
   "targetAudience": "目标人群",
   "recommendedSize": "建议人数",
   "totalSessions": 次数,
@@ -112,12 +117,17 @@ export async function generateGroupSchemeOverall(input: { prompt: string }): Pro
   "description": "方案描述",
   "theory": "理论基础",
   "overallGoal": "总目标",
-  "specificGoals": ["具体目标1"],
+  "specificGoals": [{"title": "具体目标", "metric": "衡量方式"}],
   "targetAudience": "目标人群",
+  "ageRange": "适用年龄",
+  "selectionCriteria": "筛选标准",
   "recommendedSize": "建议人数",
   "totalSessions": 次数,
   "sessionDuration": "每次时长",
   "frequency": "频率",
+  "facilitatorRequirements": "带领者要求",
+  "evaluationMethod": "评估建议",
+  "notes": "注意事项",
   "sessionCount": 单元数,
   "sessions": [
     {"title": "单元标题", "goal": "目标", "duration": "时长"}
@@ -183,9 +193,12 @@ export async function refineGroupSchemeOverall(input: {
   instruction: string;
 }): Promise<SchemeOverview> {
   const systemPrompt = `你是一位专业的团体咨询治疗师。
-根据修改指令更新团体辅导方案。保持现有结构，除非用户要求修改。不要使用Markdown格式。
+根据修改指令更新团体辅导方案。保持现有结构和所有字段，除非用户要求修改。不要使用Markdown格式。
 
-返回和输入相同的JSON结构。语言：中文。`;
+返回和输入完全相同的JSON结构，包含所有字段（title, description, theory, overallGoal, specificGoals, targetAudience, ageRange, selectionCriteria, recommendedSize, totalSessions, sessionDuration, frequency, facilitatorRequirements, evaluationMethod, notes, sessionCount, sessions）。
+
+specificGoals 格式为 [{"title": "目标", "metric": "衡量方式"}]。
+语言：中文。`;
 
   return aiClient.generateJSON<SchemeOverview>(
     systemPrompt,
