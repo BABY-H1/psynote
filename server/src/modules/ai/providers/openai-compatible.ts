@@ -48,6 +48,9 @@ export class AIClient {
       throw new Error('AI provider is not configured (AI_API_KEY missing)');
     }
 
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 120_000); // 2 min timeout
+
     const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
@@ -59,8 +62,11 @@ export class AIClient {
         messages,
         temperature: options?.temperature ?? 0.7,
         max_tokens: options?.maxTokens ?? 2048,
+        // Disable thinking/reasoning for models that support it (saves tokens and time)
+        enable_thinking: false,
       }),
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
 
     if (!response.ok) {
       const error = await response.text().catch(() => 'Unknown error');

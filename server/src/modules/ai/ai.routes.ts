@@ -45,6 +45,11 @@ import { extractScheme } from './pipelines/extract-scheme.js';
 import { chatCreateScheme } from './pipelines/create-scheme-chat.js';
 
 export async function aiRoutes(app: FastifyInstance) {
+  // AI requests can take a long time (especially with thinking models)
+  app.addHook('onRequest', async (request) => {
+    request.socket.setTimeout(180_000); // 3 min socket timeout
+  });
+
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
   app.addHook('preHandler', dataScopeGuard);
