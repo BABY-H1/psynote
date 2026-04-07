@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useCourses, useDeleteCourse } from '../../../api/useCourses';
 import { PageLoading, useToast } from '../../../shared/components';
-import { BookOpen, Sparkles, Eye, Edit3, Trash2 } from 'lucide-react';
+import { ManualCourseEditor } from '../../courses/pages/ManualCourseEditor';
+import { BookOpen, Sparkles, Upload, Eye, Edit3, Trash2 } from 'lucide-react';
 
 const TYPE_LABELS: Record<string, string> = {
   micro_course: '微课', series: '系列课', group_facilitation: '团辅', workshop: '工作坊',
@@ -17,6 +18,11 @@ export function CoursesTab() {
   const { data: courses, isLoading } = useCourses();
   const deleteCourse = useDeleteCourse();
   const { toast } = useToast();
+  const [showManualEditor, setShowManualEditor] = useState(false);
+
+  if (showManualEditor) {
+    return <ManualCourseEditor onClose={() => setShowManualEditor(false)} />;
+  }
 
   return (
     <div className="space-y-4">
@@ -25,6 +31,12 @@ export function CoursesTab() {
           创作与管理课程方案模板，可用于心理健康教育
         </div>
         <div className="flex gap-2">
+          <button
+            onClick={() => setShowManualEditor(true)}
+            className="px-3 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"
+          >
+            <Upload className="w-4 h-4" /> 文本导入
+          </button>
           <button
             onClick={() => navigate('/courses/new/requirements')}
             className="px-3 py-2 border border-amber-200 text-amber-700 bg-amber-50 rounded-lg text-sm font-medium hover:bg-amber-100 flex items-center gap-1.5"
