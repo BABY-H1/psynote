@@ -88,23 +88,31 @@ export async function chatCreateAgreement(
 
   const trimmed = result.trim();
 
-  // Check if the response is a JSON agreement result
-  let jsonStr = trimmed;
-  if (jsonStr.startsWith('```')) {
-    jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-  }
+  // Try multiple strategies to extract JSON from the response
+  const jsonCandidates = [
+    trimmed,
+    trimmed.replace(/^```(?:json)?\s*/s, '').replace(/\s*```\s*$/s, ''),
+    (() => { const m = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/); return m ? m[1] : null; })(),
+    (() => {
+      const s = trimmed.indexOf('{');
+      if (s === -1) return null;
+      let d = 0;
+      for (let i = s; i < trimmed.length; i++) { if (trimmed[i] === '{') d++; if (trimmed[i] === '}') d--; if (d === 0) return trimmed.slice(s, i + 1); }
+      return null;
+    })(),
+  ];
 
-  try {
-    const parsed = JSON.parse(jsonStr);
-    if (parsed.type === 'agreement' && parsed.agreement) {
-      return {
-        type: 'agreement',
-        agreement: parsed.agreement,
-        summary: parsed.summary || '',
-      };
-    }
-  } catch {
-    // Not JSON — treat as regular message
+  for (const candidate of jsonCandidates) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed.type === 'agreement' && parsed.agreement) {
+        return { type: 'agreement', agreement: parsed.agreement, summary: parsed.summary || '' };
+      }
+      if (parsed.title && parsed.consentType && parsed.content) {
+        return { type: 'agreement', agreement: parsed, summary: `已生成协议"${parsed.title}"。` };
+      }
+    } catch { /* try next */ }
   }
 
   return { type: 'message', content: trimmed };

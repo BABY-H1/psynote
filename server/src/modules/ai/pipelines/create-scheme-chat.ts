@@ -120,17 +120,43 @@ export async function chatCreateScheme(
   const result = await aiClient.chat(fullMessages, { temperature: 0.6, maxTokens: 4096 });
   const trimmed = result.trim();
 
-  let jsonStr = trimmed;
-  if (jsonStr.startsWith('```')) {
-    jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-  }
+  // Try multiple strategies to extract JSON from the response
+  const jsonCandidates = [
+    trimmed,
+    // Strip markdown code block
+    trimmed.replace(/^```(?:json)?\s*/s, '').replace(/\s*```\s*$/s, ''),
+    // Extract JSON block from mixed text (AI sometimes adds text before/after JSON)
+    (() => {
+      const match = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+      return match ? match[1] : null;
+    })(),
+    // Find the first { ... } block in the text
+    (() => {
+      const start = trimmed.indexOf('{');
+      if (start === -1) return null;
+      let depth = 0;
+      for (let i = start; i < trimmed.length; i++) {
+        if (trimmed[i] === '{') depth++;
+        if (trimmed[i] === '}') depth--;
+        if (depth === 0) return trimmed.slice(start, i + 1);
+      }
+      return null;
+    })(),
+  ];
 
-  try {
-    const parsed = JSON.parse(jsonStr);
-    if (parsed.type === 'scheme' && parsed.scheme) {
-      return { type: 'scheme', scheme: parsed.scheme, summary: parsed.summary || '' };
-    }
-  } catch { /* Not JSON */ }
+  for (const candidate of jsonCandidates) {
+    if (!candidate) continue;
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed.type === 'scheme' && parsed.scheme) {
+        return { type: 'scheme', scheme: parsed.scheme, summary: parsed.summary || '' };
+      }
+      // Some models omit the wrapper and return the scheme directly
+      if (parsed.title && parsed.sessions && Array.isArray(parsed.sessions)) {
+        return { type: 'scheme', scheme: parsed, summary: `已生成方案"${parsed.title}"，包含 ${parsed.sessions.length} 次活动。` };
+      }
+    } catch { /* Not valid JSON, try next candidate */ }
+  }
 
   return { type: 'message', content: trimmed };
 }
