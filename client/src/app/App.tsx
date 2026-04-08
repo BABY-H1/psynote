@@ -13,7 +13,6 @@ import { CreateEpisodeWizard } from '../features/counseling/pages/CreateEpisodeW
 import { MemberManagement } from '../features/settings/pages/MemberManagement';
 import { ReminderSettings } from '../features/settings/pages/ReminderSettings';
 import { AvailabilitySettings } from '../features/counseling/pages/AvailabilitySettings';
-import { AppointmentManagement } from '../features/counseling/pages/AppointmentManagement';
 import { GroupCenter } from '../features/groups/pages/GroupCenter';
 import { CourseManagement } from '../features/courses/pages/CourseManagement';
 import { CourseRequirementsConfig } from '../features/courses/pages/CourseRequirementsConfig';
@@ -96,6 +95,10 @@ function AppRoutes() {
             <Route path="agreements" element={<AgreementLibrary />} />
             <Route path="schemes" element={<SchemeLibrary />} />
             <Route path="courses" element={<CoursesTab />} />
+            <Route path="courses/new/requirements" element={<CourseRequirementsConfig />} />
+            <Route path="courses/:courseId/requirements" element={<CourseRequirementsConfig />} />
+            <Route path="courses/:courseId/blueprint" element={<CourseBlueprintEditor />} />
+            <Route path="courses/:courseId/chapters/:chapterId/edit" element={<LessonEditor />} />
             <Route path="templates" element={<NoteTemplateLibrary />} />
           </Route>
           <Route path="scales" element={<Navigate to="/knowledge/scales" replace />} />
@@ -105,7 +108,6 @@ function AppRoutes() {
           <Route path="episodes/:episodeId" element={<EpisodeDetail />} />
           <Route path="settings/members" element={<MemberManagement />} />
           <Route path="settings/reminders" element={<ReminderSettings />} />
-          <Route path="appointments" element={<AppointmentManagement />} />
           <Route path="availability" element={<AvailabilitySettings />} />
           <Route path="groups" element={<GroupCenter />} />
           <Route path="courses" element={<CourseManagement />} />
@@ -173,18 +175,21 @@ const allNavItems: { to: string; label: string; end?: boolean; disabled?: boolea
   { to: '/episodes', label: '个体咨询' },
   { to: '/groups', label: '团辅中心' },
   { to: '/courses', label: '课程中心' },
-  { to: '/appointments', label: '预约管理' },
   { to: '/settings/members', label: '成员管理' },
 ];
 
-const adminStaffPaths = new Set(['/', '/appointments', '/settings/members']);
+const adminStaffPaths = new Set(['/', '/settings/members']);
 
 function getNavItems(role: string | null) {
+  const navItems = allNavItems.map((item) =>
+    item.to === '/courses' ? { ...item, label: '课程交付' } : item,
+  );
+
   if (role === 'admin_staff') {
-    return allNavItems.filter((item) => adminStaffPaths.has(item.to));
+    return navItems.filter((item) => adminStaffPaths.has(item.to));
   }
   // counselor, org_admin: show everything
-  return allNavItems;
+  return navItems;
 }
 
 function AppShell() {
