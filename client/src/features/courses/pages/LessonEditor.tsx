@@ -35,8 +35,21 @@ const AUDIENCE_OPTIONS: AudienceOption[] = ['适合家长', '适合学生', '适
 
 // ─── Component ─────────────────────────────────────────────────
 
-export function LessonEditor() {
-  const { courseId, chapterId } = useParams<{ courseId: string; chapterId: string }>();
+interface LessonEditorProps {
+  courseId?: string;
+  chapterId?: string;
+  onBack?: () => void;
+}
+
+export function LessonEditor({
+  courseId: courseIdProp,
+  chapterId: chapterIdProp,
+  onBack,
+}: LessonEditorProps = {}) {
+  const { courseId: routeCourseId, chapterId: routeChapterId } =
+    useParams<{ courseId: string; chapterId: string }>();
+  const courseId = courseIdProp ?? routeCourseId;
+  const chapterId = chapterIdProp ?? routeChapterId;
   const navigate = useNavigate();
 
   // Queries
@@ -218,6 +231,14 @@ export function LessonEditor() {
     return () => document.removeEventListener('click', handleClick);
   }, [openDropdown]);
 
+  function handleBack() {
+    if (onBack) {
+      onBack();
+    } else {
+      navigate('/courses');
+    }
+  }
+
   // ─── Render ─────────────────────────────────────────────────
 
   return (
@@ -225,7 +246,7 @@ export function LessonEditor() {
       {/* Header */}
       <div className="mb-6">
         <button
-          onClick={() => navigate('/courses')}
+          onClick={handleBack}
           className="mb-3 inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700"
         >
           <ChevronLeftIcon />
@@ -401,7 +422,7 @@ export function LessonEditor() {
       {/* Bottom action */}
       <div className="mt-8 flex justify-center">
         <button
-          onClick={() => navigate('/courses')}
+          onClick={handleBack}
           className="rounded-lg border border-slate-200 bg-white px-6 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
         >
           返回课程

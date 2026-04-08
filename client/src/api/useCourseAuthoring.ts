@@ -8,6 +8,48 @@ function aiPrefix() {
   return `/orgs/${orgId}/ai`;
 }
 
+export type CreateCourseChatResponse =
+  | { type: 'message'; content: string }
+  | {
+      type: 'course';
+      summary: string;
+      course: {
+        title: string;
+        description: string;
+        category?: string;
+        courseType?: string;
+        targetAudience?: string;
+        requirements: CourseRequirementsConfig;
+        blueprint: CourseBlueprintData;
+      };
+    };
+
+/** AI-guided course creation via multi-turn conversation */
+export function useCreateCourseChat() {
+  return useMutation({
+    mutationFn: (data: { messages: { role: 'user' | 'assistant'; content: string }[] }) =>
+      api.post<CreateCourseChatResponse>(`${aiPrefix()}/create-course-chat`, data),
+  });
+}
+
+export interface ExtractedCourseDraft {
+  title: string;
+  description: string;
+  category?: string;
+  courseType?: string;
+  targetAudience?: string;
+  requirements: CourseRequirementsConfig;
+  blueprint: CourseBlueprintData;
+}
+
+/** Extract a structured course draft from raw text input */
+export function useExtractCourse() {
+  return useMutation({
+    mutationFn: (data: { content: string }) =>
+      api.post<ExtractedCourseDraft>(`${aiPrefix()}/extract-course`, data),
+  });
+}
+
 /** Generate course blueprint from structured requirements */
 export function useGenerateCourseBlueprint() {
   return useMutation({

@@ -47,6 +47,12 @@ const statusFilters = [
 
 type ViewMode = 'list' | 'create' | 'detail';
 
+const DELIVERY_COPY = {
+  title: '课程交付中心',
+  subtitle: '管理课程实例、招生发布与学员学习',
+  create: '创建实例',
+};
+
 export function CourseManagement() {
   const [view, setView] = useState<ViewMode>('list');
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -85,7 +91,11 @@ export function CourseManagement() {
 
   const totalInstances = instances?.length ?? 0;
   const activeCount = instances?.filter((i: any) => i.status === 'active').length ?? 0;
-  const totalEnrolled = instances?.reduce((sum: number, i: any) => sum + (i.enrolledCount ?? 0), 0) ?? 0;
+  const totalEnrolled =
+    instances?.reduce(
+      (sum: number, i: any) => sum + (i.enrollmentCount ?? i.enrolledCount ?? 0),
+      0,
+    ) ?? 0;
   const avgCompletion = totalInstances > 0
     ? Math.round(
         instances!.reduce((sum: number, i: any) => sum + (i.completionRate ?? 0), 0) / totalInstances,
@@ -131,15 +141,15 @@ export function CourseManagement() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h2 className="text-xl font-bold text-slate-900">课程中心</h2>
-          <p className="text-sm text-slate-500 mt-1">管理课程发布与学员学习</p>
+          <h2 className="text-xl font-bold text-slate-900">{DELIVERY_COPY.title}</h2>
+          <p className="text-sm text-slate-500 mt-1">{DELIVERY_COPY.subtitle}</p>
         </div>
         <button
           onClick={() => setView('create')}
           className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition"
         >
           <Plus className="w-4 h-4" />
-          发布课程
+          {DELIVERY_COPY.create}
         </button>
       </div>
 
@@ -200,7 +210,7 @@ export function CourseManagement() {
           {filteredInstances.map((inst: any) => {
             const st = statusLabels[inst.status] || statusLabels.draft;
             const stripe = statusStripeColors[inst.status] || statusStripeColors.draft;
-            const enrolled = inst.enrolledCount ?? 0;
+            const enrolled = inst.enrollmentCount ?? inst.enrolledCount ?? 0;
             const completionRate = inst.completionRate ?? 0;
 
             return (

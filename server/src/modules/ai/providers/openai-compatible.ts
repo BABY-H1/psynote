@@ -49,7 +49,11 @@ export class AIClient {
     }
 
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 120_000); // 2 min timeout
+    // Keep this strictly under the route-level socket timeout so the AI
+    // client's own abort fires first and propagates a real error up to the
+    // route handler, rather than letting the socket die and leave the
+    // client with an empty response body.
+    const timeout = setTimeout(() => controller.abort(), 270_000); // 4.5 min
 
     const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
       method: 'POST',
@@ -137,8 +141,10 @@ export class AIClient {
 
   /**
    * Attempt to repair truncated JSON by closing open brackets/braces.
+   * Public so pipelines using bare `chat()` (conversational flows) can
+   * salvage responses that hit the token ceiling mid-object.
    */
-  private tryRepairJSON(str: string): unknown | null {
+  tryRepairJSON(str: string): unknown | null {
     try {
       // Try as-is first
       return JSON.parse(str);

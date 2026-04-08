@@ -5,8 +5,19 @@ import { useCourse, useUpdateCourse, useConfirmBlueprint } from '../../../api/us
 import { useRefineCourseBlueprint } from '../../../api/useCourseAuthoring';
 import { PageLoading, useToast } from '../../../shared/components';
 
-export function CourseBlueprintEditor() {
-  const { courseId } = useParams<{ courseId: string }>();
+interface CourseBlueprintEditorProps {
+  courseId?: string;
+  onBack?: () => void;
+  onConfirmed?: (courseId: string, chapterId?: string) => void;
+}
+
+export function CourseBlueprintEditor({
+  courseId: courseIdProp,
+  onBack,
+  onConfirmed,
+}: CourseBlueprintEditorProps = {}) {
+  const { courseId: routeCourseId } = useParams<{ courseId: string }>();
+  const courseId = courseIdProp ?? routeCourseId;
   const navigate = useNavigate();
   const { data: course, isLoading } = useCourse(courseId);
   const updateCourse = useUpdateCourse();
@@ -90,10 +101,12 @@ export function CourseBlueprintEditor() {
               onSuccess: (data: unknown) => {
                 const chapters = data as any[];
                 toast('蓝图已确认', 'success');
-                if (chapters.length > 0) {
-                  navigate(`/courses/${courseId}/chapters/${chapters[0].id}/edit`);
+                if (onConfirmed) {
+                  onConfirmed(courseId, chapters[0]?.id);
+                } else if (chapters.length > 0) {
+                  navigate(`/knowledge/courses/${courseId}/chapters/${chapters[0].id}/edit`);
                 } else {
-                  navigate('/courses');
+                  navigate('/knowledge/courses');
                 }
               },
             },
@@ -131,7 +144,7 @@ export function CourseBlueprintEditor() {
       {/* ── Top section ─────────────────────────────────────────── */}
       <div className="bg-white rounded-lg border border-slate-200 p-6 space-y-4">
         <button
-          onClick={() => navigate('/courses')}
+          onClick={() => (onBack ? onBack() : navigate('/knowledge/courses'))}
           className="text-sm text-brand-600 hover:text-brand-700 font-medium"
         >
           &larr; 返回课程列表

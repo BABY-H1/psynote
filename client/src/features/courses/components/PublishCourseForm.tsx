@@ -254,10 +254,10 @@ export function PublishCourseForm({ onClose, preselectedCourseId }: Props) {
         }
       }
 
-      toast('课程实例发布成功', 'success');
+      toast('课程实例创建成功', 'success');
       onClose();
     } catch {
-      toast('发布失败，请重试', 'error');
+      toast('创建失败，请重试', 'error');
     } finally {
       setSubmitting(false);
     }
@@ -283,8 +283,8 @@ export function PublishCourseForm({ onClose, preselectedCourseId }: Props) {
             <BookOpen className="w-5 h-5 text-brand-600" />
           </div>
           <div>
-            <h1 className="text-lg font-semibold text-slate-900">发布课程实例</h1>
-            <p className="text-xs text-slate-500">将已发布的课程创建为可推送的实例</p>
+            <h1 className="text-lg font-semibold text-slate-900">创建课程实例</h1>
+            <p className="text-xs text-slate-500">从已发布课程创建一个可交付的课程实例</p>
           </div>
         </div>
 
@@ -630,7 +630,7 @@ export function PublishCourseForm({ onClose, preselectedCourseId }: Props) {
               disabled={!canSubmit}
               className="px-6 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50 transition-colors"
             >
-              {submitting ? '发布中...' : '发布课程实例'}
+              {submitting ? '创建中...' : '创建课程实例'}
             </button>
           </div>
         </form>

@@ -12,6 +12,11 @@ const tabs = [
 
 export function KnowledgeBase() {
   const location = useLocation();
+  const displayTabs = tabs.map((tab) =>
+    tab.to === '/knowledge/courses'
+      ? { ...tab, label: '课程工作室' }
+      : tab,
+  );
 
   // Redirect /knowledge to /knowledge/scales
   if (location.pathname === '/knowledge') {
@@ -27,7 +32,7 @@ export function KnowledgeBase() {
 
       {/* Sub tabs — pill style */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
-        {tabs.map((tab) => (
+        {displayTabs.map((tab) => (
           <NavLink
             key={tab.to}
             to={tab.to}

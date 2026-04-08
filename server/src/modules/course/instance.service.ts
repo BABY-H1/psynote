@@ -1,7 +1,7 @@
-import { eq, and, desc, sql, count } from 'drizzle-orm';
+import { eq, and, desc, sql, count, or, isNull } from 'drizzle-orm';
 import { db } from '../../config/database.js';
-import { courseInstances, courseEnrollments, courses, users } from '../../db/schema.js';
-import { NotFoundError } from '../../lib/errors.js';
+import { courseInstances, courseEnrollments, courses } from '../../db/schema.js';
+import { ConflictError, NotFoundError } from '../../lib/errors.js';
 
 export async function listInstances(
   orgId: string,
@@ -23,15 +23,22 @@ export async function listInstances(
   const rows = await db
     .select({
       instance: courseInstances,
+      courseType: courses.courseType,
+      targetAudience: courses.targetAudience,
+      courseCategory: courses.category,
       enrollmentCount: sql<number>`coalesce(${enrollmentCountSq.enrollmentCount}, 0)`.mapWith(Number),
     })
     .from(courseInstances)
+    .leftJoin(courses, eq(courses.id, courseInstances.courseId))
     .leftJoin(enrollmentCountSq, eq(enrollmentCountSq.instanceId, courseInstances.id))
     .where(and(...conditions))
     .orderBy(desc(courseInstances.createdAt));
 
   let results = rows.map((r) => ({
     ...r.instance,
+    courseType: r.courseType,
+    targetAudience: r.targetAudience,
+    courseCategory: r.courseCategory,
     enrollmentCount: r.enrollmentCount,
   }));
 
@@ -93,6 +100,29 @@ export async function createInstance(input: {
   responsibleId?: string;
   createdBy: string;
 }) {
+  const [sourceCourse] = await db
+    .select({
+      id: courses.id,
+      status: courses.status,
+    })
+    .from(courses)
+    .where(and(
+      eq(courses.id, input.courseId),
+      or(
+        eq(courses.orgId, input.orgId),
+        and(isNull(courses.orgId), eq(courses.isPublic, true)),
+      ),
+    ))
+    .limit(1);
+
+  if (!sourceCourse) {
+    throw new NotFoundError('Course', input.courseId);
+  }
+
+  if (sourceCourse.status !== 'published') {
+    throw new ConflictError('Only published courses can be used to create instances');
+  }
+
   const [instance] = await db
     .insert(courseInstances)
     .values({

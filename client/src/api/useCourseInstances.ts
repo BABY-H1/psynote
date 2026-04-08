@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import type { CourseInstance } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
 
@@ -23,7 +24,7 @@ export function useCourseInstances(filters?: {
 
   return useQuery({
     queryKey: ['course-instances', orgId, filters],
-    queryFn: () => api.get<any[]>(`${orgPrefix()}/course-instances${qs ? `?${qs}` : ''}`),
+    queryFn: () => api.get<CourseInstance[]>(`${orgPrefix()}/course-instances${qs ? `?${qs}` : ''}`),
     enabled: !!orgId,
   });
 }
@@ -32,7 +33,7 @@ export function useCourseInstance(instanceId: string | null) {
   const orgId = useAuthStore((s) => s.currentOrgId);
   return useQuery({
     queryKey: ['course-instances', orgId, instanceId],
-    queryFn: () => api.get<any>(`${orgPrefix()}/course-instances/${instanceId}`),
+    queryFn: () => api.get<CourseInstance>(`${orgPrefix()}/course-instances/${instanceId}`),
     enabled: !!orgId && !!instanceId,
   });
 }

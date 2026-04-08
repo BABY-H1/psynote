@@ -1,4 +1,5 @@
 import { aiClient } from '../providers/openai-compatible.js';
+import { extractStructuredPayload, looksLikeJsonAttempt } from './chat-json-helpers.js';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -109,6 +110,48 @@ const SYSTEM_PROMPT = `你是一位专业的团体咨询治疗师和课程设计
 - 不要使用Markdown格式，只使用纯文本
 - 所有内容使用中文`;
 
+interface SchemeWrapperPayload {
+  type: 'scheme';
+  scheme: GeneratedScheme;
+  summary?: string;
+}
+
+function isSchemeWrapper(value: unknown): value is SchemeWrapperPayload {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  if (obj.type !== 'scheme') return false;
+  const scheme = obj.scheme as Record<string, unknown> | undefined;
+  return !!scheme && typeof scheme.title === 'string' && Array.isArray(scheme.sessions);
+}
+
+function isRawScheme(value: unknown): value is GeneratedScheme {
+  if (!value || typeof value !== 'object') return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.title === 'string' && Array.isArray(obj.sessions);
+}
+
+function normaliseResult(content: string): CreateSchemeChatResponse {
+  const wrapped = extractStructuredPayload<SchemeWrapperPayload>(content, isSchemeWrapper);
+  if (wrapped) {
+    return { type: 'scheme', scheme: wrapped.scheme, summary: wrapped.summary || '' };
+  }
+  // Some models omit the wrapper and return the scheme directly.
+  const raw = extractStructuredPayload<GeneratedScheme>(content, isRawScheme);
+  if (raw) {
+    return {
+      type: 'scheme',
+      scheme: raw,
+      summary: `已生成方案"${raw.title}"，包含 ${raw.sessions.length} 次活动。`,
+    };
+  }
+  return { type: 'message', content: content.trim() };
+}
+
+// Soft budget: skip the truncation retry if we've already burned more than
+// this on the first attempt. With ~4.5 min total per request, this leaves
+// ~80 s for the retry, enough for a smaller fallback even on slow models.
+const RETRY_BUDGET_MS = 180_000; // 3 min
+
 export async function chatCreateScheme(
   messages: ChatMessage[],
 ): Promise<CreateSchemeChatResponse> {
@@ -117,46 +160,33 @@ export async function chatCreateScheme(
     ...messages.map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
   ];
 
-  const result = await aiClient.chat(fullMessages, { temperature: 0.6, maxTokens: 4096 });
-  const trimmed = result.trim();
+  // First attempt with generous token budget. A 4-session scheme with full
+  // phases/facilitator notes easily exceeds 4096 tokens in Chinese.
+  const startedAt = Date.now();
+  const first = await aiClient.chat(fullMessages, { temperature: 0.6, maxTokens: 8192 });
+  const firstResult = normaliseResult(first);
+  if (firstResult.type === 'scheme') return firstResult;
 
-  // Try multiple strategies to extract JSON from the response
-  const jsonCandidates = [
-    trimmed,
-    // Strip markdown code block
-    trimmed.replace(/^```(?:json)?\s*/s, '').replace(/\s*```\s*$/s, ''),
-    // Extract JSON block from mixed text (AI sometimes adds text before/after JSON)
-    (() => {
-      const match = trimmed.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-      return match ? match[1] : null;
-    })(),
-    // Find the first { ... } block in the text
-    (() => {
-      const start = trimmed.indexOf('{');
-      if (start === -1) return null;
-      let depth = 0;
-      for (let i = start; i < trimmed.length; i++) {
-        if (trimmed[i] === '{') depth++;
-        if (trimmed[i] === '}') depth--;
-        if (depth === 0) return trimmed.slice(start, i + 1);
-      }
-      return null;
-    })(),
-  ];
-
-  for (const candidate of jsonCandidates) {
-    if (!candidate) continue;
-    try {
-      const parsed = JSON.parse(candidate);
-      if (parsed.type === 'scheme' && parsed.scheme) {
-        return { type: 'scheme', scheme: parsed.scheme, summary: parsed.summary || '' };
-      }
-      // Some models omit the wrapper and return the scheme directly
-      if (parsed.title && parsed.sessions && Array.isArray(parsed.sessions)) {
-        return { type: 'scheme', scheme: parsed, summary: `已生成方案"${parsed.title}"，包含 ${parsed.sessions.length} 次活动。` };
-      }
-    } catch { /* Not valid JSON, try next candidate */ }
+  // If the reply looked like JSON but we couldn't parse/repair it, the
+  // model most likely got truncated. Retry once with a bigger budget unless
+  // we've already exhausted our time slot.
+  const firstElapsed = Date.now() - startedAt;
+  if (looksLikeJsonAttempt(first) && firstElapsed < RETRY_BUDGET_MS) {
+    console.warn(
+      `[chatCreateScheme] JSON parse fell through after ${firstElapsed}ms, retrying with 12k tokens`,
+    );
+    const retry = await aiClient.chat(fullMessages, { temperature: 0.6, maxTokens: 12288 });
+    const retryResult = normaliseResult(retry);
+    if (retryResult.type === 'scheme') return retryResult;
+    console.warn(
+      '[chatCreateScheme] Retry still failed to produce a scheme. Preview:',
+      retry.slice(0, 300),
+    );
+  } else if (looksLikeJsonAttempt(first)) {
+    console.warn(
+      `[chatCreateScheme] First attempt looked like JSON but took ${firstElapsed}ms; skipping retry`,
+    );
   }
 
-  return { type: 'message', content: trimmed };
+  return firstResult;
 }

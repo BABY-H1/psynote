@@ -5,6 +5,12 @@ import { useGenerateCourseBlueprint } from '../../../api/useCourseAuthoring';
 import { useToast } from '../../../shared/components';
 import type { CourseRequirementsConfig as RequirementsConfig } from '@psynote/shared';
 
+interface CourseRequirementsConfigProps {
+  courseId?: string;
+  onBack?: () => void;
+  onGenerated?: (courseId: string) => void;
+}
+
 // ─── Option Definitions ────────────────────────────────────────
 
 const TARGET_AUDIENCE_OPTIONS = [
@@ -91,10 +97,16 @@ const RISK_LEVEL_OPTIONS = [
 
 // ─── Component ─────────────────────────────────────────────────
 
-export function CourseRequirementsConfig() {
+export function CourseRequirementsConfig({
+  courseId: courseIdProp,
+  onBack,
+  onGenerated,
+}: CourseRequirementsConfigProps = {}) {
   const navigate = useNavigate();
-  const { courseId } = useParams<{ courseId: string }>();
-  const isEditing = !!courseId && courseId !== 'new';
+  const { courseId: routeCourseId } = useParams<{ courseId: string }>();
+  const courseId =
+    courseIdProp ?? (routeCourseId && routeCourseId !== 'new' ? routeCourseId : undefined);
+  const isEditing = !!courseId;
 
   const { data: existingCourse } = useCourse(isEditing ? courseId : undefined);
   const createCourse = useCreateCourse();
@@ -222,7 +234,11 @@ export function CourseRequirementsConfig() {
       });
 
       // Step 4: Navigate to blueprint page
-      navigate(`/courses/${activeCourseId}/blueprint`);
+      if (onGenerated) {
+        onGenerated(activeCourseId!);
+      } else {
+        navigate(`/knowledge/courses/${activeCourseId}/blueprint`);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : '生成蓝图失败，请重试';
       setError(msg);
@@ -236,7 +252,7 @@ export function CourseRequirementsConfig() {
     <div className="max-w-3xl mx-auto">
       {/* Back link */}
       <button
-        onClick={() => navigate(-1)}
+        onClick={() => (onBack ? onBack() : navigate(-1))}
         className="text-sm text-slate-500 hover:text-slate-700 mb-4 inline-flex items-center gap-1"
       >
         &larr; 返回
