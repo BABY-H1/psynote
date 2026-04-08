@@ -23,26 +23,29 @@ export function SchemeLibrary() {
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedSchemeId, setSelectedSchemeId] = useState<string | null>(null);
+  const [detailEditing, setDetailEditing] = useState(false);
 
   if (viewMode === 'detail' && selectedSchemeId) {
     return (
       <SchemeDetail
         schemeId={selectedSchemeId}
-        onBack={() => { setViewMode('list'); setSelectedSchemeId(null); }}
+        initialEditing={detailEditing}
+        onBack={() => { setViewMode('list'); setSelectedSchemeId(null); setDetailEditing(false); }}
       />
     );
   }
 
-  const goToDetail = (schemeId: string) => {
+  const goToDetail = (schemeId: string, editing = false) => {
     setSelectedSchemeId(schemeId);
+    setDetailEditing(editing);
     setViewMode('detail');
   };
 
   if (viewMode === 'import') {
-    return <SchemeImporter onClose={() => setViewMode('list')} onCreated={goToDetail} />;
+    return <SchemeImporter onClose={() => setViewMode('list')} onCreated={(id) => goToDetail(id, true)} />;
   }
   if (viewMode === 'ai') {
-    return <SchemeAICreator onClose={() => setViewMode('list')} onCreated={goToDetail} />;
+    return <SchemeAICreator onClose={() => setViewMode('list')} onCreated={(id) => goToDetail(id, true)} />;
   }
 
   return (
@@ -98,14 +101,14 @@ export function SchemeLibrary() {
                 </div>
                 <div className="flex items-center gap-1 ml-3">
                   <button
-                    onClick={() => goToDetail(s.id)}
+                    onClick={() => goToDetail(s.id, false)}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
                     title="查看"
                   >
                     <Eye className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => goToDetail(s.id)}
+                    onClick={() => goToDetail(s.id, true)}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
                     title="编辑"
                   >

@@ -15,9 +15,6 @@ import { ReminderSettings } from '../features/settings/pages/ReminderSettings';
 import { AvailabilitySettings } from '../features/counseling/pages/AvailabilitySettings';
 import { GroupCenter } from '../features/groups/pages/GroupCenter';
 import { CourseManagement } from '../features/courses/pages/CourseManagement';
-import { CourseRequirementsConfig } from '../features/courses/pages/CourseRequirementsConfig';
-import { CourseBlueprintEditor } from '../features/courses/pages/CourseBlueprintEditor';
-import { LessonEditor } from '../features/courses/pages/LessonEditor';
 import { ClientPortalLayout } from '../features/client-portal/ClientPortalLayout';
 import { ClientDashboard } from '../features/client-portal/pages/ClientDashboard';
 import { ServiceHall } from '../features/client-portal/pages/ServiceHall';
@@ -95,10 +92,6 @@ function AppRoutes() {
             <Route path="agreements" element={<AgreementLibrary />} />
             <Route path="schemes" element={<SchemeLibrary />} />
             <Route path="courses" element={<CoursesTab />} />
-            <Route path="courses/new/requirements" element={<CourseRequirementsConfig />} />
-            <Route path="courses/:courseId/requirements" element={<CourseRequirementsConfig />} />
-            <Route path="courses/:courseId/blueprint" element={<CourseBlueprintEditor />} />
-            <Route path="courses/:courseId/chapters/:chapterId/edit" element={<LessonEditor />} />
             <Route path="templates" element={<NoteTemplateLibrary />} />
           </Route>
           <Route path="scales" element={<Navigate to="/knowledge/scales" replace />} />
@@ -111,10 +104,6 @@ function AppRoutes() {
           <Route path="availability" element={<AvailabilitySettings />} />
           <Route path="groups" element={<GroupCenter />} />
           <Route path="courses" element={<CourseManagement />} />
-          <Route path="courses/new/requirements" element={<CourseRequirementsConfig />} />
-          <Route path="courses/:courseId/requirements" element={<CourseRequirementsConfig />} />
-          <Route path="courses/:courseId/blueprint" element={<CourseBlueprintEditor />} />
-          <Route path="courses/:courseId/chapters/:chapterId/edit" element={<LessonEditor />} />
           {isSystemAdmin && (
             <Route path="admin" element={<AdminDashboard />} />
           )}

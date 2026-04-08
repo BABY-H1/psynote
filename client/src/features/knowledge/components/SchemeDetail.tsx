@@ -58,6 +58,7 @@ interface EditData {
 interface Props {
   schemeId: string;
   onBack: () => void;
+  initialEditing?: boolean;
 }
 
 function stripSessionPrefix(title: string): string {
@@ -93,13 +94,13 @@ function schemeToEditData(scheme: any): EditData {
   };
 }
 
-export function SchemeDetail({ schemeId, onBack }: Props) {
+export function SchemeDetail({ schemeId, onBack, initialEditing = false }: Props) {
   const { data: scheme, isLoading } = useGroupScheme(schemeId);
   const updateScheme = useUpdateGroupScheme();
   const deleteScheme = useDeleteGroupScheme();
   const { toast } = useToast();
 
-  const [editing, setEditing] = useState(false);
+  const [editing, setEditing] = useState(initialEditing);
   const [editData, setEditData] = useState<EditData | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | number>('overview');
 
@@ -108,6 +109,14 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
     setEditData(schemeToEditData(scheme));
     setEditing(true);
   }, [scheme]);
+
+  // Auto-enter edit mode if requested via prop
+  useEffect(() => {
+    if (initialEditing && scheme && !editData) {
+      setEditData(schemeToEditData(scheme));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialEditing, scheme]);
 
   const handleCancel = () => { setEditing(false); setEditData(null); };
 
@@ -180,56 +189,43 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
     });
   };
 
-  // AI direct apply — merge AI response with existing editData to preserve local-only fields
+  // AI direct apply — merge AI response into editData (only callable in editing mode)
   const applySchemeChange = useCallback((newData: EditData) => {
     setEditData((prev) => {
-      const base = prev || schemeToEditData(scheme);
+      if (!prev) return prev;
       return {
-        ...base,
+        ...prev,
         // Only overwrite fields that AI actually returns
-        title: newData.title || base.title,
-        description: newData.description || base.description,
-        theory: newData.theory || base.theory,
-        overallGoal: newData.overallGoal || base.overallGoal,
-        specificGoals: newData.specificGoals.length > 0 ? newData.specificGoals : base.specificGoals,
-        targetAudience: newData.targetAudience || base.targetAudience,
-        ageRange: newData.ageRange || base.ageRange,
-        selectionCriteria: newData.selectionCriteria || base.selectionCriteria,
-        recommendedSize: newData.recommendedSize || base.recommendedSize,
-        totalSessions: newData.totalSessions ?? base.totalSessions,
-        sessionDuration: newData.sessionDuration || base.sessionDuration,
-        frequency: newData.frequency || base.frequency,
-        facilitatorRequirements: newData.facilitatorRequirements || base.facilitatorRequirements,
-        evaluationMethod: newData.evaluationMethod || base.evaluationMethod,
-        notes: newData.notes || base.notes,
-        // Preserve local-only fields
-        recruitmentAssessments: base.recruitmentAssessments,
-        overallAssessments: base.overallAssessments,
-        screeningNotes: base.screeningNotes,
-        visibility: base.visibility,
-        sessions: newData.sessions.length > 0 ? newData.sessions : base.sessions,
+        title: newData.title || prev.title,
+        description: newData.description || prev.description,
+        theory: newData.theory || prev.theory,
+        overallGoal: newData.overallGoal || prev.overallGoal,
+        specificGoals: newData.specificGoals.length > 0 ? newData.specificGoals : prev.specificGoals,
+        targetAudience: newData.targetAudience || prev.targetAudience,
+        ageRange: newData.ageRange || prev.ageRange,
+        selectionCriteria: newData.selectionCriteria || prev.selectionCriteria,
+        recommendedSize: newData.recommendedSize || prev.recommendedSize,
+        totalSessions: newData.totalSessions ?? prev.totalSessions,
+        sessionDuration: newData.sessionDuration || prev.sessionDuration,
+        frequency: newData.frequency || prev.frequency,
+        facilitatorRequirements: newData.facilitatorRequirements || prev.facilitatorRequirements,
+        evaluationMethod: newData.evaluationMethod || prev.evaluationMethod,
+        notes: newData.notes || prev.notes,
+        sessions: newData.sessions.length > 0 ? newData.sessions : prev.sessions,
       };
     });
-    if (!editing) setEditing(true);
     toast('AI 已更新方案', 'success');
-  }, [editing, scheme, toast]);
+  }, [toast]);
 
   const applySessionChange = useCallback((index: number, sessionData: Partial<EditSession>) => {
-    if ((!editing || !editData) && scheme) {
-      const base = schemeToEditData(scheme);
-      if (base.sessions[index]) base.sessions[index] = { ...base.sessions[index], ...sessionData };
-      setEditData(base);
-      if (!editing) setEditing(true);
-    } else {
-      setEditData((p) => {
-        if (!p) return p;
-        const sessions = [...p.sessions];
-        if (sessions[index]) sessions[index] = { ...sessions[index], ...sessionData };
-        return { ...p, sessions };
-      });
-    }
+    setEditData((p) => {
+      if (!p) return p;
+      const sessions = [...p.sessions];
+      if (sessions[index]) sessions[index] = { ...sessions[index], ...sessionData };
+      return { ...p, sessions };
+    });
     toast('AI 已更新该活动', 'success');
-  }, [editing, editData, scheme, toast]);
+  }, [toast]);
 
   if (isLoading || !scheme) return <PageLoading text="加载方案详情..." />;
 
@@ -251,6 +247,7 @@ export function SchemeDetail({ schemeId, onBack }: Props) {
 
         {/* AI chat */}
         <AIChatPanel scheme={scheme} editData={editing ? editData : null}
+          editing={editing}
           activeTab={activeTab}
           onApplyScheme={applySchemeChange}
           onApplySession={applySessionChange} />
@@ -637,8 +634,9 @@ type AIChatMsg = {
   applied?: boolean;
 };
 
-function AIChatPanel({ scheme, editData, activeTab, onApplyScheme, onApplySession }: {
+function AIChatPanel({ scheme, editData, editing, activeTab, onApplyScheme, onApplySession }: {
   scheme: any; editData: EditData | null;
+  editing: boolean;
   activeTab: 'overview' | number;
   onApplyScheme: (data: EditData) => void;
   onApplySession: (index: number, session: Partial<EditSession>) => void;
@@ -665,6 +663,7 @@ function AIChatPanel({ scheme, editData, activeTab, onApplyScheme, onApplySessio
     : '当前: 总体方案';
 
   const handleSend = () => {
+    if (!editing) return;
     const text = input.trim();
     if (!text || isPending) return;
     setInput('');
@@ -706,7 +705,7 @@ function AIChatPanel({ scheme, editData, activeTab, onApplyScheme, onApplySessio
         <Sparkles className="w-4 h-4 text-amber-500" />
         <span className="text-sm font-semibold text-slate-900">AI 助手</span>
       </div>
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto p-3 space-y-3 relative">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[92%] rounded-2xl px-3.5 py-2 text-xs ${
@@ -723,16 +722,26 @@ function AIChatPanel({ scheme, editData, activeTab, onApplyScheme, onApplySessio
             </div>
           </div>
         )}
+
+        {/* Disabled overlay when not editing */}
+        {!editing && (
+          <div className="absolute inset-0 bg-slate-50/80 backdrop-blur-[1px] flex items-center justify-center pointer-events-none">
+            <div className="bg-white border border-slate-200 rounded-lg px-4 py-3 text-xs text-slate-500 max-w-[85%] text-center shadow-sm">
+              点击右上角「编辑」按钮，进入编辑态后即可与 AI 对话修改方案
+            </div>
+          </div>
+        )}
       </div>
       <div className="p-3 border-t border-slate-200 bg-white">
         <p className="text-xs text-slate-400 mb-1.5">{contextHint}</p>
         <div className="flex gap-1.5">
           <input value={input} onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-            placeholder="输入修改意见..." disabled={isPending}
-            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50" />
-          <button onClick={handleSend} disabled={isPending || !input.trim()}
-            className="px-3 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-500 disabled:opacity-50">
+            placeholder={editing ? '输入修改意见...' : '请先点击编辑'}
+            disabled={!editing || isPending}
+            className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-1 focus:ring-brand-500 disabled:bg-slate-50 disabled:cursor-not-allowed" />
+          <button onClick={handleSend} disabled={!editing || isPending || !input.trim()}
+            className="px-3 py-2 bg-brand-600 text-white rounded-lg hover:bg-brand-500 disabled:opacity-50 disabled:cursor-not-allowed">
             <Send className="w-3.5 h-3.5" />
           </button>
         </div>
