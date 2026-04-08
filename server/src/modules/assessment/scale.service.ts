@@ -239,7 +239,45 @@ export async function createScale(input: {
   return getScaleById(scale.id);
 }
 
-/** Update scale metadata (not dimensions/items - those need separate endpoints) */
+interface DimensionUpdateInput {
+  name: string;
+  description?: string;
+  calculationMethod?: string;
+  sortOrder?: number;
+  rules?: {
+    minScore: number;
+    maxScore: number;
+    label: string;
+    description?: string;
+    advice?: string;
+    riskLevel?: string;
+  }[];
+}
+
+interface ItemUpdateInput {
+  text: string;
+  dimensionIndex: number;
+  isReverseScored?: boolean;
+  options: { label: string; value: number }[];
+  sortOrder?: number;
+}
+
+/**
+ * Update a scale.
+ * - Always updates the top-level scale fields that were passed.
+ * - If `dimensions` is passed, `items` MUST also be passed (and vice
+ *   versa). Sending one without the other is rejected, because
+ *   item.dimensionIndex needs to be resolved against a known
+ *   dimension order. We replace both as one atomic operation.
+ *
+ * Replacement strategy (in transaction):
+ *   1. Delete items (must come first — items.dimensionId FK blocks
+ *      dimension deletion since the column has no ON DELETE clause).
+ *   2. Delete dimensions (cascades to rules).
+ *   3. Re-insert dimensions and capture their new ids in order.
+ *   4. Re-insert rules linked to new dimension ids.
+ *   5. Re-insert items linked to new dimension ids by index.
+ */
 export async function updateScale(
   scaleId: string,
   updates: Partial<{
@@ -248,16 +286,100 @@ export async function updateScale(
     instructions: string;
     scoringMode: string;
     isPublic: boolean;
+    dimensions: DimensionUpdateInput[];
+    items: ItemUpdateInput[];
   }>,
 ) {
-  const [updated] = await db
-    .update(scales)
-    .set({ ...updates, updatedAt: new Date() })
-    .where(eq(scales.id, scaleId))
-    .returning();
+  const { dimensions: newDimensions, items: newItems, ...scalarUpdates } = updates;
 
-  if (!updated) throw new NotFoundError('Scale', scaleId);
-  return updated;
+  // Either both nested arrays are provided or neither — they must be
+  // updated atomically to keep item.dimensionId consistent.
+  if ((newDimensions === undefined) !== (newItems === undefined)) {
+    throw new Error(
+      'updateScale: dimensions and items must be sent together (or neither)',
+    );
+  }
+
+  await db.transaction(async (tx) => {
+    // 1. Update top-level fields
+    const hasScalarChanges = Object.keys(scalarUpdates).length > 0;
+    if (hasScalarChanges) {
+      const [updated] = await tx
+        .update(scales)
+        .set({ ...scalarUpdates, updatedAt: new Date() })
+        .where(eq(scales.id, scaleId))
+        .returning();
+      if (!updated) throw new NotFoundError('Scale', scaleId);
+    } else if (newDimensions !== undefined) {
+      // Touch updatedAt when only nested data changed
+      await tx
+        .update(scales)
+        .set({ updatedAt: new Date() })
+        .where(eq(scales.id, scaleId));
+    }
+
+    if (newDimensions === undefined || newItems === undefined) {
+      return;
+    }
+
+    // 2. Drop existing items first (FK to dimensions has no cascade)
+    await tx.delete(scaleItems).where(eq(scaleItems.scaleId, scaleId));
+
+    // 3. Drop existing dimensions (cascades rules)
+    await tx.delete(scaleDimensions).where(eq(scaleDimensions.scaleId, scaleId));
+
+    // 4. Re-insert dimensions
+    let dimensionIdMap: string[] = [];
+    if (newDimensions.length > 0) {
+      const inserted = await tx
+        .insert(scaleDimensions)
+        .values(
+          newDimensions.map((dim, idx) => ({
+            scaleId,
+            name: dim.name,
+            description: dim.description,
+            calculationMethod: dim.calculationMethod || 'sum',
+            sortOrder: dim.sortOrder ?? idx,
+          })),
+        )
+        .returning();
+      dimensionIdMap = inserted.map((d) => d.id);
+
+      // 5. Re-insert rules linked to new dimension ids
+      for (let i = 0; i < inserted.length; i++) {
+        const dimRules = newDimensions[i].rules;
+        if (dimRules && dimRules.length > 0) {
+          await tx.insert(dimensionRules).values(
+            dimRules.map((rule) => ({
+              dimensionId: inserted[i].id,
+              minScore: String(rule.minScore),
+              maxScore: String(rule.maxScore),
+              label: rule.label,
+              description: rule.description,
+              advice: rule.advice,
+              riskLevel: rule.riskLevel,
+            })),
+          );
+        }
+      }
+    }
+
+    // 6. Re-insert items linked to new dimension ids
+    if (newItems.length > 0) {
+      await tx.insert(scaleItems).values(
+        newItems.map((item, idx) => ({
+          scaleId,
+          dimensionId: dimensionIdMap[item.dimensionIndex] ?? null,
+          text: item.text,
+          isReverseScored: item.isReverseScored || false,
+          options: item.options,
+          sortOrder: item.sortOrder ?? idx,
+        })),
+      );
+    }
+  });
+
+  return getScaleById(scaleId);
 }
 
 /** Delete a scale and all its children (cascading) */

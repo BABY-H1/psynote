@@ -1,45 +1,18 @@
 import React, { useState } from 'react';
 import { useScales, useScale, useDeleteScale } from '../../../api/useScales';
-import type { ScaleListItem } from '../../../api/useScales';
-import { ScaleEditor } from '../components/ScaleEditor';
+import { ScaleDetail } from '../components/ScaleDetail';
 import { AIScaleCreator } from '../components/AIScaleCreator';
 import { ScaleImporter } from '../components/ScaleImporter';
-import { Sparkles, FileText, Trash2, Edit3, Eye, ClipboardList, X } from 'lucide-react';
+import { Sparkles, FileText, Trash2, Edit3, Eye, X, ClipboardList } from 'lucide-react';
 import { PageLoading, EmptyState, StatusBadge, useToast } from '../../../shared/components';
-
-interface ScaleInitialData {
-  title: string;
-  description: string;
-  instructions: string;
-  scoringMode: 'sum' | 'average';
-  options: { label: string; value: number }[];
-  items: { text: string; isReverseScored: boolean; dimensionIndex: number | null }[];
-  dimensions: {
-    name: string;
-    description: string;
-    calculationMethod: 'sum' | 'average';
-    rules: {
-      minScore: number;
-      maxScore: number;
-      label: string;
-      description: string;
-      advice: string;
-      riskLevel: string;
-    }[];
-  }[];
-}
 
 type View =
   | { type: 'list' }
   | { type: 'ai-create' }
   | { type: 'import' }
-  | { type: 'edit'; scaleId: string }
-  | { type: 'edit-new'; initialData: ScaleInitialData };
+  | { type: 'detail'; scaleId: string; editing: boolean };
 
-type ModalView =
-  | null
-  | { type: 'detail'; scaleId: string }
-  | { type: 'report'; scaleId: string };
+type ModalView = null | { type: 'report'; scaleId: string };
 
 const riskLabels: Record<string, string> = {
   level_1: '一级',
@@ -61,6 +34,7 @@ export function ScaleLibrary() {
   const { toast } = useToast();
   const [view, setView] = useState<View>({ type: 'list' });
   const [modal, setModal] = useState<ModalView>(null);
+
   if (isLoading) {
     return <PageLoading text="加载量表库中..." />;
   }
@@ -69,7 +43,7 @@ export function ScaleLibrary() {
     return (
       <AIScaleCreator
         onClose={() => setView({ type: 'list' })}
-        onEditScale={(data) => setView({ type: 'edit-new', initialData: data })}
+        onCreated={(scaleId) => setView({ type: 'detail', scaleId, editing: true })}
       />
     );
   }
@@ -78,25 +52,18 @@ export function ScaleLibrary() {
     return (
       <ScaleImporter
         onClose={() => setView({ type: 'list' })}
-        onEditScale={(data) => setView({ type: 'edit-new', initialData: data })}
+        onCreated={(scaleId) => setView({ type: 'detail', scaleId, editing: true })}
       />
     );
   }
 
-  if (view.type === 'edit') {
+  if (view.type === 'detail') {
     return (
-      <ScaleEditor
+      <ScaleDetail
         scaleId={view.scaleId}
-        onClose={() => setView({ type: 'list' })}
-      />
-    );
-  }
-
-  if (view.type === 'edit-new') {
-    return (
-      <ScaleEditor
-        initialData={view.initialData}
-        onClose={() => setView({ type: 'list' })}
+        initialEditing={view.editing}
+        onBack={() => setView({ type: 'list' })}
+        onPreviewReport={() => setModal({ type: 'report', scaleId: view.scaleId })}
       />
     );
   }
@@ -134,49 +101,48 @@ export function ScaleLibrary() {
           }}
         />
       ) : (
-        <div className="grid gap-4">
+        <div className="grid gap-3">
           {scales.map((scale) => (
             <div
               key={scale.id}
-              className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm transition"
+              className="bg-white rounded-xl border border-slate-200 p-4"
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-slate-900 truncate">{scale.title}</h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <ClipboardList className="w-4 h-4 text-brand-500 flex-shrink-0" />
+                    <span className="text-sm font-semibold text-slate-900 truncate">{scale.title}</span>
                     {scale.isPublic && <StatusBadge label="公开" variant="green" />}
                     {!scale.orgId && <StatusBadge label="平台" variant="blue" />}
+                    <span className="text-xs text-slate-400">
+                      {scale.dimensionCount ?? '-'} 维度 · {scale.itemCount ?? '-'} 题
+                    </span>
                   </div>
                   {scale.description && (
-                    <p className="text-sm text-slate-500 mt-1 line-clamp-2">{scale.description}</p>
+                    <p className="text-xs text-slate-500 mt-1 line-clamp-2">{scale.description}</p>
                   )}
-                  <div className="flex gap-4 mt-3 text-xs text-slate-400">
-                    <span>计分: {scale.scoringMode === 'sum' ? '求和' : '平均'}</span>
-                    <span>维度: {scale.dimensionCount ?? '-'}</span>
-                    <span>题目: {scale.itemCount ?? '-'}</span>
-                  </div>
                 </div>
-                <div className="flex gap-1 ml-4 shrink-0">
+                <div className="flex items-center gap-1 ml-3">
                   <button
-                    onClick={() => setModal({ type: 'detail', scaleId: scale.id })}
-                    className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                    title="查看详情"
+                    onClick={() => setView({ type: 'detail', scaleId: scale.id, editing: false })}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
+                    title="查看"
                   >
-                    <ClipboardList className="w-4 h-4" />
+                    <Eye className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={() => setModal({ type: 'report', scaleId: scale.id })}
-                    className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
                     title="预览报告"
                   >
-                    <Eye className="w-4 h-4" />
+                    <ClipboardList className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => setView({ type: 'edit', scaleId: scale.id })}
-                    className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                    onClick={() => setView({ type: 'detail', scaleId: scale.id, editing: true })}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
                     title="编辑"
                   >
-                    <Edit3 className="w-4 h-4" />
+                    <Edit3 className="w-3.5 h-3.5" />
                   </button>
                   {scale.orgId && (
                     <button
@@ -188,10 +154,10 @@ export function ScaleLibrary() {
                           });
                         }
                       }}
-                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                      className="p-1.5 text-slate-400 hover:text-red-500 rounded"
                       title="删除"
                     >
-                      <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   )}
                 </div>
@@ -201,11 +167,10 @@ export function ScaleLibrary() {
         </div>
       )}
 
-      {/* Modal for detail / report preview */}
-      {modal && (
-        <ScaleModal
+      {/* Report preview modal */}
+      {modal && modal.type === 'report' && (
+        <ReportPreviewModal
           scaleId={modal.scaleId}
-          mode={modal.type}
           onClose={() => setModal(null)}
         />
       )}
@@ -213,19 +178,8 @@ export function ScaleLibrary() {
   );
 }
 
-function ScaleModal({
-  scaleId,
-  mode,
-  onClose,
-}: {
-  scaleId: string;
-  mode: 'detail' | 'report';
-  onClose: () => void;
-}) {
+function ReportPreviewModal({ scaleId, onClose }: { scaleId: string; onClose: () => void }) {
   const { data: scale, isLoading } = useScale(scaleId);
-
-  const title = mode === 'detail' ? '量表详情' : '报告预览';
-  const Icon = mode === 'detail' ? ClipboardList : Eye;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -234,9 +188,9 @@ function ScaleModal({
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
           <div className="flex items-center gap-2">
-            <Icon className="w-5 h-5 text-brand-600" />
+            <Eye className="w-5 h-5 text-brand-600" />
             <h3 className="text-lg font-semibold text-slate-900 truncate">
-              {scale?.title ? `${scale.title} — ${title}` : '加载中...'}
+              {scale?.title ? `${scale.title} — 报告预览` : '加载中...'}
             </h3>
           </div>
           <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-slate-600 transition">
@@ -246,106 +200,9 @@ function ScaleModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
-          {isLoading || !scale ? (
-            <PageLoading />
-          ) : mode === 'detail' ? (
-            <ScaleDetailContent scale={scale} />
-          ) : (
-            <ReportPreview scale={scale} />
-          )}
+          {isLoading || !scale ? <PageLoading /> : <ReportPreview scale={scale} />}
         </div>
       </div>
-    </div>
-  );
-}
-
-function ScaleDetailContent({ scale }: { scale: NonNullable<ReturnType<typeof useScale>['data']> }) {
-  const dims = scale.dimensions || [];
-  const items = scale.items || [];
-
-  return (
-    <div className="space-y-5">
-      {/* Basic info */}
-      <div className="space-y-2">
-        {scale.description && <p className="text-sm text-slate-600">{scale.description}</p>}
-        <div className="flex gap-6 text-sm text-slate-500">
-          <span>计分: <strong className="text-slate-700">{scale.scoringMode === 'sum' ? '总分求和' : '平均分'}</strong></span>
-          <span>维度: <strong className="text-slate-700">{dims.length}</strong></span>
-          <span>题目: <strong className="text-slate-700">{items.length}</strong></span>
-        </div>
-      </div>
-
-      {/* Instructions */}
-      {scale.instructions && (
-        <div>
-          <span className="text-xs text-slate-400">指导语</span>
-          <p className="text-sm text-slate-600 mt-0.5 bg-slate-50 rounded-lg p-3">{scale.instructions}</p>
-        </div>
-      )}
-
-      {/* Dimensions & Rules */}
-      {dims.length > 0 && (
-        <div className="space-y-3">
-          <span className="text-xs font-medium text-slate-500">维度与解读规则</span>
-          {dims.map((dim, di) => (
-            <div key={dim.id || di} className="bg-slate-50 rounded-lg p-3 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-slate-800">{dim.name}</span>
-                <span className="text-xs text-slate-400">{dim.calculationMethod === 'sum' ? '求和' : '平均'}</span>
-              </div>
-              {dim.description && <p className="text-xs text-slate-500">{dim.description}</p>}
-              {dim.rules && dim.rules.length > 0 && (
-                <div className="grid gap-1.5 mt-1">
-                  {dim.rules.map((rule, ri) => (
-                    <div key={rule.id || ri} className="flex items-center gap-2 text-xs bg-white rounded px-2.5 py-1.5">
-                      <span className="font-mono text-slate-500 w-20 shrink-0">{rule.minScore}~{rule.maxScore} 分</span>
-                      {rule.riskLevel && (
-                        <span className={`px-1.5 py-0.5 rounded ${riskColors[rule.riskLevel] || 'bg-slate-100 text-slate-600'}`}>
-                          {riskLabels[rule.riskLevel] || rule.riskLevel}
-                        </span>
-                      )}
-                      <span className="text-slate-700 font-medium">{rule.label}</span>
-                      {rule.description && <span className="text-slate-400 truncate">— {rule.description}</span>}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Items */}
-      {items.length > 0 && (
-        <div>
-          <span className="text-xs font-medium text-slate-500">题目 ({items.length} 题)</span>
-          <div className="mt-2 space-y-1">
-            {items.map((item, ii) => {
-              const dimName = dims.find((d) => d.id === item.dimensionId)?.name;
-              return (
-                <div key={item.id || ii} className="flex gap-2 items-start text-sm py-1">
-                  <span className="text-xs text-slate-400 w-5 text-right shrink-0 mt-0.5">{ii + 1}.</span>
-                  <span className="text-slate-700 flex-1">{item.text}</span>
-                  <div className="flex gap-1 shrink-0">
-                    {dimName && <span className="text-xs px-1.5 py-0.5 bg-brand-50 text-brand-600 rounded">{dimName}</span>}
-                    {item.isReverseScored && <span className="text-xs px-1.5 py-0.5 bg-amber-50 text-amber-600 rounded">R</span>}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          {items[0]?.options && (
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              <span className="text-xs text-slate-400 mr-1">选项:</span>
-              {(items[0].options as { label: string; value: number }[]).map((opt, oi) => (
-                <span key={oi} className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
-                  {opt.value}={opt.label}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
     </div>
   );
 }

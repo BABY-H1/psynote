@@ -276,9 +276,9 @@ export function CourseDetail({ courseId, onBack, initialEditing = false }: Props
     activeSessionIndex !== null ? displayData.blueprint.sessions[activeSessionIndex] : null;
 
   return (
-    <div className="flex -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
-      {/* LEFT: AI Chat panel */}
-      <div className="w-[420px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+    <div className="flex flex-row-reverse -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
+      {/* RIGHT: AI Chat panel (rendered first so flex-row-reverse puts it on the right) */}
+      <div className="w-[420px] flex-shrink-0 border-l border-slate-200 bg-white flex flex-col">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
           <button onClick={onBack} className="text-slate-400 hover:text-slate-600">
             <ArrowLeft className="w-5 h-5" />
@@ -301,8 +301,8 @@ export function CourseDetail({ courseId, onBack, initialEditing = false }: Props
         />
       </div>
 
-      {/* RIGHT: Tabbed content */}
-      <div className="flex-1 flex flex-col bg-slate-50">
+      {/* LEFT: Tabbed content (rendered second, appears on the left due to flex-row-reverse) */}
+      <div className="flex-1 flex flex-col bg-slate-50 min-w-0">
         {/* Top bar with tabs + actions */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-slate-200 flex-shrink-0">
           {/* Tab bar */}

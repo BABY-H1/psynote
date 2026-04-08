@@ -1,9 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { useNoteTemplates, useCreateNoteTemplate, useUpdateNoteTemplate, useDeleteNoteTemplate } from '../../../api/useCounseling';
+import {
+  useNoteTemplates, useCreateNoteTemplate, useDeleteNoteTemplate,
+} from '../../../api/useCounseling';
 import { useExtractNoteTemplate, useCreateNoteTemplateChat } from '../../../api/useAI';
 import { PageLoading, useToast } from '../../../shared/components';
+import { NoteTemplateDetail } from '../components/NoteTemplateDetail';
 import {
-  Edit3, Trash2, FileText, Upload, Sparkles, Loader2, Send, ArrowLeft, Plus, Eye, EyeOff,
+  Edit3, Trash2, FileText, Upload, Sparkles, Loader2, Send, ArrowLeft, Eye,
 } from 'lucide-react';
 
 const formatLabels: Record<string, string> = {
@@ -13,24 +16,52 @@ const formatLabels: Record<string, string> = {
   custom: '自定义',
 };
 
-type ViewMode = 'list' | 'import' | 'ai';
+type ViewMode = 'list' | 'import' | 'ai' | 'detail';
 
 export function NoteTemplateLibrary() {
   const { data: templates, isLoading } = useNoteTemplates();
   const deleteTemplate = useDeleteNoteTemplate();
   const { toast } = useToast();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [editingTemplate, setEditingTemplate] = useState<any>(null);
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [detailEditing, setDetailEditing] = useState(false);
 
+  const goToDetail = (templateId: string, editing = false) => {
+    setSelectedTemplateId(templateId);
+    setDetailEditing(editing);
+    setViewMode('detail');
+  };
+
+  const goToList = () => {
+    setViewMode('list');
+    setSelectedTemplateId(null);
+    setDetailEditing(false);
+  };
+
+  if (viewMode === 'detail' && selectedTemplateId) {
+    return (
+      <NoteTemplateDetail
+        templateId={selectedTemplateId}
+        initialEditing={detailEditing}
+        onBack={goToList}
+      />
+    );
+  }
   if (viewMode === 'import') {
-    return <NoteTemplateImporter onClose={() => setViewMode('list')} />;
+    return (
+      <NoteTemplateImporter
+        onClose={goToList}
+        onCreated={(id) => goToDetail(id, true)}
+      />
+    );
   }
   if (viewMode === 'ai') {
-    return <NoteTemplateAICreator onClose={() => setViewMode('list')} />;
-  }
-  if (editingTemplate) {
-    return <NoteTemplateEditor template={editingTemplate} onClose={() => setEditingTemplate(null)} />;
+    return (
+      <NoteTemplateAICreator
+        onClose={goToList}
+        onCreated={(id) => goToDetail(id, true)}
+      />
+    );
   }
 
   return (
@@ -40,12 +71,16 @@ export function NoteTemplateLibrary() {
           自定义会谈记录格式（SOAP/DAP/BIRP 等），在写笔记时可选用
         </div>
         <div className="flex gap-2">
-          <button onClick={() => setViewMode('import')}
-            className="px-3 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5">
+          <button
+            onClick={() => setViewMode('import')}
+            className="px-3 py-2 border border-slate-200 text-slate-600 rounded-lg text-sm font-medium hover:bg-slate-50 flex items-center gap-1.5"
+          >
             <Upload className="w-4 h-4" /> 文本导入
           </button>
-          <button onClick={() => setViewMode('ai')}
-            className="px-3 py-2 border border-amber-200 text-amber-700 bg-amber-50 rounded-lg text-sm font-medium hover:bg-amber-100 flex items-center gap-1.5">
+          <button
+            onClick={() => setViewMode('ai')}
+            className="px-3 py-2 border border-amber-200 text-amber-700 bg-amber-50 rounded-lg text-sm font-medium hover:bg-amber-100 flex items-center gap-1.5"
+          >
             <Sparkles className="w-4 h-4" /> AI 生成
           </button>
         </div>
@@ -78,54 +113,38 @@ export function NoteTemplateLibrary() {
                   </div>
                 </div>
                 <div className="flex items-center gap-1 ml-3">
-                  <button onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded" title="查看详情">
-                    {expandedId === t.id ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  <button
+                    onClick={() => goToDetail(t.id, false)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
+                    title="查看"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
                   </button>
-                  <button onClick={() => setEditingTemplate(t)}
-                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded" title="编辑">
+                  <button
+                    onClick={() => goToDetail(t.id, true)}
+                    className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
+                    title="编辑"
+                  >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
                   <button
                     onClick={async () => {
                       if (confirm(`确定删除"${t.title}"？`)) {
-                        try { await deleteTemplate.mutateAsync(t.id); toast('已删除', 'success'); }
-                        catch { toast('删除失败', 'error'); }
+                        try {
+                          await deleteTemplate.mutateAsync(t.id);
+                          toast('已删除', 'success');
+                        } catch {
+                          toast('删除失败', 'error');
+                        }
                       }
                     }}
-                    className="p-1.5 text-slate-400 hover:text-red-500 rounded" title="删除">
+                    className="p-1.5 text-slate-400 hover:text-red-500 rounded"
+                    title="删除"
+                  >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
-
-              {/* Expanded detail */}
-              {expandedId === t.id && (
-                <div className="mt-3 pt-3 border-t border-slate-100">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="text-slate-400">
-                        <th className="text-left font-normal pb-1.5 w-8">#</th>
-                        <th className="text-left font-normal pb-1.5">键名</th>
-                        <th className="text-left font-normal pb-1.5">标签</th>
-                        <th className="text-left font-normal pb-1.5">输入提示</th>
-                        <th className="text-left font-normal pb-1.5 w-12">必填</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(t.fieldDefinitions as any[])?.map((f: any, i: number) => (
-                        <tr key={i} className="text-slate-600 border-t border-slate-50">
-                          <td className="py-1.5 text-slate-400">{i + 1}</td>
-                          <td className="py-1.5 font-mono text-slate-500">{f.key}</td>
-                          <td className="py-1.5 font-medium text-slate-900">{f.label}</td>
-                          <td className="py-1.5 text-slate-400">{f.placeholder || '—'}</td>
-                          <td className="py-1.5">{f.required ? <span className="text-red-400">是</span> : <span className="text-slate-300">否</span>}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
             </div>
           ))}
         </div>
@@ -134,123 +153,9 @@ export function NoteTemplateLibrary() {
   );
 }
 
-// ─── Template Editor (edit existing template) ──────────────────
-
-function NoteTemplateEditor({ template, onClose }: { template: any; onClose: () => void }) {
-  const updateTemplate = useUpdateNoteTemplate();
-  const createTemplate = useCreateNoteTemplate();
-  const { toast } = useToast();
-  const isExisting = !!template.id;
-  const [title, setTitle] = useState(template.title || '');
-  const [format, setFormat] = useState(template.format || 'custom');
-  const [fields, setFields] = useState<{ key: string; label: string; placeholder: string; required: boolean }[]>(
-    (template.fieldDefinitions || []).map((f: any) => ({
-      key: f.key || '', label: f.label || '', placeholder: f.placeholder || '', required: f.required ?? true,
-    })),
-  );
-
-  const addField = () => setFields([...fields, { key: '', label: '', placeholder: '', required: false }]);
-  const removeField = (i: number) => setFields(fields.filter((_, idx) => idx !== i));
-  const updateField = (i: number, patch: Partial<typeof fields[0]>) => {
-    const updated = [...fields];
-    updated[i] = { ...updated[i], ...patch };
-    setFields(updated);
-  };
-
-  const isPending = updateTemplate.isPending || createTemplate.isPending;
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const fieldDefs = fields.filter((f) => f.key && f.label).map((f, i) => ({ ...f, order: i + 1 }));
-    try {
-      if (isExisting) {
-        await updateTemplate.mutateAsync({
-          templateId: template.id,
-          title,
-          format,
-          fieldDefinitions: fieldDefs as any,
-        });
-      } else {
-        await createTemplate.mutateAsync({
-          title,
-          format,
-          fieldDefinitions: fieldDefs as any,
-        });
-      }
-      toast('笔记模板已保存', 'success');
-      onClose();
-    } catch {
-      toast('保存失败', 'error');
-    }
-  };
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-center gap-3">
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><ArrowLeft className="w-5 h-5" /></button>
-        <h3 className="text-lg font-bold text-slate-900">编辑笔记模板</h3>
-      </div>
-      <form onSubmit={handleSubmit} className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">模板名称 *</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} required placeholder="如：初次评估记录"
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">格式类型</label>
-            <select value={format} onChange={(e) => setFormat(e.target.value)}
-              className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm">
-              {Object.entries(formatLabels).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-xs text-slate-500 mb-2">字段定义</label>
-          <div className="space-y-2">
-            {fields.map((f, i) => (
-              <div key={i} className="flex items-center gap-2">
-                <input value={f.key} onChange={(e) => updateField(i, { key: e.target.value })} placeholder="键名 (英文)"
-                  className="w-28 px-2 py-1.5 border border-slate-200 rounded text-xs" />
-                <input value={f.label} onChange={(e) => updateField(i, { label: e.target.value })} placeholder="标签"
-                  className="w-28 px-2 py-1.5 border border-slate-200 rounded text-xs" />
-                <input value={f.placeholder} onChange={(e) => updateField(i, { placeholder: e.target.value })} placeholder="输入提示"
-                  className="flex-1 px-2 py-1.5 border border-slate-200 rounded text-xs" />
-                <label className="flex items-center gap-1 text-xs text-slate-500">
-                  <input type="checkbox" checked={f.required} onChange={(e) => updateField(i, { required: e.target.checked })} className="rounded" />
-                  必填
-                </label>
-                {fields.length > 1 && (
-                  <button type="button" onClick={() => removeField(i)} className="text-slate-300 hover:text-red-400">
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          <button type="button" onClick={addField}
-            className="mt-2 text-xs text-brand-600 hover:text-brand-700 flex items-center gap-1">
-            <Plus className="w-3 h-3" /> 添加字段
-          </button>
-        </div>
-
-        <div className="flex gap-3 justify-end">
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">取消</button>
-          <button type="submit" disabled={isPending || !title}
-            className="px-5 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50">
-            {isPending ? '保存中...' : '保存'}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}
-
 // ─── Note Template Importer ────────────────────────────────────
 
-function NoteTemplateImporter({ onClose }: { onClose: () => void }) {
+function NoteTemplateImporter({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const { toast } = useToast();
   const extractTemplate = useExtractNoteTemplate();
   const createTemplate = useCreateNoteTemplate();
@@ -272,7 +177,10 @@ function NoteTemplateImporter({ onClose }: { onClose: () => void }) {
       format: result.format,
       fieldDefinitions: result.fieldDefinitions as any,
     }, {
-      onSuccess: () => { toast('笔记模板导入成功', 'success'); onClose(); },
+      onSuccess: (created: any) => {
+        toast('笔记模板导入成功', 'success');
+        onCreated(created.id);
+      },
       onError: () => toast('保存失败', 'error'),
     });
   };
@@ -345,7 +253,7 @@ function NoteTemplateImporter({ onClose }: { onClose: () => void }) {
 
 // ─── Note Template AI Creator ──────────────────────────────────
 
-function NoteTemplateAICreator({ onClose }: { onClose: () => void }) {
+function NoteTemplateAICreator({ onClose, onCreated }: { onClose: () => void; onCreated: (id: string) => void }) {
   const { toast } = useToast();
   const chatMutation = useCreateNoteTemplateChat();
   const createTemplate = useCreateNoteTemplate();
@@ -387,7 +295,10 @@ function NoteTemplateAICreator({ onClose }: { onClose: () => void }) {
 
   const handleSaveTemplate = (template: { title: string; format: string; fieldDefinitions: any[] }) => {
     createTemplate.mutate({ title: template.title, format: template.format, fieldDefinitions: template.fieldDefinitions }, {
-      onSuccess: () => { toast('笔记模板已创建', 'success'); onClose(); },
+      onSuccess: (created: any) => {
+        toast('笔记模板已创建', 'success');
+        onCreated(created.id);
+      },
       onError: () => toast('保存失败', 'error'),
     });
   };
@@ -420,7 +331,7 @@ function NoteTemplateAICreator({ onClose }: { onClose: () => void }) {
                   <button onClick={() => handleSaveTemplate(msg.template!)}
                     disabled={createTemplate.isPending}
                     className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-500 disabled:opacity-50">
-                    {createTemplate.isPending ? '保存中...' : '保存此模板'}
+                    {createTemplate.isPending ? '保存中...' : '保存并进入编辑'}
                   </button>
                 </div>
               )}

@@ -83,6 +83,27 @@ export async function scaleRoutes(app: FastifyInstance) {
       instructions: string;
       scoringMode: string;
       isPublic: boolean;
+      dimensions: {
+        name: string;
+        description?: string;
+        calculationMethod?: string;
+        sortOrder?: number;
+        rules?: {
+          minScore: number;
+          maxScore: number;
+          label: string;
+          description?: string;
+          advice?: string;
+          riskLevel?: string;
+        }[];
+      }[];
+      items: {
+        text: string;
+        dimensionIndex: number;
+        isReverseScored?: boolean;
+        options: { label: string; value: number }[];
+        sortOrder?: number;
+      }[];
     }>;
 
     const updated = await scaleService.updateScale(scaleId, body);

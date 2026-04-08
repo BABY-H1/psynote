@@ -28,10 +28,10 @@ interface ScaleData {
 
 interface Props {
   onClose: () => void;
-  onEditScale: (data: ScaleData) => void;
+  onCreated: (scaleId: string) => void;
 }
 
-export function ScaleImporter({ onClose, onEditScale }: Props) {
+export function ScaleImporter({ onClose, onCreated }: Props) {
   const { toast } = useToast();
   const extractScale = useExtractScale();
   const createScale = useCreateScale();
@@ -58,7 +58,7 @@ export function ScaleImporter({ onClose, onEditScale }: Props) {
     );
   };
 
-  const handleSaveDirectly = () => {
+  const handleSaveAndEdit = () => {
     if (!result) return;
     createScale.mutate(
       {
@@ -82,9 +82,9 @@ export function ScaleImporter({ onClose, onEditScale }: Props) {
         })),
       },
       {
-        onSuccess: () => {
+        onSuccess: (created: any) => {
           toast('量表导入成功', 'success');
-          onClose();
+          onCreated(created.id);
         },
         onError: () => {
           toast('保存失败，请重试', 'error');
@@ -274,14 +274,7 @@ export function ScaleImporter({ onClose, onEditScale }: Props) {
               重新识别
             </button>
             <button
-              onClick={() => onEditScale(result)}
-              className="flex items-center gap-1.5 px-4 py-2 bg-white border border-brand-200 text-brand-700 rounded-lg text-sm font-medium hover:bg-brand-50 transition"
-            >
-              <Edit3 className="w-3.5 h-3.5" />
-              编辑后保存
-            </button>
-            <button
-              onClick={handleSaveDirectly}
+              onClick={handleSaveAndEdit}
               disabled={createScale.isPending}
               className="px-5 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
             >
@@ -291,7 +284,10 @@ export function ScaleImporter({ onClose, onEditScale }: Props) {
                   保存中...
                 </>
               ) : (
-                '确认导入'
+                <>
+                  <Edit3 className="w-3.5 h-3.5" />
+                  确认导入并编辑
+                </>
               )}
             </button>
           </div>

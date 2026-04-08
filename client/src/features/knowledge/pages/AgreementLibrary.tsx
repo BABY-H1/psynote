@@ -1,27 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
-import type { ConsentTemplate } from '@psynote/shared';
 import {
-  useConsentTemplates, useCreateConsentTemplate,
-  useUpdateConsentTemplate, useDeleteConsentTemplate,
+  useConsentTemplates, useCreateConsentTemplate, useDeleteConsentTemplate,
 } from '../../../api/useConsent';
 import { useExtractAgreement, useCreateAgreementChat } from '../../../api/useAI';
 import { PageLoading, useToast } from '../../../shared/components';
+import { AgreementDetail } from '../components/AgreementDetail';
 import {
-  Edit3, Trash2, FileCheck, Eye, EyeOff, Upload, Sparkles, Loader2, Send,
-  ArrowLeft, FileText, Check,
+  Edit3, Trash2, FileCheck, Eye, Upload, Sparkles, Loader2, Send,
+  ArrowLeft, Check,
 } from 'lucide-react';
 
 const consentTypeLabels: Record<string, string> = {
   treatment: '咨询知情同意',
   data_collection: '数据采集同意',
-  ai_processing: 'AI辅助分析同意',
+  ai_processing: 'AI 辅助分析同意',
   data_sharing: '数据共享同意',
   research: '研究用途同意',
 };
 
-type PrefillData = { title: string; consentType: string; content: string };
 type ChatMsg = { role: 'user' | 'assistant'; content: string };
-type ViewMode = 'list' | 'import' | 'ai' | 'editor';
+type ViewMode = 'list' | 'import' | 'ai' | 'detail';
 
 // ─── Main Component ──────────────────────────────────────────────
 
@@ -29,30 +27,36 @@ export function AgreementLibrary() {
   const { data: templates, isLoading } = useConsentTemplates();
   const deleteTemplate = useDeleteConsentTemplate();
   const { toast } = useToast();
-  const [previewId, setPreviewId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('list');
-  const [editingTemplate, setEditingTemplate] = useState<ConsentTemplate | null>(null);
-  const [prefillData, setPrefillData] = useState<PrefillData | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [detailEditing, setDetailEditing] = useState(false);
 
-  const goToEditor = (template?: ConsentTemplate, prefill?: PrefillData) => {
-    setEditingTemplate(template || null);
-    setPrefillData(prefill || null);
-    setViewMode('editor');
+  const goToDetail = (templateId: string, editing = false) => {
+    setSelectedTemplateId(templateId);
+    setDetailEditing(editing);
+    setViewMode('detail');
   };
 
   const goToList = () => {
     setViewMode('list');
-    setEditingTemplate(null);
-    setPrefillData(null);
+    setSelectedTemplateId(null);
+    setDetailEditing(false);
   };
 
+  if (viewMode === 'detail' && selectedTemplateId) {
+    return (
+      <AgreementDetail
+        templateId={selectedTemplateId}
+        initialEditing={detailEditing}
+        onBack={goToList}
+      />
+    );
+  }
   if (viewMode === 'import') {
     return (
       <AgreementImporter
         onClose={goToList}
-        onEditResult={(data) => {
-          goToEditor(undefined, data);
-        }}
+        onCreated={(id) => goToDetail(id, true)}
       />
     );
   }
@@ -60,18 +64,7 @@ export function AgreementLibrary() {
     return (
       <AgreementAICreator
         onClose={goToList}
-        onEditAgreement={(data) => {
-          goToEditor(undefined, data);
-        }}
-      />
-    );
-  }
-  if (viewMode === 'editor') {
-    return (
-      <AgreementEditor
-        editingTemplate={editingTemplate}
-        prefillData={prefillData}
-        onDone={goToList}
+        onCreated={(id) => goToDetail(id, true)}
       />
     );
   }
@@ -119,14 +112,14 @@ export function AgreementLibrary() {
                 </div>
                 <div className="flex items-center gap-1 ml-3">
                   <button
-                    onClick={() => setPreviewId(previewId === t.id ? null : t.id)}
+                    onClick={() => goToDetail(t.id, false)}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
-                    title="预览"
+                    title="查看"
                   >
-                    {previewId === t.id ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                    <Eye className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => goToEditor(t)}
+                    onClick={() => goToDetail(t.id, true)}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
                     title="编辑"
                   >
@@ -135,8 +128,12 @@ export function AgreementLibrary() {
                   <button
                     onClick={async () => {
                       if (confirm(`确定删除"${t.title}"？`)) {
-                        try { await deleteTemplate.mutateAsync(t.id); toast('已删除', 'success'); }
-                        catch { toast('删除失败', 'error'); }
+                        try {
+                          await deleteTemplate.mutateAsync(t.id);
+                          toast('已删除', 'success');
+                        } catch {
+                          toast('删除失败', 'error');
+                        }
                       }
                     }}
                     className="p-1.5 text-slate-400 hover:text-red-500 rounded"
@@ -146,12 +143,6 @@ export function AgreementLibrary() {
                   </button>
                 </div>
               </div>
-
-              {previewId === t.id && (
-                <div className="mt-3 pt-3 border-t border-slate-100 bg-slate-50 rounded-lg p-3 max-h-60 overflow-y-auto">
-                  <div className="text-sm text-slate-700 whitespace-pre-wrap">{t.content}</div>
-                </div>
-              )}
             </div>
           ))}
         </div>
@@ -160,222 +151,15 @@ export function AgreementLibrary() {
   );
 }
 
-// ─── Agreement Editor (Split Pane: AI Chat + Editable Content) ───
-
-function AgreementEditor({ editingTemplate, prefillData, onDone }: {
-  editingTemplate?: ConsentTemplate | null;
-  prefillData?: PrefillData | null;
-  onDone: () => void;
-}) {
-  const createTemplate = useCreateConsentTemplate();
-  const updateTemplate = useUpdateConsentTemplate();
-  const chatMutation = useCreateAgreementChat();
-  const { toast } = useToast();
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const initial = editingTemplate || prefillData;
-  const [title, setTitle] = useState(initial?.title || '');
-  const [consentType, setConsentType] = useState(initial?.consentType || 'treatment');
-  const [content, setContent] = useState(initial?.content || '');
-  const [showSettings, setShowSettings] = useState(false);
-
-  const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: 'assistant', content: editingTemplate
-      ? '你好！我可以帮你修改这份协议。\n\n比如你可以说：\n• "在保密条款中加入录音录像相关说明"\n• "增加一个关于紧急联系人的条款"\n• "把语气改得更正式一些"'
-      : '你好！我可以帮你完善这份协议。\n\n如需修改，直接告诉我：\n• "保密条款需要增加关于录音录像的说明"\n• "加入紧急联系人相关条款"\n• "把语气改得更正式一些"'
-    },
-  ]);
-  const [input, setInput] = useState('');
-
-  const isPending = createTemplate.isPending || updateTemplate.isPending;
-
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-  }, [messages]);
-
-  const handleSend = () => {
-    const text = input.trim();
-    if (!text || chatMutation.isPending) return;
-    const userMsg: ChatMsg = { role: 'user', content: text };
-    const updated = [...messages, userMsg];
-    setMessages(updated);
-    setInput('');
-
-    // Include current content as context for AI
-    const contextMsg = { role: 'user' as const, content: `当前协议内容如下：\n\n${content}` };
-    const apiMessages = [contextMsg, ...updated.map((m) => ({ role: m.role, content: m.content }))];
-
-    chatMutation.mutate({ messages: apiMessages }, {
-      onSuccess: (data) => {
-        if (data.type === 'agreement') {
-          setMessages((prev) => [...prev, { role: 'assistant', content: data.summary }]);
-          // Update the editable content with AI's revision
-          setContent(data.agreement.content);
-          if (data.agreement.title) setTitle(data.agreement.title);
-          if (data.agreement.consentType) setConsentType(data.agreement.consentType);
-        } else {
-          setMessages((prev) => [...prev, { role: 'assistant', content: data.content }]);
-        }
-      },
-      onError: () => setMessages((prev) => [...prev, { role: 'assistant', content: '抱歉，AI 服务暂时不可用。' }]),
-    });
-  };
-
-  const handleSave = async () => {
-    if (!title.trim() || !content.trim()) return;
-    try {
-      if (editingTemplate) {
-        await updateTemplate.mutateAsync({
-          templateId: editingTemplate.id,
-          title, consentType, content,
-        });
-        toast('协议模板已更新', 'success');
-      } else {
-        await createTemplate.mutateAsync({ title, consentType, content });
-        toast('协议模板已创建', 'success');
-      }
-      onDone();
-    } catch {
-      toast('操作失败', 'error');
-    }
-  };
-
-  return (
-    <div className="flex -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
-      {/* LEFT: AI Chat panel */}
-      <div className="w-[420px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-          <button onClick={onDone} className="text-slate-400 hover:text-slate-600">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <Sparkles className="w-5 h-5 text-amber-500" />
-          <h3 className="font-bold text-slate-900">
-            {editingTemplate ? '编辑协议' : '新建协议'}
-          </h3>
-        </div>
-
-        {/* Chat messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm ${
-                msg.role === 'user' ? 'bg-brand-600 text-white rounded-br-md' : 'bg-slate-100 text-slate-700 rounded-bl-md'
-              }`}>
-                <div className="whitespace-pre-wrap">{msg.content}</div>
-              </div>
-            </div>
-          ))}
-          {chatMutation.isPending && (
-            <div className="flex justify-start">
-              <div className="bg-slate-100 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm text-slate-500 flex items-center gap-2">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> 思考中...
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Settings collapsible */}
-        <div className="border-t border-slate-100">
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="w-full px-5 py-2.5 flex items-center justify-between text-xs text-slate-500 hover:bg-slate-50"
-          >
-            <span className="font-medium">模板设置</span>
-            <svg className={`w-4 h-4 transition-transform ${showSettings ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-          {showSettings && (
-            <div className="px-5 pb-4 space-y-3">
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">模板标题 *</label>
-                <input value={title} onChange={(e) => setTitle(e.target.value)}
-                  placeholder="如：咨询知情同意书"
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-              </div>
-              <div>
-                <label className="block text-xs text-slate-500 mb-1">协议类型 *</label>
-                <select value={consentType} onChange={(e) => setConsentType(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500">
-                  {Object.entries(consentTypeLabels).map(([v, l]) => (
-                    <option key={v} value={v}>{l}</option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Chat input */}
-        <div className="px-4 py-3 border-t border-slate-100">
-          <div className="flex gap-2">
-            <input value={input} onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-              placeholder="让 AI 帮你修改协议内容..." disabled={chatMutation.isPending}
-              className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white" />
-            <button onClick={handleSend} disabled={chatMutation.isPending || !input.trim()}
-              className="px-4 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-500 disabled:opacity-50">
-              <Send className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* RIGHT: Editable content */}
-      <div className="flex-1 flex flex-col bg-slate-50">
-        {/* Header with save actions */}
-        <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200">
-          <div className="flex items-center gap-3">
-            <FileText className="w-5 h-5 text-brand-500" />
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">{title || '未命名协议'}</h3>
-              <span className="text-xs text-slate-400">
-                {consentTypeLabels[consentType] || consentType} · {content.length} 字
-              </span>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={onDone}
-              className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50">
-              取消
-            </button>
-            <button onClick={handleSave} disabled={isPending || !title.trim() || !content.trim()}
-              className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-500 disabled:opacity-50 flex items-center gap-1.5">
-              {isPending
-                ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 保存中...</>
-                : <><Check className="w-3.5 h-3.5" /> {editingTemplate ? '更新' : '保存'}</>
-              }
-            </button>
-          </div>
-        </div>
-
-        {/* Editable document */}
-        <div className="flex-1 overflow-y-auto px-6 py-6">
-          <div className="max-w-2xl mx-auto">
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-              <textarea
-                value={content} onChange={(e) => setContent(e.target.value)}
-                placeholder="输入协议完整内容..."
-                className="w-full px-8 py-8 text-sm text-slate-700 leading-relaxed rounded-xl focus:outline-none resize-none"
-                style={{ minHeight: 'calc(100vh - 14rem)' }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Agreement Importer (Text Import + AI Extract) ───────────────
 
-function AgreementImporter({ onClose, onEditResult }: {
+function AgreementImporter({ onClose, onCreated }: {
   onClose: () => void;
-  onEditResult: (data: PrefillData) => void;
+  onCreated: (templateId: string) => void;
 }) {
   const { toast } = useToast();
   const extractAgreement = useExtractAgreement();
+  const createTemplate = useCreateConsentTemplate();
   const [text, setText] = useState('');
   const [result, setResult] = useState<{ title: string; consentType: string; content: string; sections: { heading: string; body: string }[] } | null>(null);
 
@@ -387,10 +171,26 @@ function AgreementImporter({ onClose, onEditResult }: {
     });
   };
 
+  const handleSave = () => {
+    if (!result) return;
+    createTemplate.mutate(
+      { title: result.title, consentType: result.consentType, content: result.content },
+      {
+        onSuccess: (created: any) => {
+          toast('协议导入成功', 'success');
+          onCreated(created.id);
+        },
+        onError: () => toast('保存失败', 'error'),
+      },
+    );
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600"><ArrowLeft className="w-5 h-5" /></button>
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
         <Sparkles className="w-5 h-5 text-amber-500" />
         <h3 className="text-lg font-bold text-slate-900">文本导入协议</h3>
       </div>
@@ -401,13 +201,28 @@ function AgreementImporter({ onClose, onEditResult }: {
             <p className="font-medium mb-1">粘贴协议文本，AI 会自动识别结构</p>
             <p className="text-amber-600">支持：知情同意书、数据采集协议、研究参与协议等</p>
           </div>
-          <textarea value={text} onChange={(e) => setText(e.target.value)}
-            rows={12} placeholder="在此粘贴协议文本..."
-            className="w-full border border-slate-200 rounded-xl p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-500" />
+          <textarea
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            rows={12}
+            placeholder="在此粘贴协议文本..."
+            className="w-full border border-slate-200 rounded-xl p-4 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-brand-500"
+          />
           <div className="flex justify-end">
-            <button onClick={handleExtract} disabled={!text.trim() || extractAgreement.isPending}
-              className="px-5 py-2.5 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50 flex items-center gap-1.5">
-              {extractAgreement.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> AI 识别中...</> : <><Sparkles className="w-4 h-4" /> 开始识别</>}
+            <button
+              onClick={handleExtract}
+              disabled={!text.trim() || extractAgreement.isPending}
+              className="px-5 py-2.5 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50 flex items-center gap-1.5"
+            >
+              {extractAgreement.isPending ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" /> AI 识别中...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4" /> 开始识别
+                </>
+              )}
             </button>
           </div>
         </div>
@@ -419,9 +234,18 @@ function AgreementImporter({ onClose, onEditResult }: {
               <span className="text-sm font-semibold">识别完成，请确认</span>
             </div>
             <div className="bg-slate-50 rounded-lg p-4 space-y-2">
-              <div><span className="text-xs text-slate-400">标题</span><p className="text-sm font-semibold text-slate-900">{result.title}</p></div>
-              <div><span className="text-xs text-slate-400">类型</span><p className="text-sm text-slate-700">{consentTypeLabels[result.consentType] || result.consentType}</p></div>
-              <div><span className="text-xs text-slate-400">章节数</span><p className="text-sm text-slate-700">{result.sections.length} 个章节</p></div>
+              <div>
+                <span className="text-xs text-slate-400">标题</span>
+                <p className="text-sm font-semibold text-slate-900">{result.title}</p>
+              </div>
+              <div>
+                <span className="text-xs text-slate-400">类型</span>
+                <p className="text-sm text-slate-700">{consentTypeLabels[result.consentType] || result.consentType}</p>
+              </div>
+              <div>
+                <span className="text-xs text-slate-400">章节数</span>
+                <p className="text-sm text-slate-700">{result.sections.length} 个章节</p>
+              </div>
             </div>
             {result.sections.length > 0 && (
               <div>
@@ -441,12 +265,18 @@ function AgreementImporter({ onClose, onEditResult }: {
             </div>
           </div>
           <div className="flex gap-3 justify-end">
-            <button onClick={() => setResult(null)} className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">重新识别</button>
             <button
-              onClick={() => onEditResult({ title: result.title, consentType: result.consentType, content: result.content })}
-              className="px-5 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 flex items-center gap-1.5"
+              onClick={() => setResult(null)}
+              className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
             >
-              <Edit3 className="w-4 h-4" /> 编辑并保存
+              重新识别
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={createTemplate.isPending}
+              className="px-5 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50"
+            >
+              {createTemplate.isPending ? '保存中...' : '确认导入'}
             </button>
           </div>
         </div>
@@ -455,11 +285,11 @@ function AgreementImporter({ onClose, onEditResult }: {
   );
 }
 
-// ─── Agreement AI Creator (Split Pane: Chat + Document) ──────────
+// ─── Agreement AI Creator (chat → save → detail) ─────────────────
 
-function AgreementAICreator({ onClose, onEditAgreement }: {
+function AgreementAICreator({ onClose, onCreated }: {
   onClose: () => void;
-  onEditAgreement: (data: PrefillData) => void;
+  onCreated: (templateId: string) => void;
 }) {
   const { toast } = useToast();
   const chatMutation = useCreateAgreementChat();
@@ -467,10 +297,14 @@ function AgreementAICreator({ onClose, onEditAgreement }: {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const [messages, setMessages] = useState<ChatMsg[]>([
-    { role: 'assistant', content: '你好！我可以帮你生成专业的协议模板。\n\n请问你需要什么类型的协议？比如：\n• 咨询知情同意书\n• 数据采集同意书\n• AI辅助分析同意书\n• 研究参与同意书' },
+    {
+      role: 'assistant',
+      content:
+        '你好！我可以帮你生成专业的协议模板。\n\n请问你需要什么类型的协议？比如：\n• 咨询知情同意书\n• 数据采集同意书\n• AI辅助分析同意书\n• 研究参与同意书',
+    },
   ]);
   const [input, setInput] = useState('');
-  const [currentAgreement, setCurrentAgreement] = useState<PrefillData | null>(null);
+  const [currentAgreement, setCurrentAgreement] = useState<{ title: string; consentType: string; content: string } | null>(null);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -499,119 +333,80 @@ function AgreementAICreator({ onClose, onEditAgreement }: {
     });
   };
 
-  const handleSaveDirectly = () => {
+  const handleSaveAndEdit = () => {
     if (!currentAgreement) return;
-    createTemplate.mutate({ ...currentAgreement }, {
-      onSuccess: () => toast('协议模板已保存', 'success'),
+    createTemplate.mutate(currentAgreement, {
+      onSuccess: (created: any) => {
+        toast('协议已保存', 'success');
+        onCreated(created.id);
+      },
       onError: () => toast('保存失败', 'error'),
     });
   };
 
   return (
-    <div className="flex -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
-      {/* LEFT: Chat panel */}
-      <div className="w-[420px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
-        {/* Header */}
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <Sparkles className="w-5 h-5 text-amber-500" />
-          <h3 className="font-bold text-slate-900">AI 生成协议</h3>
-        </div>
-
-        {/* Messages */}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-          {messages.map((msg, i) => (
-            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[90%] rounded-2xl px-4 py-2.5 text-sm ${
-                msg.role === 'user' ? 'bg-brand-600 text-white rounded-br-md' : 'bg-slate-100 text-slate-700 rounded-bl-md'
-              }`}>
-                <div className="whitespace-pre-wrap">{msg.content}</div>
-              </div>
-            </div>
-          ))}
-          {chatMutation.isPending && (
-            <div className="flex justify-start">
-              <div className="bg-slate-100 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm text-slate-500 flex items-center gap-2">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" /> 思考中...
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Input */}
-        <div className="px-4 py-3 border-t border-slate-100">
-          <div className="flex gap-2">
-            <input value={input} onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
-              placeholder="描述你需要的协议或修改要求..." disabled={chatMutation.isPending}
-              className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500 bg-white" />
-            <button onClick={handleSend} disabled={chatMutation.isPending || !input.trim()}
-              className="px-4 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-500 disabled:opacity-50">
-              <Send className="w-4 h-4" />
-            </button>
-          </div>
-        </div>
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 14rem)' }}>
+      <div className="flex items-center gap-3 mb-4">
+        <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+        <Sparkles className="w-5 h-5 text-amber-500" />
+        <h3 className="text-lg font-bold text-slate-900">AI 生成协议</h3>
       </div>
 
-      {/* RIGHT: Document panel */}
-      <div className="flex-1 flex flex-col bg-slate-50">
-        {/* Document header */}
-        {currentAgreement ? (
-          <>
-            <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-slate-200">
-              <div className="flex items-center gap-3">
-                <FileText className="w-5 h-5 text-brand-500" />
-                <div>
-                  <h3 className="text-sm font-semibold text-slate-900">{currentAgreement.title}</h3>
-                  <span className="text-xs text-slate-400">
-                    {consentTypeLabels[currentAgreement.consentType] || currentAgreement.consentType} · AI 生成
-                  </span>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={() => onEditAgreement(currentAgreement)}
-                  className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium hover:bg-slate-50 flex items-center gap-1.5">
-                  <Edit3 className="w-3.5 h-3.5" /> 编辑
-                </button>
-                <button onClick={handleSaveDirectly} disabled={createTemplate.isPending}
-                  className="px-3 py-1.5 bg-brand-600 text-white rounded-lg text-xs font-medium hover:bg-brand-500 disabled:opacity-50 flex items-center gap-1.5">
-                  {createTemplate.isPending
-                    ? <><Loader2 className="w-3.5 h-3.5 animate-spin" /> 保存中...</>
-                    : <><Check className="w-3.5 h-3.5" /> 保存为模板</>
-                  }
-                </button>
-              </div>
+      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-3 mb-4">
+        {messages.map((msg, i) => (
+          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
+              msg.role === 'user' ? 'bg-brand-600 text-white rounded-br-md' : 'bg-slate-100 text-slate-700 rounded-bl-md'
+            }`}>
+              <div className="whitespace-pre-wrap">{msg.content}</div>
             </div>
-
-            {/* Document body */}
-            <div className="flex-1 overflow-y-auto px-6 py-6">
-              <div className="max-w-2xl mx-auto">
-                <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-                  <div className="text-center py-8 px-8 border-b border-slate-100">
-                    <h1 className="text-xl font-bold text-slate-900">{currentAgreement.title}</h1>
-                    <p className="text-xs text-slate-400 mt-2">
-                      {consentTypeLabels[currentAgreement.consentType] || currentAgreement.consentType}
-                    </p>
-                  </div>
-                  <div className="px-8 py-6 text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
-                    {currentAgreement.content}
-                  </div>
-                </div>
+          </div>
+        ))}
+        {currentAgreement && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%] rounded-2xl rounded-bl-md px-4 py-3 bg-white border border-amber-200">
+              <div className="text-xs font-semibold text-amber-700 mb-1">已生成协议草稿</div>
+              <div className="text-sm font-medium text-slate-900 mb-1">{currentAgreement.title}</div>
+              <div className="text-xs text-slate-500 mb-2">
+                {consentTypeLabels[currentAgreement.consentType] || currentAgreement.consentType} · {currentAgreement.content.length} 字
               </div>
-            </div>
-          </>
-        ) : (
-          /* Empty state */
-          <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <FileText className="w-12 h-12 text-slate-200 mx-auto mb-3" />
-              <p className="text-sm text-slate-400">在左侧对话中描述你需要的协议</p>
-              <p className="text-xs text-slate-300 mt-1">AI 生成后，文稿将在这里展示</p>
+              <button
+                onClick={handleSaveAndEdit}
+                disabled={createTemplate.isPending}
+                className="px-3 py-1.5 bg-green-600 text-white rounded-lg text-xs font-medium hover:bg-green-500 disabled:opacity-50"
+              >
+                {createTemplate.isPending ? '保存中...' : '保存并进入编辑'}
+              </button>
             </div>
           </div>
         )}
+        {chatMutation.isPending && (
+          <div className="flex justify-start">
+            <div className="bg-slate-100 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm text-slate-500 flex items-center gap-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" /> 思考中...
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="flex gap-2">
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), handleSend())}
+          placeholder="描述你需要的协议..."
+          disabled={chatMutation.isPending}
+          className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+        />
+        <button
+          onClick={handleSend}
+          disabled={chatMutation.isPending || !input.trim()}
+          className="px-4 py-2.5 bg-brand-600 text-white rounded-xl hover:bg-brand-500 disabled:opacity-50"
+        >
+          <Send className="w-4 h-4" />
+        </button>
       </div>
     </div>
   );

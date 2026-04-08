@@ -65,6 +65,29 @@ export function useCreateScale() {
   });
 }
 
+export interface UpdateScaleDimensionInput {
+  name: string;
+  description?: string;
+  calculationMethod?: string;
+  sortOrder?: number;
+  rules?: {
+    minScore: number;
+    maxScore: number;
+    label: string;
+    description?: string;
+    advice?: string;
+    riskLevel?: string;
+  }[];
+}
+
+export interface UpdateScaleItemInput {
+  text: string;
+  dimensionIndex: number;
+  isReverseScored?: boolean;
+  options: { label: string; value: number }[];
+  sortOrder?: number;
+}
+
 export function useUpdateScale() {
   const qc = useQueryClient();
   return useMutation({
@@ -74,6 +97,8 @@ export function useUpdateScale() {
       instructions: string;
       scoringMode: string;
       isPublic: boolean;
+      dimensions: UpdateScaleDimensionInput[];
+      items: UpdateScaleItemInput[];
     }>) => api.patch<Scale>(`${orgPrefix()}/scales/${scaleId}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scales'] });

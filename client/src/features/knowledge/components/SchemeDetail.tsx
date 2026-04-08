@@ -233,9 +233,9 @@ export function SchemeDetail({ schemeId, onBack, initialEditing = false }: Props
   const activeSessionIndex = activeTab === 'overview' ? null : activeTab;
 
   return (
-    <div className="flex -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
-      {/* LEFT: AI Chat panel */}
-      <div className="w-[420px] flex-shrink-0 border-r border-slate-200 bg-white flex flex-col">
+    <div className="flex flex-row-reverse -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
+      {/* RIGHT: AI Chat panel (rendered first, appears on the right via flex-row-reverse) */}
+      <div className="w-[420px] flex-shrink-0 border-l border-slate-200 bg-white flex flex-col">
         {/* Header */}
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
           <button onClick={onBack} className="text-slate-400 hover:text-slate-600">
@@ -253,8 +253,8 @@ export function SchemeDetail({ schemeId, onBack, initialEditing = false }: Props
           onApplySession={applySessionChange} />
       </div>
 
-      {/* RIGHT: Tabbed content */}
-      <div className="flex-1 flex flex-col bg-slate-50">
+      {/* LEFT: Tabbed content (rendered second, appears on the left via flex-row-reverse) */}
+      <div className="flex-1 flex flex-col bg-slate-50 min-w-0">
         {/* Top bar with tabs + actions */}
         <div className="flex items-center justify-between px-4 py-2.5 bg-white border-b border-slate-200 flex-shrink-0">
           {/* Tab bar */}

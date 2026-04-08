@@ -35,7 +35,7 @@ interface ChatMessage {
 
 interface Props {
   onClose: () => void;
-  onEditScale: (data: ScaleData) => void;
+  onCreated: (scaleId: string) => void;
 }
 
 const WELCOME_MESSAGE: ChatMessage = {
@@ -44,7 +44,7 @@ const WELCOME_MESSAGE: ChatMessage = {
     '你好！我是你的量表编制助手，可以帮你从零创建一份专业的心理测评量表。\n\n请告诉我你想创建什么样的量表？比如：\n- 你想测量什么心理特质或状态？\n- 目标人群是谁？\n- 在什么场景下使用？',
 };
 
-export function AIScaleCreator({ onClose, onEditScale }: Props) {
+export function AIScaleCreator({ onClose, onCreated }: Props) {
   const { toast } = useToast();
   const chatMutation = useCreateScaleChat();
   const createScale = useCreateScale();
@@ -109,7 +109,7 @@ export function AIScaleCreator({ onClose, onEditScale }: Props) {
     );
   };
 
-  const handleSaveDirectly = (scaleData: ScaleData) => {
+  const handleSaveAndEdit = (scaleData: ScaleData) => {
     createScale.mutate(
       {
         title: scaleData.title,
@@ -132,9 +132,9 @@ export function AIScaleCreator({ onClose, onEditScale }: Props) {
         })),
       },
       {
-        onSuccess: () => {
-          toast('量表创建成功', 'success');
-          onClose();
+        onSuccess: (created: any) => {
+          toast('量表已创建', 'success');
+          onCreated(created.id);
         },
         onError: () => {
           toast('保存失败，请重试', 'error');
@@ -229,18 +229,12 @@ export function AIScaleCreator({ onClose, onEditScale }: Props) {
                   )}
                   <div className="flex gap-2 pt-2">
                     <button
-                      onClick={() => onEditScale(msg.scaleData!)}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition"
+                      onClick={() => handleSaveAndEdit(msg.scaleData!)}
+                      disabled={createScale.isPending}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition disabled:opacity-50"
                     >
                       <Edit3 className="w-3.5 h-3.5" />
-                      编辑并保存
-                    </button>
-                    <button
-                      onClick={() => handleSaveDirectly(msg.scaleData!)}
-                      disabled={createScale.isPending}
-                      className="px-4 py-2 bg-white border border-slate-200 text-slate-700 rounded-lg text-sm font-medium hover:bg-slate-50 transition disabled:opacity-50"
-                    >
-                      {createScale.isPending ? '保存中...' : '直接保存'}
+                      {createScale.isPending ? '创建中...' : '保存并进入编辑'}
                     </button>
                   </div>
                 </div>
