@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useCounselors, useCreateAppointmentRequest } from '../../../api/useClientPortal';
-import { useAvailableSlots } from '../../../api/useAvailability';
-import { PageLoading, EmptyState, useToast } from '../../../shared/components';
+import { useCounselors, useCreateAppointmentRequest } from '@client/api/useClientPortal';
+import { useAvailableSlots } from '@client/api/useAvailability';
+import { PageLoading, EmptyState, useToast } from '@client/shared/components';
 
 type Step = 'counselor' | 'datetime' | 'details' | 'done';
 

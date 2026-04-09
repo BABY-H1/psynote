@@ -2,10 +2,11 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../config/database.js';
 import { queryClient } from '../config/database.js';
-import { orgMembers } from '../db/schema.js';
+import { orgMembers, organizations } from '../db/schema.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { env } from '../config/env.js';
-import type { OrgRole } from '@psynote/shared';
+import type { OrgRole, OrgTier } from '@psynote/shared';
+import { planToTier } from '@psynote/shared';
 
 export interface OrgContext {
   orgId: string;
@@ -14,6 +15,8 @@ export interface OrgContext {
   supervisorId: string | null;
   fullPracticeAccess: boolean;
   superviseeUserIds: string[];
+  /** Phase 7a — mapped from organizations.plan at the start of each request */
+  tier: OrgTier;
 }
 
 declare module 'fastify' {
@@ -37,8 +40,14 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     throw new ForbiddenError('Authentication required before org context');
   }
 
-  // System admin bypass: full access to any org without membership
+  // System admin bypass: full access to any org without membership.
+  // Still load the org row so we know its tier (system admins see the real tier).
   if (request.user?.isSystemAdmin) {
+    const [orgRow] = await db
+      .select({ plan: organizations.plan })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
     request.org = {
       orgId,
       role: 'org_admin',
@@ -46,6 +55,7 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
       supervisorId: null,
       fullPracticeAccess: true,
       superviseeUserIds: [],
+      tier: planToTier(orgRow?.plan),
     };
     await queryClient`SELECT set_config('app.current_org_id', ${orgId}, true)`;
     await queryClient`SELECT set_config('app.current_user_id', ${userId}, true)`;
@@ -66,6 +76,11 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
   // Dev mode: if no membership found, use dev role header
   if (!member && env.NODE_ENV === 'development') {
     const devRole = (request.headers['x-dev-role'] as string) || 'counselor';
+    const [orgRow] = await db
+      .select({ plan: organizations.plan })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
     request.org = {
       orgId,
       role: devRole as OrgRole,
@@ -73,6 +88,7 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
       supervisorId: null,
       fullPracticeAccess: devRole === 'org_admin',
       superviseeUserIds: [],
+      tier: planToTier(orgRow?.plan),
     };
     await queryClient`SELECT set_config('app.current_org_id', ${orgId}, true)`;
     await queryClient`SELECT set_config('app.current_user_id', ${userId}, true)`;
@@ -102,6 +118,14 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     superviseeUserIds = supervisees.map((s) => s.userId);
   }
 
+  // Load the org's plan → tier. Piggybacks on the membership query shape; this
+  // is a single extra row lookup that's cheap and fully cacheable by Postgres.
+  const [orgRow] = await db
+    .select({ plan: organizations.plan })
+    .from(organizations)
+    .where(eq(organizations.id, orgId))
+    .limit(1);
+
   request.org = {
     orgId,
     role: member.role as OrgRole,
@@ -109,6 +133,7 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     supervisorId: member.supervisorId ?? null,
     fullPracticeAccess: member.fullPracticeAccess ?? (member.role === 'org_admin'),
     superviseeUserIds,
+    tier: planToTier(orgRow?.plan),
   };
 
   // Set PostgreSQL session variables for RLS

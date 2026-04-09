@@ -7,7 +7,13 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      // Phase 8a — @client/* alias used by @psynote/client-portal when it
+      // imports back into client/src. The portal's own tsconfig has a
+      // matching alias that resolves against ../../client/src; the copy here
+      // is needed so the client's tsc process also resolves this token when
+      // it follows the import graph through node_modules/@psynote/client-portal.
+      "@client/*": ["./src/*"]
     }
   },
   "include": ["src"],

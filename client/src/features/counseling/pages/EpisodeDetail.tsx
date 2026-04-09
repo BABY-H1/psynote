@@ -13,13 +13,49 @@ import { ChatWorkspace, type WorkMode } from '../components/ChatWorkspace';
 import { OutputPanel } from '../components/OutputPanel';
 import { LeftPanel } from '../components/LeftPanel';
 
-import { PageLoading, useToast } from '../../../shared/components';
-import { ArrowLeft, RotateCcw } from 'lucide-react';
-import type { SessionNote } from '@psynote/shared';
+import {
+  PageLoading,
+  useToast,
+  ServiceDetailLayout,
+} from '../../../shared/components';
+import { RotateCcw } from 'lucide-react';
+import type { SessionNote, ServiceStatus } from '@psynote/shared';
 
-const statusLabels: Record<string, string> = {
-  active: '进行中', paused: '暂停', closed: '已结案', archived: '已归档',
+/**
+ * Phase 4d — EpisodeDetail wrapped in `<ServiceDetailLayout variant="workspace">`.
+ *
+ * MINIMUM-DISTURBANCE migration:
+ *  - The 3-column workspace (LeftPanel / ChatWorkspace / OutputPanel) is
+ *    rendered EXACTLY as before. Zero modifications to those component calls.
+ *  - The previous inline top banner is removed; the back button, title, status
+ *    pill, and action buttons (结案 / 重新开启) are all moved into the
+ *    `ServiceDetailLayout` chrome.
+ *  - Status text/colors preserved via `statusText`/`statusClassName` overrides
+ *    so counseling-specific labels (已结案, etc.) remain the same.
+ *  - Hooks order is preserved: all `useMemo` calls run before the early return.
+ */
+
+const STATUS_TONE: Record<string, { text: string; cls: string }> = {
+  active: { text: '进行中', cls: 'bg-blue-50 text-blue-700' },
+  paused: { text: '暂停', cls: 'bg-yellow-50 text-yellow-700' },
+  closed: { text: '已结案', cls: 'bg-slate-100 text-slate-500' },
+  archived: { text: '已归档', cls: 'bg-slate-100 text-slate-400' },
 };
+
+function mapEpisodeStatus(s: string): ServiceStatus {
+  switch (s) {
+    case 'active':
+      return 'ongoing';
+    case 'paused':
+      return 'paused';
+    case 'closed':
+      return 'closed';
+    case 'archived':
+      return 'archived';
+    default:
+      return 'draft';
+  }
+}
 
 export function EpisodeDetail() {
   const { episodeId } = useParams<{ episodeId: string }>();
@@ -95,21 +131,21 @@ export function EpisodeDetail() {
   const lastNote = sessionNotes?.[0];
   const presentingIssues = (profile?.presentingIssues as string[]) || [];
 
+  const tone = STATUS_TONE[episode.status] || STATUS_TONE.active;
+
   return (
-    <>
-      {/* Top banner */}
-      <div className="bg-white border-b border-slate-200 px-4 py-2 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <button onClick={() => navigate('/episodes')} className="text-slate-400 hover:text-slate-600">
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-          <span className="text-sm font-bold text-slate-900">{episode.client?.name || '未知'}</span>
-          <span className="text-xs text-slate-400">{statusLabels[episode.status]}</span>
-          {episode.chiefComplaint && (
-            <span className="text-xs text-slate-500 hidden md:inline">— {episode.chiefComplaint}</span>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
+    <ServiceDetailLayout
+      variant="workspace"
+      title={episode.client?.name || '未知来访者'}
+      status={mapEpisodeStatus(episode.status)}
+      statusText={tone.text}
+      statusClassName={tone.cls}
+      metaLine={
+        episode.chiefComplaint ? <span>{episode.chiefComplaint}</span> : undefined
+      }
+      onBack={() => navigate('/episodes')}
+      actions={
+        <>
           {episode.status === 'active' && (
             <button
               onClick={async () => {
@@ -118,7 +154,7 @@ export function EpisodeDetail() {
                   toast('已结案', 'success');
                 }
               }}
-              className="px-3 py-1 border border-slate-200 rounded text-xs text-slate-600 hover:bg-slate-50"
+              className="px-3 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50"
             >
               结案
             </button>
@@ -127,14 +163,14 @@ export function EpisodeDetail() {
             <button
               onClick={async () => { await reopenEpisode.mutateAsync(episode.id); toast('已重新开启', 'success'); }}
               disabled={reopenEpisode.isPending}
-              className="px-3 py-1 border border-brand-200 rounded text-xs text-brand-600 hover:bg-brand-50 flex items-center gap-1"
+              className="px-3 py-2 border border-brand-200 rounded-lg text-sm text-brand-600 hover:bg-brand-50 flex items-center gap-1"
             >
-              <RotateCcw className="w-3 h-3" /> 重新开启
+              <RotateCcw className="w-4 h-4" /> 重新开启
             </button>
           )}
-        </div>
-      </div>
-
+        </>
+      }
+    >
       <WorkspaceLayout
         left={
           <LeftPanel
@@ -194,6 +230,6 @@ export function EpisodeDetail() {
           />
         }
       />
-    </>
+    </ServiceDetailLayout>
   );
 }

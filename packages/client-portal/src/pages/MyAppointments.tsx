@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useMyAppointments } from '../../../api/useClientPortal';
-import { PageLoading, EmptyState, StatusBadge } from '../../../shared/components';
+import { useMyAppointments } from '@client/api/useClientPortal';
+import { PageLoading, EmptyState, StatusBadge } from '@client/shared/components';
 
 const statusMap: Record<string, { label: string; variant: 'yellow' | 'blue' | 'green' | 'slate' | 'red' }> = {
   pending: { label: '待确认', variant: 'yellow' },

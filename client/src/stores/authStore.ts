@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User, OrgRole } from '@psynote/shared';
+import type { User, OrgRole, OrgTier } from '@psynote/shared';
 import { api } from '../api/client';
 
 interface AuthState {
@@ -9,10 +9,12 @@ interface AuthState {
   refreshToken: string | null;
   currentOrgId: string | null;
   currentRole: OrgRole | null;
+  /** Phase 7a — SaaS tier of the current org (solo|team|enterprise|platform) */
+  currentOrgTier: OrgTier | null;
   isSystemAdmin: boolean;
   _hydrated: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string, isSystemAdmin?: boolean) => void;
-  setOrg: (orgId: string, role: OrgRole) => void;
+  setOrg: (orgId: string, role: OrgRole, tier?: OrgTier) => void;
   updateTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
 }
@@ -25,17 +27,26 @@ export const useAuthStore = create<AuthState>()(
       refreshToken: null,
       currentOrgId: null,
       currentRole: null,
+      currentOrgTier: null,
       isSystemAdmin: false,
       _hydrated: false,
 
       setAuth: (user, accessToken, refreshToken, isSystemAdmin = false) => {
         api.setToken(accessToken);
-        // Clear org/role so OrgSelector re-fetches for the new user
-        set({ user, accessToken, refreshToken, currentOrgId: null, currentRole: null, isSystemAdmin });
+        // Clear org/role/tier so OrgSelector re-fetches for the new user
+        set({
+          user,
+          accessToken,
+          refreshToken,
+          currentOrgId: null,
+          currentRole: null,
+          currentOrgTier: null,
+          isSystemAdmin,
+        });
       },
 
-      setOrg: (orgId, role) => {
-        set({ currentOrgId: orgId, currentRole: role });
+      setOrg: (orgId, role, tier) => {
+        set({ currentOrgId: orgId, currentRole: role, currentOrgTier: tier ?? null });
       },
 
       updateTokens: (accessToken, refreshToken) => {
@@ -51,6 +62,7 @@ export const useAuthStore = create<AuthState>()(
           refreshToken: null,
           currentOrgId: null,
           currentRole: null,
+          currentOrgTier: null,
           isSystemAdmin: false,
         });
       },
@@ -63,6 +75,7 @@ export const useAuthStore = create<AuthState>()(
         refreshToken: state.refreshToken,
         currentOrgId: state.currentOrgId,
         currentRole: state.currentRole,
+        currentOrgTier: state.currentOrgTier,
         isSystemAdmin: state.isSystemAdmin,
       }),
       onRehydrateStorage: () => (state) => {

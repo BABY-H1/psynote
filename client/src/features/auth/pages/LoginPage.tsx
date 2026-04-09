@@ -51,12 +51,13 @@ export function LoginPage() {
         return;
       }
 
-      // Fetch user's orgs to get role
-      const orgs = await api.get<{ id: string; myRole: string }[]>('/orgs');
+      // Fetch user's orgs to get role + plan (for tier)
+      const orgs = await api.get<{ id: string; myRole: string; plan?: string }[]>('/orgs');
 
       if (orgs.length > 0) {
         const { setOrg } = useAuthStore.getState();
-        setOrg(orgs[0].id, orgs[0].myRole as any);
+        const { planToTier } = await import('@psynote/shared');
+        setOrg(orgs[0].id, orgs[0].myRole as any, planToTier(orgs[0].plan));
       }
 
       // Navigate based on role

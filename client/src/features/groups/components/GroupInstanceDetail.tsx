@@ -1,28 +1,64 @@
 import React, { useState } from 'react';
 import { useGroupInstance, useUpdateGroupInstance } from '../../../api/useGroups';
-import { ArrowLeft, LayoutDashboard, Users, ListChecks, BarChart3 } from 'lucide-react';
-import { PageLoading, useToast } from '../../../shared/components';
+import {
+  PageLoading,
+  useToast,
+  ServiceDetailLayout,
+  ServiceTabBar,
+  type ServiceTab,
+} from '../../../shared/components';
+import type { GroupInstance, ServiceStatus } from '@psynote/shared';
 import { OverviewTab } from './detail/OverviewTab';
 import { MembersTab } from './detail/MembersTab';
 import { SessionsTab } from './detail/SessionsTab';
 import { ReportsTab } from './detail/ReportsTab';
 
-const statusLabels: Record<string, { text: string; color: string }> = {
-  draft: { text: '草稿', color: 'bg-slate-100 text-slate-600' },
-  recruiting: { text: '招募中', color: 'bg-green-100 text-green-700' },
-  ongoing: { text: '进行中', color: 'bg-blue-100 text-blue-700' },
-  full: { text: '已满', color: 'bg-yellow-100 text-yellow-700' },
-  ended: { text: '已结束', color: 'bg-slate-100 text-slate-500' },
+/**
+ * Phase 4a — GroupInstanceDetail migrated to Phase 2 shared components.
+ *
+ * Visual & behavioural changes from the previous version:
+ *  - Header (back button / title / status pill / action buttons) is now provided
+ *    by `<ServiceDetailLayout variant="tabs">`.
+ *  - Tab bar uses `<ServiceTabBar>` with the 5 standard tabs, but only the 4 we
+ *    need are passed via `visibleTabs` (no "资产" tab in groups yet).
+ *  - Tab labels are localized via `labels`: 参与者 → 成员.
+ *  - "full" status keeps its yellow "已满" label via the layout's `statusText`
+ *    and `statusClassName` overrides.
+ *
+ * Behaviour preserved:
+ *  - Status transition buttons (开始招募 / 开始活动 / 结束活动)
+ *  - Tab content components (OverviewTab / MembersTab / SessionsTab / ReportsTab)
+ *    are slotted in unchanged
+ *  - Each existing tab key is mapped onto the standard ServiceTab namespace:
+ *      overview → overview
+ *      members  → participants
+ *      sessions → timeline
+ *      reports  → records
+ */
+
+const VISIBLE_TABS: ServiceTab[] = ['overview', 'participants', 'timeline', 'records'];
+const TAB_LABELS: Partial<Record<ServiceTab, string>> = {
+  participants: '成员',
+  timeline: '活动记录',
+  records: '效果报告',
 };
 
-type TabType = 'overview' | 'members' | 'sessions' | 'reports';
-
-const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
-  { key: 'overview', label: '概览', icon: <LayoutDashboard className="w-4 h-4" /> },
-  { key: 'members', label: '成员', icon: <Users className="w-4 h-4" /> },
-  { key: 'sessions', label: '活动记录', icon: <ListChecks className="w-4 h-4" /> },
-  { key: 'reports', label: '效果报告', icon: <BarChart3 className="w-4 h-4" /> },
-];
+function mapGroupStatus(s: GroupInstance['status']): ServiceStatus {
+  switch (s) {
+    case 'draft':
+      return 'draft';
+    case 'recruiting':
+      return 'recruiting';
+    case 'ongoing':
+      return 'ongoing';
+    case 'full':
+      return 'ongoing';
+    case 'ended':
+      return 'completed';
+    default:
+      return 'draft';
+  }
+}
 
 interface Props {
   instanceId: string;
@@ -33,11 +69,9 @@ export function GroupInstanceDetail({ instanceId, onClose }: Props) {
   const { data: instance, isLoading } = useGroupInstance(instanceId);
   const updateInstance = useUpdateGroupInstance();
   const { toast } = useToast();
-  const [tab, setTab] = useState<TabType>('overview');
+  const [tab, setTab] = useState<ServiceTab>('overview');
 
   if (isLoading || !instance) return <PageLoading text="加载活动详情..." />;
-
-  const st = statusLabels[instance.status] || statusLabels.draft;
 
   const handleStatusChange = (newStatus: string) => {
     updateInstance.mutate({ instanceId, status: newStatus }, {
@@ -53,26 +87,21 @@ export function GroupInstanceDetail({ instanceId, onClose }: Props) {
   };
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-slate-900">{instance.title}</h2>
-              <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${st.color}`}>{st.text}</span>
-            </div>
-            <div className="flex gap-4 mt-1 text-sm text-slate-500">
-              {instance.startDate && <span>开始: {instance.startDate}</span>}
-              {instance.location && <span>地点: {instance.location}</span>}
-              {instance.capacity && <span>容量: {instance.capacity}人</span>}
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-2">
+    <ServiceDetailLayout
+      title={instance.title}
+      status={mapGroupStatus(instance.status)}
+      statusText={instance.status === 'full' ? '已满' : undefined}
+      statusClassName={instance.status === 'full' ? 'bg-yellow-100 text-yellow-700' : undefined}
+      metaLine={
+        <>
+          {instance.startDate && <span>开始: {instance.startDate}</span>}
+          {instance.location && <span>地点: {instance.location}</span>}
+          {instance.capacity && <span>容量: {instance.capacity}人</span>}
+        </>
+      }
+      onBack={onClose}
+      actions={
+        <>
           {instance.status === 'draft' && (
             <button
               onClick={() => handleStatusChange('recruiting')}
@@ -97,32 +126,21 @@ export function GroupInstanceDetail({ instanceId, onClose }: Props) {
               结束活动
             </button>
           )}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-slate-100 rounded-xl p-1">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition ${
-              tab === t.key
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
+        </>
+      }
+      tabBar={
+        <ServiceTabBar
+          value={tab}
+          onChange={setTab}
+          visibleTabs={VISIBLE_TABS}
+          labels={TAB_LABELS}
+        />
+      }
+    >
       {tab === 'overview' && <OverviewTab instance={instance} />}
-      {tab === 'members' && <MembersTab instance={instance} />}
-      {tab === 'sessions' && <SessionsTab instance={instance} />}
-      {tab === 'reports' && <ReportsTab instance={instance} />}
-    </div>
+      {tab === 'participants' && <MembersTab instance={instance} />}
+      {tab === 'timeline' && <SessionsTab instance={instance} />}
+      {tab === 'records' && <ReportsTab instance={instance} />}
+    </ServiceDetailLayout>
   );
 }

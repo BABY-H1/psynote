@@ -1,9 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useClientDashboard, useMyTimeline } from '../../../api/useClientPortal';
-import { useMyDocuments } from '../../../api/useConsent';
-import { Timeline } from '../../counseling/components/Timeline';
-import { PageLoading, RiskBadge, EmptyState } from '../../../shared/components';
+import { useClientDashboard, useMyTimeline } from '@client/api/useClientPortal';
+import { useMyDocuments } from '@client/api/useConsent';
+import { Timeline } from '@client/features/counseling/components/Timeline';
+import { PageLoading, RiskBadge, EmptyState } from '@client/shared/components';
 import { AlertTriangle } from 'lucide-react';
 
 const riskDisplay: Record<string, { label: string; color: string; bg: string }> = {

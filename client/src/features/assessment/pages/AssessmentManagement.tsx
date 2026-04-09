@@ -1,11 +1,68 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useAssessments, useUpdateAssessment, useDeleteAssessment } from '../../../api/useAssessments';
 import { AssessmentWizard } from '../components/AssessmentWizard';
 import { AssessmentDetail } from '../components/AssessmentDetail';
-import { Search, Plus, ClipboardCheck, PauseCircle, PlayCircle, Edit3, Send, Trash2, X, Copy, Check } from 'lucide-react';
+import { Search, Plus, PauseCircle, PlayCircle, Edit3, Send, Trash2, X, Copy, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { PageLoading, EmptyState, useToast } from '../../../shared/components';
+import {
+  PageLoading,
+  useToast,
+  StatusFilterTabs,
+  CardGrid,
+  DeliveryCard,
+  EmptyCard,
+  type StatusFilterOption,
+  type DeliveryCardData,
+} from '../../../shared/components';
 import { ASSESSMENT_TYPE_LABELS } from '../constants';
+import type { Assessment, ServiceStatus } from '@psynote/shared';
+
+/**
+ * Phase 4c — AssessmentManagement migrated to Phase 2 shared components.
+ *
+ *  - Status filter row → `<StatusFilterTabs>` with count badges
+ *  - Card layout → `<CardGrid>` + `<DeliveryCard>` (actions slot)
+ *  - Empty state → `<EmptyCard>`
+ *  - `ShareModal` and view-switching logic preserved
+ *
+ * Status mapping:
+ *   `(status, isActive)` is a tuple in the DB. We collapse it into a synthetic
+ *   "logical status" key used both for filtering and for ServiceStatus mapping:
+ *
+ *     status='draft'                          → 'draft'    → ServiceStatus.draft    (yellow override)
+ *     status='archived'                       → 'archived' → ServiceStatus.archived (default)
+ *     status≠'draft' && isActive===true       → 'active'   → ServiceStatus.ongoing  (green override)
+ *     status≠'draft' && isActive===false      → 'paused'   → ServiceStatus.paused   (slate override + "已停用")
+ */
+
+type LogicalStatus = 'draft' | 'active' | 'paused' | 'archived';
+
+function getLogicalStatus(a: Assessment): LogicalStatus {
+  if (a.status === 'draft') return 'draft';
+  if (a.status === 'archived') return 'archived';
+  return a.isActive ? 'active' : 'paused';
+}
+
+function mapToServiceStatus(ls: LogicalStatus): ServiceStatus {
+  switch (ls) {
+    case 'draft':
+      return 'draft';
+    case 'archived':
+      return 'archived';
+    case 'active':
+      return 'ongoing';
+    case 'paused':
+      return 'paused';
+  }
+}
+
+/** Per-status label + className overrides preserving the original assessment palette. */
+const STATUS_OVERRIDE: Record<LogicalStatus, { text: string; cls: string }> = {
+  draft: { text: '草稿', cls: 'bg-yellow-100 text-yellow-700' },
+  active: { text: '进行中', cls: 'bg-green-100 text-green-700' },
+  paused: { text: '已停用', cls: 'bg-slate-100 text-slate-500' },
+  archived: { text: '已归档', cls: 'bg-slate-100 text-slate-500' },
+};
 
 type View =
   | { type: 'list' }
@@ -13,12 +70,12 @@ type View =
   | { type: 'edit'; assessmentId: string }
   | { type: 'detail'; assessmentId: string };
 
-const statusFilters = [
-  { value: '', label: '全部' },
-  { value: 'active', label: '进行中' },
-  { value: 'draft', label: '草稿' },
-  { value: 'paused', label: '已停用' },
-  { value: 'archived', label: '已归档' },
+const STATUS_FILTER_KEYS: { key: '' | LogicalStatus; label: string }[] = [
+  { key: '', label: '全部' },
+  { key: 'active', label: '进行中' },
+  { key: 'draft', label: '草稿' },
+  { key: 'paused', label: '已停用' },
+  { key: 'archived', label: '已归档' },
 ];
 
 export function AssessmentManagement() {
@@ -30,6 +87,39 @@ export function AssessmentManagement() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [shareModalId, setShareModalId] = useState<string | null>(null);
+
+  // IMPORTANT: All hooks (including these useMemos) must run on every render,
+  // BEFORE any early return. Moving them after the early returns below would
+  // cause "Rendered fewer hooks than expected" when switching views.
+
+  // Status counts for filter badges (always reflect ALL assessments)
+  const statusOptions = useMemo<StatusFilterOption[]>(() => {
+    const all = assessments ?? [];
+    const counts: Record<LogicalStatus, number> = { draft: 0, active: 0, paused: 0, archived: 0 };
+    for (const a of all) counts[getLogicalStatus(a)]++;
+    return STATUS_FILTER_KEYS.map((f) => ({
+      value: f.key,
+      label: f.label,
+      count: f.key === '' ? all.length : counts[f.key],
+      countTone: 'slate' as const,
+    }));
+  }, [assessments]);
+
+  const filtered = useMemo(() => {
+    let arr = assessments ?? [];
+    if (statusFilter) {
+      arr = arr.filter((a) => getLogicalStatus(a) === statusFilter);
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      arr = arr.filter(
+        (a) =>
+          a.title.toLowerCase().includes(q) ||
+          (a.description || '').toLowerCase().includes(q),
+      );
+    }
+    return arr;
+  }, [assessments, statusFilter, search]);
 
   if (view.type === 'create') {
     return (
@@ -60,22 +150,6 @@ export function AssessmentManagement() {
     );
   }
 
-  const filtered = (assessments || []).filter((a) => {
-    // Status filter
-    if (statusFilter) {
-      if (statusFilter === 'active' && !(a.status !== 'draft' && a.isActive)) return false;
-      if (statusFilter === 'draft' && a.status !== 'draft') return false;
-      if (statusFilter === 'paused' && !(a.status !== 'draft' && !a.isActive && a.status !== 'archived')) return false;
-      if (statusFilter === 'archived' && a.status !== 'archived') return false;
-    }
-    // Search filter
-    if (search.trim()) {
-      const q = search.toLowerCase();
-      return a.title.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q);
-    }
-    return true;
-  });
-
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -92,9 +166,9 @@ export function AssessmentManagement() {
         </button>
       </div>
 
-      {/* Search + Filters */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-xs">
+      {/* Search + Filters (Phase 4c) */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative flex-1 max-w-xs min-w-[160px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             value={search}
@@ -103,80 +177,73 @@ export function AssessmentManagement() {
             className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
-          {statusFilters.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
-                statusFilter === f.value
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <StatusFilterTabs options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
       </div>
 
       {/* Assessment List */}
       {isLoading ? (
         <PageLoading />
-      ) : !assessments || assessments.length === 0 ? (
-        <EmptyState
-          title="暂无测评"
-          action={{ label: '创建第一个测评', onClick: () => setView({ type: 'create' }) }}
-        />
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12 text-sm text-slate-400">无匹配的测评</div>
+        <EmptyCard
+          title={
+            (assessments?.length ?? 0) === 0
+              ? '暂无测评'
+              : '没有匹配的测评'
+          }
+          description={
+            (assessments?.length ?? 0) === 0
+              ? '点击右上角创建第一个测评'
+              : '尝试调整筛选或搜索词'
+          }
+          action={
+            (assessments?.length ?? 0) === 0
+              ? { label: '+ 新建测评', onClick: () => setView({ type: 'create' }) }
+              : undefined
+          }
+        />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <CardGrid cols={2}>
           {filtered.map((assessment) => {
-            const statusInfo = assessment.status === 'draft'
-              ? { text: '草稿', color: 'bg-yellow-100 text-yellow-700' }
-              : assessment.status === 'archived'
-              ? { text: '已归档', color: 'bg-slate-100 text-slate-500' }
-              : assessment.isActive
-              ? { text: '进行中', color: 'bg-green-100 text-green-700' }
-              : { text: '已停用', color: 'bg-slate-100 text-slate-500' };
-
+            const ls = getLogicalStatus(assessment);
+            const ovr = STATUS_OVERRIDE[ls];
             const typeLabel = ASSESSMENT_TYPE_LABELS[(assessment as any).assessmentType] || '';
 
+            const cardData: DeliveryCardData = {
+              id: assessment.id,
+              kind: 'assessment',
+              title: assessment.title,
+              status: mapToServiceStatus(ls),
+              description: assessment.description,
+              meta: [
+                ...(typeLabel ? [typeLabel] : []),
+                {
+                  label: '创建于',
+                  value: new Date(assessment.createdAt).toLocaleDateString('zh-CN'),
+                },
+              ],
+            };
+
             return (
-              <div
+              <DeliveryCard
                 key={assessment.id}
-                className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm transition"
-              >
-                <div className="flex items-start justify-between">
-                  {/* Clickable content area */}
-                  <button
-                    onClick={() => setView({ type: 'detail', assessmentId: assessment.id })}
-                    className="flex-1 min-w-0 text-left"
-                  >
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-slate-900 truncate">{assessment.title}</h3>
-                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${statusInfo.color}`}>
-                        {statusInfo.text}
-                      </span>
-                      {typeLabel && (
-                        <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full flex-shrink-0">
-                          {typeLabel}
-                        </span>
-                      )}
-                    </div>
-                    {assessment.description && (
-                      <p className="text-sm text-slate-500 mt-1 line-clamp-2">{assessment.description}</p>
-                    )}
-                    <div className="text-xs text-slate-400 mt-2">
-                      创建于 {new Date(assessment.createdAt).toLocaleDateString('zh-CN')}
-                    </div>
-                  </button>
-                  {/* Action icons */}
-                  <div className="flex gap-1 ml-4 shrink-0">
+                data={cardData}
+                onOpen={() => setView({ type: 'detail', assessmentId: assessment.id })}
+                statusText={ovr.text}
+                statusClassName={ovr.cls}
+                actions={
+                  <>
                     <button
-                      onClick={() => updateAssessment.mutate({ assessmentId: assessment.id, isActive: !assessment.isActive }, { onSuccess: () => toast(assessment.isActive ? '已暂停' : '已启用', 'success') })}
-                      className={`p-2 rounded-lg transition ${assessment.isActive ? 'text-slate-400 hover:text-amber-600 hover:bg-amber-50' : 'text-amber-500 hover:text-green-600 hover:bg-green-50'}`}
+                      onClick={() =>
+                        updateAssessment.mutate(
+                          { assessmentId: assessment.id, isActive: !assessment.isActive },
+                          { onSuccess: () => toast(assessment.isActive ? '已暂停' : '已启用', 'success') },
+                        )
+                      }
+                      className={`p-2 rounded-lg transition ${
+                        assessment.isActive
+                          ? 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'
+                          : 'text-amber-500 hover:text-green-600 hover:bg-green-50'
+                      }`}
                       title={assessment.isActive ? '暂停发放' : '恢复发放'}
                     >
                       {assessment.isActive ? <PauseCircle className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}
@@ -196,18 +263,25 @@ export function AssessmentManagement() {
                       <Edit3 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => { if (confirm('确定删除此测评？')) { deleteAssessment.mutate(assessment.id, { onSuccess: () => toast('已删除', 'success'), onError: (err) => toast(err.message || '删除失败', 'error') }); } }}
+                      onClick={() => {
+                        if (confirm('确定删除此测评？')) {
+                          deleteAssessment.mutate(assessment.id, {
+                            onSuccess: () => toast('已删除', 'success'),
+                            onError: (err) => toast(err.message || '删除失败', 'error'),
+                          });
+                        }
+                      }}
                       className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
                       title="删除"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
-                  </div>
-                </div>
-              </div>
+                  </>
+                }
+              />
             );
           })}
-        </div>
+        </CardGrid>
       )}
 
       {/* Share modal */}

@@ -1,41 +1,105 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useEpisodes } from '../../../api/useCounseling';
-import { PageLoading, EmptyState } from '../../../shared/components';
-import { Search, Plus, Calendar, Hash, ChevronDown, ChevronRight, User } from 'lucide-react';
+import {
+  PageLoading,
+  StatusFilterTabs,
+  EmptyCard,
+  DeliveryCard,
+  type StatusFilterOption,
+  type DeliveryCardData,
+} from '../../../shared/components';
+import { Search, Plus, ChevronDown, ChevronRight, User } from 'lucide-react';
+import type { ServiceStatus } from '@psynote/shared';
 
-const statusLabels: Record<string, string> = {
-  active: '进行中', paused: '暂停', closed: '已结案', archived: '已归档',
+/**
+ * Phase 4d — CaseWorkbench migrated to Phase 2 shared components.
+ *
+ * Visual & behavioural changes from the previous version:
+ *  - Status filter row → `<StatusFilterTabs>` with count badges (preserves the
+ *    original 3-tab UX: 全部 / 进行中 / 已结案, where each tab maps to a
+ *    *logical* status group, not a single raw status).
+ *  - Empty state → `<EmptyCard>`
+ *  - Per-episode card render → `<DeliveryCard>`. The status pill text and color
+ *    are kept identical to the previous version via `statusText` /
+ *    `statusClassName` overrides, since counseling episodes use 已结案 / 暂停
+ *    rather than the default ServiceStatus labels.
+ *
+ * Behaviour preserved:
+ *  - Episodes are grouped by client. When a client has multiple episodes, a
+ *    collapsible group header is shown (this is a domain-specific feature: the
+ *    same client may go through several care episodes over time and the UI
+ *    reflects that history).
+ *  - Singles render as a flat DeliveryCard (`onOpen` → navigate to detail).
+ *  - Multi-episode groups render the same DeliveryCard inside the expanded body
+ *    (compact, no client name in the title since it's already in the header).
+ *  - Search by client name or chief complaint.
+ *  - Status filtering by logical group, not raw status.
+ */
+
+const STATUS_TONE: Record<string, { text: string; cls: string }> = {
+  active: { text: '进行中', cls: 'bg-blue-50 text-blue-700' },
+  paused: { text: '暂停', cls: 'bg-yellow-50 text-yellow-700' },
+  closed: { text: '已结案', cls: 'bg-slate-100 text-slate-500' },
+  archived: { text: '已归档', cls: 'bg-slate-100 text-slate-400' },
 };
 
-type StatusFilter = 'all' | 'active' | 'closed';
+function mapEpisodeStatus(s: string): ServiceStatus {
+  switch (s) {
+    case 'active':
+      return 'ongoing';
+    case 'paused':
+      return 'paused';
+    case 'closed':
+      return 'closed';
+    case 'archived':
+      return 'archived';
+    default:
+      return 'draft';
+  }
+}
+
+type StatusFilter = '' | 'active' | 'closed';
 
 export function CaseWorkbench() {
   const navigate = useNavigate();
   const { data: episodes, isLoading } = useEpisodes();
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('');
 
-  const filtered = (episodes || [])
-    .filter((ep: any) => {
-      if (statusFilter === 'active') return ep.status === 'active' || ep.status === 'paused';
-      if (statusFilter === 'closed') return ep.status === 'closed' || ep.status === 'archived';
-      return true;
-    })
-    .filter((ep: any) => {
-      if (!search) return true;
-      const s = search.toLowerCase();
-      return (
-        ep.client?.name?.toLowerCase().includes(s) ||
-        ep.chiefComplaint?.toLowerCase().includes(s)
+  // Counts (always reflect ALL episodes regardless of current filter/search)
+  const counts = useMemo(() => {
+    const arr = episodes ?? [];
+    return {
+      all: arr.length,
+      active: arr.filter((e: any) => e.status === 'active' || e.status === 'paused').length,
+      closed: arr.filter((e: any) => e.status === 'closed' || e.status === 'archived').length,
+    };
+  }, [episodes]);
+
+  const statusOptions = useMemo<StatusFilterOption[]>(() => [
+    { value: '', label: '全部', count: counts.all, countTone: 'slate' },
+    { value: 'active', label: '进行中', count: counts.active, countTone: 'slate' },
+    { value: 'closed', label: '已结案', count: counts.closed, countTone: 'slate' },
+  ], [counts]);
+
+  const filtered = useMemo(() => {
+    let arr = (episodes ?? []) as any[];
+    if (statusFilter === 'active') {
+      arr = arr.filter((ep) => ep.status === 'active' || ep.status === 'paused');
+    } else if (statusFilter === 'closed') {
+      arr = arr.filter((ep) => ep.status === 'closed' || ep.status === 'archived');
+    }
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      arr = arr.filter(
+        (ep) =>
+          ep.client?.name?.toLowerCase().includes(q) ||
+          ep.chiefComplaint?.toLowerCase().includes(q),
       );
-    });
-
-  const counts = {
-    all: episodes?.length || 0,
-    active: episodes?.filter((e: any) => e.status === 'active' || e.status === 'paused').length || 0,
-    closed: episodes?.filter((e: any) => e.status === 'closed' || e.status === 'archived').length || 0,
-  };
+    }
+    return arr;
+  }, [episodes, statusFilter, search]);
 
   return (
     <div className="space-y-6">
@@ -56,9 +120,9 @@ export function CaseWorkbench() {
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1 max-w-xs">
+      {/* Filters: search input + StatusFilterTabs */}
+      <div className="flex flex-wrap items-center gap-3">
+        <div className="relative flex-1 max-w-xs min-w-[160px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             value={search}
@@ -67,34 +131,21 @@ export function CaseWorkbench() {
             className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
-          {([
-            { key: 'all' as const, label: `全部 (${counts.all})` },
-            { key: 'active' as const, label: `进行中 (${counts.active})` },
-            { key: 'closed' as const, label: `已结案 (${counts.closed})` },
-          ]).map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setStatusFilter(tab.key)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
-                statusFilter === tab.key
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        <StatusFilterTabs
+          options={statusOptions}
+          value={statusFilter}
+          onChange={(v) => setStatusFilter(v as StatusFilter)}
+        />
       </div>
 
       {/* Episode list grouped by client */}
       {isLoading ? (
         <PageLoading />
       ) : filtered.length === 0 ? (
-        <EmptyState
-          title={search || statusFilter !== 'all' ? '未找到匹配的个案' : '暂无个案'}
-          action={!search && statusFilter === 'all' ? { label: '+ 新建个案', onClick: () => navigate('/episodes/new') } : undefined}
+        <EmptyCard
+          title={search || statusFilter ? '未找到匹配的个案' : '暂无个案'}
+          description={search || statusFilter ? '尝试调整筛选或搜索词' : '点击右上角新建第一个个案'}
+          action={!search && !statusFilter ? { label: '+ 新建个案', onClick: () => navigate('/episodes/new') } : undefined}
         />
       ) : (
         <ClientGroupedList episodes={filtered} navigate={navigate} />
@@ -109,6 +160,11 @@ interface ClientGroup {
   episodes: any[];
 }
 
+/**
+ * Group episodes by client. Singles render as flat DeliveryCards; clients with
+ * multiple episodes render a collapsible container with a slim header and
+ * DeliveryCards (compact, untitled) inside.
+ */
 function ClientGroupedList({ episodes, navigate }: { episodes: any[]; navigate: (path: string) => void }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
@@ -129,7 +185,8 @@ function ClientGroupedList({ episodes, navigate }: { episodes: any[]; navigate: 
   const toggle = (clientId: string) => {
     setCollapsed((prev) => {
       const next = new Set(prev);
-      if (next.has(clientId)) next.delete(clientId); else next.add(clientId);
+      if (next.has(clientId)) next.delete(clientId);
+      else next.add(clientId);
       return next;
     });
   };
@@ -141,12 +198,19 @@ function ClientGroupedList({ episodes, navigate }: { episodes: any[]; navigate: 
         const isCollapsed = collapsed.has(group.clientId);
 
         if (!isMulti) {
-          // Single episode: render flat card (same as before)
+          // Single episode → flat DeliveryCard with the client name as title
           const ep = group.episodes[0];
-          return <EpisodeCard key={ep.id} ep={ep} navigate={navigate} />;
+          return (
+            <EpisodeDeliveryCard
+              key={ep.id}
+              ep={ep}
+              titleMode="client"
+              onOpen={() => navigate(`/episodes/${ep.id}`)}
+            />
+          );
         }
 
-        // Multi-episode: render as collapsible group
+        // Multi-episode group → collapsible container
         return (
           <div key={group.clientId} className="bg-white rounded-xl border border-slate-200 overflow-hidden">
             <button
@@ -159,9 +223,14 @@ function ClientGroupedList({ episodes, navigate }: { episodes: any[]; navigate: 
               <span className="text-xs text-slate-400">{group.episodes.length} 个个案</span>
             </button>
             {!isCollapsed && (
-              <div className="border-t border-slate-100">
+              <div className="border-t border-slate-100 p-3 space-y-2 bg-slate-50/50">
                 {group.episodes.map((ep) => (
-                  <EpisodeCard key={ep.id} ep={ep} navigate={navigate} nested />
+                  <EpisodeDeliveryCard
+                    key={ep.id}
+                    ep={ep}
+                    titleMode="complaint"
+                    onOpen={() => navigate(`/episodes/${ep.id}`)}
+                  />
                 ))}
               </div>
             )}
@@ -172,56 +241,55 @@ function ClientGroupedList({ episodes, navigate }: { episodes: any[]; navigate: 
   );
 }
 
-function EpisodeCard({ ep, navigate, nested }: { ep: any; navigate: (path: string) => void; nested?: boolean }) {
-  return (
-    <button
-      onClick={() => navigate(`/episodes/${ep.id}`)}
-      className={`w-full text-left hover:bg-slate-50 transition ${
-        nested
-          ? 'px-4 py-3 border-b border-slate-50 last:border-b-0 pl-11'
-          : 'bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 hover:shadow-sm'
-      }`}
-    >
-      <div className="flex items-center justify-between">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            {!nested && (
-              <span className="text-sm font-semibold text-slate-900">
-                {ep.client?.name || '未知来访者'}
-              </span>
-            )}
-            <span className={`text-xs px-2 py-0.5 rounded-full ${
-              ep.status === 'active' ? 'bg-blue-50 text-blue-700' :
-              ep.status === 'closed' ? 'bg-slate-100 text-slate-500' :
-              'bg-yellow-50 text-yellow-700'
-            }`}>
-              {statusLabels[ep.status] || ep.status}
-            </span>
-          </div>
-          {ep.chiefComplaint && (
-            <p className="text-sm text-slate-500 mt-1 truncate">{ep.chiefComplaint}</p>
-          )}
-        </div>
+/**
+ * Renders one episode as a `DeliveryCard`. The title shown depends on context:
+ *   `titleMode="client"`     — used for top-level singles. Title = client name.
+ *   `titleMode="complaint"`  — used for nested rows inside a multi-episode
+ *                              group. Title = chief complaint (or fallback),
+ *                              since the client name is already in the header.
+ */
+function EpisodeDeliveryCard({
+  ep,
+  titleMode,
+  onOpen,
+}: {
+  ep: any;
+  titleMode: 'client' | 'complaint';
+  onOpen: () => void;
+}) {
+  const tone = STATUS_TONE[ep.status] || STATUS_TONE.active;
 
-        <div className="flex items-center gap-4 flex-shrink-0 ml-4">
-          <div className="flex items-center gap-1 text-xs text-slate-400">
-            <Hash className="w-3 h-3" />
-            <span>{ep.sessionCount ?? 0} 次</span>
-          </div>
-          {ep.nextAppointment ? (
-            <div className="flex items-center gap-1 text-xs text-brand-600">
-              <Calendar className="w-3 h-3" />
-              <span>{formatNextTime(ep.nextAppointment)}</span>
-            </div>
-          ) : ep.status === 'active' ? (
-            <div className="flex items-center gap-1 text-xs text-slate-300">
-              <Calendar className="w-3 h-3" />
-              <span>未预约</span>
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </button>
+  const title = titleMode === 'client'
+    ? (ep.client?.name || '未知来访者')
+    : (ep.chiefComplaint || '未填写主诉');
+
+  // For nested rows we don't repeat the chief complaint as description; for top-
+  // level singles, we put the chief complaint in description.
+  const description = titleMode === 'client' ? ep.chiefComplaint : undefined;
+
+  // Meta: session count + next appointment
+  const meta: DeliveryCardData['meta'] = [];
+  meta.push({ label: '会谈', value: `${ep.sessionCount ?? 0} 次` });
+  if (ep.nextAppointment) {
+    meta.push({ label: '下次', value: formatNextTime(ep.nextAppointment) });
+  } else if (ep.status === 'active') {
+    meta.push('未预约');
+  }
+
+  return (
+    <DeliveryCard
+      data={{
+        id: ep.id,
+        kind: 'counseling',
+        title,
+        status: mapEpisodeStatus(ep.status),
+        description,
+        meta,
+      }}
+      onOpen={onOpen}
+      statusText={tone.text}
+      statusClassName={tone.cls}
+    />
   );
 }
 
@@ -238,3 +306,4 @@ function formatNextTime(iso: string): string {
   if (days < 7) return `${days}天后 ${time}`;
   return `${d.getMonth() + 1}/${d.getDate()} ${time}`;
 }
+

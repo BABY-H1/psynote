@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
-import { useAuthStore } from '../../stores/authStore';
+import { useAuthStore } from '@client/stores/authStore';
 
 const clientNav = [
   { to: '/portal', label: '健康概览', end: true },

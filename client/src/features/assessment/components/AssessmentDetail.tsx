@@ -1,12 +1,18 @@
 import React, { useState } from 'react';
 import { useAssessment, useResults, useUpdateAssessment, useDeleteAssessment, useGenerateReport, useDistributions } from '../../../api/useAssessments';
-import type { AssessmentReport } from '@psynote/shared';
+import type { Assessment, AssessmentReport, ServiceStatus } from '@psynote/shared';
 import {
-  ArrowLeft, BarChart3, Users, FileText, Loader2,
+  BarChart3, Users, FileText, Loader2,
   Edit3, Trash2, Send, PauseCircle, PlayCircle, X, Copy, Check,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
-import { PageLoading, useToast } from '../../../shared/components';
+import {
+  PageLoading,
+  useToast,
+  ServiceDetailLayout,
+  ServiceTabBar,
+  type ServiceTab,
+} from '../../../shared/components';
 import { ASSESSMENT_TYPE_LABELS } from '../constants';
 
 import { useDimAverages, useCrossData, useUserResultMap, useRiskDistribution } from './detail/useAssessmentData';
@@ -14,11 +20,63 @@ import { OverviewTab } from './detail/OverviewTab';
 import { IndividualTab } from './detail/IndividualTab';
 import { GroupReportView } from './detail/GroupReportView';
 
+/**
+ * Phase 4c — AssessmentDetail migrated to Phase 2 shared components.
+ *
+ *  - Header (back / title / status pill / actions) → `<ServiceDetailLayout variant="tabs">`
+ *  - Tab bar → `<ServiceTabBar visibleTabs=['overview','records','timeline']>`
+ *      overview  → 概览     → OverviewTab
+ *      records   → 个人报告 → IndividualTab (the per-user answer records)
+ *      timeline  → 团体报告 → GroupReportView (cross-user aggregate view)
+ *    The "参与者" and "资产" tabs are hidden — assessments don't have those concepts.
+ *  - Internal tab state uses the standard `ServiceTab` type so that future
+ *    deep-links / cross-module nav can target tabs by canonical name.
+ *  - Status pill: collapses `(status, isActive)` into the closest ServiceStatus
+ *    and overrides the visual to preserve the original assessment palette
+ *    (yellow draft / green active / slate paused).
+ */
+
 interface Props {
   assessmentId: string;
   onClose: () => void;
   onEdit?: (assessmentId: string) => void;
 }
+
+const VISIBLE_TABS: ServiceTab[] = ['overview', 'records', 'timeline'];
+
+const TAB_ICONS: Partial<Record<ServiceTab, React.ReactNode>> = {
+  overview: <BarChart3 className="w-4 h-4" />,
+  records: <Users className="w-4 h-4" />,
+  timeline: <FileText className="w-4 h-4" />,
+};
+
+type LogicalAssessmentStatus = 'draft' | 'active' | 'paused' | 'archived';
+
+function getLogicalStatus(a: Assessment): LogicalAssessmentStatus {
+  if (a.status === 'draft') return 'draft';
+  if (a.status === 'archived') return 'archived';
+  return a.isActive ? 'active' : 'paused';
+}
+
+function mapToServiceStatus(ls: LogicalAssessmentStatus): ServiceStatus {
+  switch (ls) {
+    case 'draft':
+      return 'draft';
+    case 'archived':
+      return 'archived';
+    case 'active':
+      return 'ongoing';
+    case 'paused':
+      return 'paused';
+  }
+}
+
+const STATUS_OVERRIDE: Record<LogicalAssessmentStatus, { text: string; cls: string }> = {
+  draft: { text: '草稿', cls: 'bg-yellow-100 text-yellow-700' },
+  active: { text: '进行中', cls: 'bg-green-100 text-green-700' },
+  paused: { text: '已停用', cls: 'bg-slate-100 text-slate-500' },
+  archived: { text: '已归档', cls: 'bg-slate-100 text-slate-500' },
+};
 
 export function AssessmentDetail({ assessmentId, onClose, onEdit }: Props) {
   const { data: assessment, isLoading } = useAssessment(assessmentId);
@@ -29,11 +87,11 @@ export function AssessmentDetail({ assessmentId, onClose, onEdit }: Props) {
   const generateReport = useGenerateReport();
   const { toast } = useToast();
 
-  const [tab, setTab] = useState<'overview' | 'individual' | 'group'>('overview');
+  const [tab, setTab] = useState<ServiceTab>('overview');
   const [groupReport, setGroupReport] = useState<AssessmentReport | null>(null);
   const [showShareModal, setShowShareModal] = useState(false);
 
-  const dimAverages = useDimAverages(results, (assessment as any).dimensionNameMap);
+  const dimAverages = useDimAverages(results, (assessment as any)?.dimensionNameMap);
   const crossData = useCrossData(results);
   const userResultMap = useUserResultMap(results);
   const riskDist = useRiskDistribution(results);
@@ -41,6 +99,8 @@ export function AssessmentDetail({ assessmentId, onClose, onEdit }: Props) {
   if (isLoading || !assessment) return <PageLoading text="加载测评详情..." />;
 
   const assessmentType = assessment.assessmentType || 'screening';
+  const ls = getLogicalStatus(assessment);
+  const statusOverride = STATUS_OVERRIDE[ls];
 
   const toggleActive = () => {
     updateAssessment.mutate({ assessmentId: assessment.id, isActive: !assessment.isActive }, {
@@ -69,42 +129,30 @@ export function AssessmentDetail({ assessmentId, onClose, onEdit }: Props) {
     });
   };
 
-  const tabs = [
-    { key: 'overview' as const, label: '概览', icon: <BarChart3 className="w-4 h-4" /> },
-    { key: 'individual' as const, label: `个人报告 (${results?.length || 0})`, icon: <Users className="w-4 h-4" /> },
-    { key: 'group' as const, label: '团体报告', icon: <FileText className="w-4 h-4" /> },
-  ];
+  // Tab labels (records gets a count badge for parity with the previous version)
+  const tabLabels: Partial<Record<ServiceTab, string>> = {
+    overview: '概览',
+    records: `个人报告 (${results?.length || 0})`,
+    timeline: '团体报告',
+  };
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-slate-900">{assessment.title}</h2>
-              <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
-                {ASSESSMENT_TYPE_LABELS[assessmentType]}
-              </span>
-              <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${
-                assessment.status === 'draft'
-                  ? 'bg-yellow-100 text-yellow-700'
-                  : assessment.isActive
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-slate-100 text-slate-500'
-              }`}>
-                {assessment.status === 'draft' ? '草稿' : assessment.isActive ? '进行中' : '已停用'}
-              </span>
-            </div>
-            {assessment.description && (
-              <p className="text-sm text-slate-500 mt-0.5">{assessment.description}</p>
-            )}
-          </div>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+    <ServiceDetailLayout
+      title={assessment.title}
+      status={mapToServiceStatus(ls)}
+      statusText={statusOverride.text}
+      statusClassName={statusOverride.cls}
+      metaLine={
+        <>
+          <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full">
+            {ASSESSMENT_TYPE_LABELS[assessmentType]}
+          </span>
+          {assessment.description && <span>{assessment.description}</span>}
+        </>
+      }
+      onBack={onClose}
+      actions={
+        <>
           <button
             onClick={toggleActive}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm transition ${
@@ -136,28 +184,18 @@ export function AssessmentDetail({ assessmentId, onClose, onEdit }: Props) {
           >
             <Trash2 className="w-4 h-4" /> 删除
           </button>
-        </div>
-      </div>
-
-      {/* Tabs — pill style matching GroupInstanceDetail */}
-      <div className="flex gap-1 mb-6 bg-slate-100 rounded-xl p-1">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition ${
-              tab === t.key
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab content */}
+        </>
+      }
+      tabBar={
+        <ServiceTabBar
+          value={tab}
+          onChange={setTab}
+          visibleTabs={VISIBLE_TABS}
+          labels={tabLabels}
+          icons={TAB_ICONS}
+        />
+      }
+    >
       {tab === 'overview' && (
         <OverviewTab
           assessment={assessment}
@@ -169,7 +207,7 @@ export function AssessmentDetail({ assessmentId, onClose, onEdit }: Props) {
         />
       )}
 
-      {tab === 'individual' && (
+      {tab === 'records' && (
         <IndividualTab
           assessmentId={assessmentId}
           assessmentTitle={assessment.title}
@@ -179,7 +217,7 @@ export function AssessmentDetail({ assessmentId, onClose, onEdit }: Props) {
         />
       )}
 
-      {tab === 'group' && (
+      {tab === 'timeline' && (
         <div className="space-y-4">
           {!results || results.length < 2 ? (
             <div className="text-center py-12 text-sm text-slate-400">需要至少 2 条结果才能查看团体报告</div>
@@ -215,7 +253,7 @@ export function AssessmentDetail({ assessmentId, onClose, onEdit }: Props) {
       {showShareModal && (
         <ShareModal assessmentId={assessmentId} onClose={() => setShowShareModal(false)} />
       )}
-    </div>
+    </ServiceDetailLayout>
   );
 }
 

@@ -1,0 +1,21 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["vite/client"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    // Phase 8a standalone typecheck — noEmit + no rootDir so that files
+    // reached via the `@client/*` alias (which point into ../../client/src)
+    // don't trigger "not under rootDir" errors. This is the known Phase 8a
+    // coupling; Phase 8b will sever it when the portal becomes independent.
+    "noEmit": true,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "composite": false,
+    "paths": {
+      "@client/*": ["../../client/src/*"]
+    }
+  },
+  "include": ["src"]
+}

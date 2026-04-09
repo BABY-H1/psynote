@@ -1,28 +1,67 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   useGroupSchemes, useGroupInstances, useCreateGroupInstance,
   useUpdateGroupInstance, useDeleteGroupInstance,
 } from '../../../api/useGroups';
 import { useAssessments } from '../../../api/useAssessments';
-import { PageLoading, EmptyState, useToast } from '../../../shared/components';
+import {
+  PageLoading,
+  useToast,
+  StatusFilterTabs,
+  CardGrid,
+  DeliveryCard,
+  EmptyCard,
+  type StatusFilterOption,
+  type DeliveryCardData,
+} from '../../../shared/components';
 import { GroupInstanceDetail } from '../components/GroupInstanceDetail';
 import { Plus, Search, UserPlus, UserMinus, Send, Edit3, Trash2, X, Copy, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import type { GroupInstance, ServiceStatus } from '@psynote/shared';
 
-const statusLabels: Record<string, { text: string; color: string }> = {
-  draft: { text: '草稿', color: 'bg-slate-100 text-slate-600' },
-  recruiting: { text: '招募中', color: 'bg-green-100 text-green-700' },
-  ongoing: { text: '进行中', color: 'bg-blue-100 text-blue-700' },
-  full: { text: '已满', color: 'bg-yellow-100 text-yellow-700' },
-  ended: { text: '已结束', color: 'bg-slate-100 text-slate-500' },
-};
+/**
+ * Phase 4a — GroupCenter migrated to Phase 2 shared components.
+ *
+ * Visual & behavioural changes from the previous version:
+ *  - Status filter row → `<StatusFilterTabs>` with count badges (computed from
+ *    the unfiltered list, since we now fetch once and filter client-side).
+ *  - Card layout → `<CardGrid>` + `<DeliveryCard>` with the action buttons in
+ *    the `actions` slot.
+ *  - Empty state → `<EmptyCard>` with a "+ 发布活动" CTA.
+ *
+ * Behaviour preserved:
+ *  - Recruit toggle, share modal, edit (open detail), delete (with confirm)
+ *  - "full" status keeps its yellow "已满" badge via DeliveryCard overrides
+ *  - Search by title, status filter
+ *  - View transitions (list / create / detail) unchanged
+ */
 
-const statusFilters = [
-  { value: '', label: '全部' },
-  { value: 'draft', label: '草稿' },
-  { value: 'recruiting', label: '招募中' },
-  { value: 'ongoing', label: '进行中' },
-  { value: 'ended', label: '已结束' },
+/** Map GroupStatus → ServiceStatus, keeping room for the "full" override below. */
+function mapGroupStatus(s: GroupInstance['status']): ServiceStatus {
+  switch (s) {
+    case 'draft':
+      return 'draft';
+    case 'recruiting':
+      return 'recruiting';
+    case 'ongoing':
+      return 'ongoing';
+    case 'full':
+      // Best-fit ServiceStatus; the "已满" label is restored via statusText override.
+      return 'ongoing';
+    case 'ended':
+      return 'completed';
+    default:
+      return 'draft';
+  }
+}
+
+/** Status filter options (keys passed to client-side filter, not server). */
+const STATUS_FILTER_KEYS: { key: string; label: string }[] = [
+  { key: '', label: '全部' },
+  { key: 'draft', label: '草稿' },
+  { key: 'recruiting', label: '招募中' },
+  { key: 'ongoing', label: '进行中' },
+  { key: 'ended', label: '已结束' },
 ];
 
 type ViewMode = 'list' | 'create' | 'detail';
@@ -34,14 +73,36 @@ export function GroupCenter() {
   const [search, setSearch] = useState('');
   const [shareModalId, setShareModalId] = useState<string | null>(null);
 
-  const { data: instances, isLoading } = useGroupInstances(statusFilter || undefined);
+  // Phase 4a — fetch once (no server-side status filter), apply filtering client-side
+  // so we can also compute count badges for the StatusFilterTabs.
+  const { data: instances, isLoading } = useGroupInstances();
   const updateInstance = useUpdateGroupInstance();
   const deleteInstance = useDeleteGroupInstance();
   const { toast } = useToast();
 
-  const filteredInstances = instances?.filter((inst) =>
-    !search || inst.title.toLowerCase().includes(search.toLowerCase()),
-  );
+  // Status counts for badges (always reflect ALL instances, not the filtered subset)
+  const statusOptions = useMemo<StatusFilterOption[]>(() => {
+    const all = instances ?? [];
+    const counts: Record<string, number> = {};
+    for (const inst of all) counts[inst.status] = (counts[inst.status] || 0) + 1;
+    return STATUS_FILTER_KEYS.map((f) => ({
+      value: f.key,
+      label: f.label,
+      count: f.key === '' ? all.length : counts[f.key] || 0,
+      countTone: 'slate' as const,
+    }));
+  }, [instances]);
+
+  // Apply status + search filter on the client
+  const filteredInstances = useMemo(() => {
+    let arr = instances ?? [];
+    if (statusFilter) arr = arr.filter((i) => i.status === statusFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      arr = arr.filter((i) => i.title.toLowerCase().includes(q));
+    }
+    return arr;
+  }, [instances, statusFilter, search]);
 
   if (view === 'detail' && selectedId) {
     return <GroupInstanceDetail instanceId={selectedId} onClose={() => { setView('list'); setSelectedId(null); }} />;
@@ -67,9 +128,9 @@ export function GroupCenter() {
         </button>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="relative flex-1 max-w-xs">
+      {/* Filters: search input + StatusFilterTabs (Phase 4a) */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <div className="relative flex-1 max-w-xs min-w-[160px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             value={search}
@@ -78,105 +139,100 @@ export function GroupCenter() {
             className="w-full pl-9 pr-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
           />
         </div>
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
-          {statusFilters.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
-                statusFilter === f.value
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
+        <StatusFilterTabs options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
       </div>
 
       {/* Instance List */}
       {isLoading ? (
         <PageLoading />
-      ) : !filteredInstances || filteredInstances.length === 0 ? (
-        <EmptyState title="暂无团辅活动" />
+      ) : filteredInstances.length === 0 ? (
+        <EmptyCard
+          title={search || statusFilter ? '没有匹配的团辅活动' : '暂无团辅活动'}
+          description={search || statusFilter ? '尝试调整筛选或搜索词' : '点击右上角发布第一个活动'}
+          action={!search && !statusFilter ? { label: '+ 发布活动', onClick: () => setView('create') } : undefined}
+        />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <CardGrid cols={2}>
           {filteredInstances.map((inst) => {
-            const st = statusLabels[inst.status] || statusLabels.draft;
             const isRecruiting = inst.status === 'recruiting';
+            const cardData: DeliveryCardData = {
+              id: inst.id,
+              kind: 'group',
+              title: inst.title,
+              status: mapGroupStatus(inst.status),
+              description: inst.description,
+              meta: [
+                ...(inst.startDate ? [inst.startDate] : []),
+                ...(inst.location ? [inst.location] : []),
+                ...(inst.capacity ? [{ label: '容量', value: inst.capacity }] : []),
+              ],
+            };
+
             return (
-              <div key={inst.id} className="bg-white rounded-xl border border-slate-200 p-5 hover:shadow-sm hover:border-slate-300 transition flex">
-                <button
-                  onClick={() => { setSelectedId(inst.id); setView('detail'); }}
-                  className="flex-1 min-w-0 text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-slate-900 truncate">{inst.title}</h3>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${st.color}`}>{st.text}</span>
-                  </div>
-                  {inst.description && (
-                    <p className="text-sm text-slate-500 mt-1 line-clamp-2">{inst.description}</p>
-                  )}
-                  <div className="flex gap-4 mt-2 text-xs text-slate-400">
-                    {inst.startDate && <span>{inst.startDate}</span>}
-                    {inst.location && <span>{inst.location}</span>}
-                    {inst.capacity && <span>容量: {inst.capacity}</span>}
-                  </div>
-                </button>
-                {/* Action buttons */}
-                <div className="flex gap-1 ml-4 shrink-0">
-                  {/* Recruit toggle */}
-                  {(inst.status === 'draft' || inst.status === 'recruiting') && (
+              <DeliveryCard
+                key={inst.id}
+                data={cardData}
+                onOpen={() => { setSelectedId(inst.id); setView('detail'); }}
+                statusText={inst.status === 'full' ? '已满' : undefined}
+                statusClassName={inst.status === 'full' ? 'bg-yellow-100 text-yellow-700' : undefined}
+                actions={
+                  <>
+                    {/* Recruit toggle */}
+                    {(inst.status === 'draft' || inst.status === 'recruiting') && (
+                      <button
+                        onClick={() => updateInstance.mutate(
+                          { instanceId: inst.id, status: isRecruiting ? 'draft' : 'recruiting' },
+                          { onSuccess: () => toast(isRecruiting ? '已停止招募' : '已开始招募', 'success') },
+                        )}
+                        className={`p-2 rounded-lg transition ${
+                          isRecruiting
+                            ? 'text-green-500 hover:text-amber-600 hover:bg-amber-50'
+                            : 'text-slate-400 hover:text-green-600 hover:bg-green-50'
+                        }`}
+                        title={isRecruiting ? '停止招募' : '开始招募'}
+                      >
+                        {isRecruiting ? <UserMinus className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                      </button>
+                    )}
+                    {/* Share/publish recruitment */}
+                    {inst.status === 'recruiting' && (
+                      <button
+                        onClick={() => setShareModalId(inst.id)}
+                        className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                        title="发布招募链接"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* Edit (opens detail) */}
                     <button
-                      onClick={() => updateInstance.mutate(
-                        { instanceId: inst.id, status: isRecruiting ? 'draft' : 'recruiting' },
-                        { onSuccess: () => toast(isRecruiting ? '已停止招募' : '已开始招募', 'success') },
-                      )}
-                      className={`p-2 rounded-lg transition ${isRecruiting ? 'text-green-500 hover:text-amber-600 hover:bg-amber-50' : 'text-slate-400 hover:text-green-600 hover:bg-green-50'}`}
-                      title={isRecruiting ? '停止招募' : '开始招募'}
-                    >
-                      {isRecruiting ? <UserMinus className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
-                    </button>
-                  )}
-                  {/* Share/publish recruitment */}
-                  {inst.status === 'recruiting' && (
-                    <button
-                      onClick={() => setShareModalId(inst.id)}
+                      onClick={() => { setSelectedId(inst.id); setView('detail'); }}
                       className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                      title="发布招募链接"
+                      title="编辑"
                     >
-                      <Send className="w-4 h-4" />
+                      <Edit3 className="w-4 h-4" />
                     </button>
-                  )}
-                  {/* Edit */}
-                  <button
-                    onClick={() => { setSelectedId(inst.id); setView('detail'); }}
-                    className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                    title="编辑"
-                  >
-                    <Edit3 className="w-4 h-4" />
-                  </button>
-                  {/* Delete */}
-                  <button
-                    onClick={() => {
-                      if (confirm('确定删除此团辅活动？相关的报名和出勤记录也将被删除。')) {
-                        deleteInstance.mutate(inst.id, {
-                          onSuccess: () => toast('已删除', 'success'),
-                          onError: (err: any) => toast(err.message || '删除失败', 'error'),
-                        });
-                      }
-                    }}
-                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                    title="删除"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
+                    {/* Delete */}
+                    <button
+                      onClick={() => {
+                        if (confirm('确定删除此团辅活动？相关的报名和出勤记录也将被删除。')) {
+                          deleteInstance.mutate(inst.id, {
+                            onSuccess: () => toast('已删除', 'success'),
+                            onError: (err: any) => toast(err.message || '删除失败', 'error'),
+                          });
+                        }
+                      }}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                      title="删除"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </>
+                }
+              />
             );
           })}
-        </div>
+        </CardGrid>
       )}
 
       {/* Share Modal */}

@@ -1,33 +1,44 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   useCourseInstances,
   useDeleteCourseInstance,
   useActivateCourseInstance,
   useCloseCourseInstance,
 } from '../../../api/useCourseInstances';
-import { PageLoading, EmptyState, useToast } from '../../../shared/components';
+import {
+  PageLoading,
+  useToast,
+  StatusFilterTabs,
+  CardGrid,
+  DeliveryCard,
+  EmptyCard,
+  type StatusFilterOption,
+  type DeliveryCardData,
+} from '../../../shared/components';
 import { CourseInstanceDetail } from '../components/CourseInstanceDetail';
 import { PublishCourseForm } from '../components/PublishCourseForm';
 import {
-  Plus, Search, Trash2, Play, Square, Archive, Users, BookOpen, BarChart, X, Copy, Check,
+  Plus, Search, Trash2, Play, Square, Users, BookOpen, BarChart, X, Copy, Check,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import type { ServiceStatus } from '@psynote/shared';
 
-// ─── Status / Label Config ──────────────────────────────────────
-
-const statusLabels: Record<string, { text: string; color: string }> = {
-  draft: { text: '草稿', color: 'bg-slate-100 text-slate-600' },
-  active: { text: '进行中', color: 'bg-blue-100 text-blue-700' },
-  closed: { text: '已关闭', color: 'bg-amber-100 text-amber-700' },
-  archived: { text: '已归档', color: 'bg-slate-100 text-slate-500' },
-};
-
-const statusStripeColors: Record<string, string> = {
-  draft: 'bg-slate-300',
-  active: 'bg-blue-500',
-  closed: 'bg-amber-500',
-  archived: 'bg-slate-400',
-};
+/**
+ * Phase 4b — CourseManagement migrated to Phase 2 shared components.
+ *
+ *  - Status filter row → `<StatusFilterTabs>` with count badges (computed from
+ *    a single unfiltered fetch + client-side filter, like Phase 4a Groups).
+ *  - Card layout → `<CardGrid cols={3}>` + `<DeliveryCard>`. Action buttons
+ *    (查看详情 / 分享报名 / 激活 / 关闭 / 删除) are passed via `actions` slot.
+ *  - Empty state → `<EmptyCard>`.
+ *  - Stats cards (4 tiles) and `ShareEnrollModal` are kept unchanged.
+ *
+ * Status mapping (course → ServiceStatus):
+ *   draft     → draft
+ *   active    → ongoing  (so default text "进行中" is reused)
+ *   closed    → closed   (label overridden to "已关闭" + amber)
+ *   archived  → archived
+ */
 
 const publishModeLabels: Record<string, string> = {
   assign: '指定学员',
@@ -35,12 +46,27 @@ const publishModeLabels: Record<string, string> = {
   public: '公开报名',
 };
 
-const statusFilters = [
-  { value: '', label: '全部' },
-  { value: 'draft', label: '草稿' },
-  { value: 'active', label: '进行中' },
-  { value: 'closed', label: '已关闭' },
-  { value: 'archived', label: '已归档' },
+function mapCourseStatus(s: string): ServiceStatus {
+  switch (s) {
+    case 'draft':
+      return 'draft';
+    case 'active':
+      return 'ongoing';
+    case 'closed':
+      return 'closed';
+    case 'archived':
+      return 'archived';
+    default:
+      return 'draft';
+  }
+}
+
+const STATUS_FILTER_KEYS: { key: string; label: string }[] = [
+  { key: '', label: '全部' },
+  { key: 'draft', label: '草稿' },
+  { key: 'active', label: '进行中' },
+  { key: 'closed', label: '已关闭' },
+  { key: 'archived', label: '已归档' },
 ];
 
 // ─── Main Component ─────────────────────────────────────────────
@@ -60,17 +86,36 @@ export function CourseManagement() {
   const [search, setSearch] = useState('');
   const [shareModalId, setShareModalId] = useState<string | null>(null);
 
-  const { data: instances, isLoading, error } = useCourseInstances(
-    statusFilter || undefined ? { status: statusFilter || undefined } : undefined,
-  );
+  // Phase 4b — fetch once (no server-side status filter), apply filtering client-side
+  // so we can also compute count badges for the StatusFilterTabs.
+  const { data: instances, isLoading, error } = useCourseInstances();
   const deleteInstance = useDeleteCourseInstance();
   const activateInstance = useActivateCourseInstance();
   const closeInstance = useCloseCourseInstance();
   const { toast } = useToast();
 
-  const filteredInstances = instances?.filter((inst: any) =>
-    !search || inst.title?.toLowerCase().includes(search.toLowerCase()),
-  );
+  // Status counts for filter badges (always reflect ALL instances).
+  const statusOptions = useMemo<StatusFilterOption[]>(() => {
+    const all = (instances ?? []) as any[];
+    const counts: Record<string, number> = {};
+    for (const inst of all) counts[inst.status] = (counts[inst.status] || 0) + 1;
+    return STATUS_FILTER_KEYS.map((f) => ({
+      value: f.key,
+      label: f.label,
+      count: f.key === '' ? all.length : counts[f.key] || 0,
+      countTone: 'slate' as const,
+    }));
+  }, [instances]);
+
+  const filteredInstances = useMemo(() => {
+    let arr = ((instances as any[]) ?? []).slice();
+    if (statusFilter) arr = arr.filter((i) => i.status === statusFilter);
+    if (search.trim()) {
+      const q = search.trim().toLowerCase();
+      arr = arr.filter((i) => (i.title || '').toLowerCase().includes(q));
+    }
+    return arr;
+  }, [instances, statusFilter, search]);
 
   // ── View switching ──────────────────────────────────────────
 
@@ -168,24 +213,10 @@ export function CourseManagement() {
         ))}
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-3 mb-4">
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-0.5">
-          {statusFilters.map((f) => (
-            <button
-              key={f.value}
-              onClick={() => setStatusFilter(f.value)}
-              className={`px-3 py-1.5 rounded-md text-xs font-medium transition ${
-                statusFilter === f.value
-                  ? 'bg-white text-slate-900 shadow-sm'
-                  : 'text-slate-500 hover:text-slate-700'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-        <div className="relative flex-1 max-w-xs">
+      {/* Filters: search input + StatusFilterTabs (Phase 4b) */}
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <StatusFilterTabs options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+        <div className="relative flex-1 max-w-xs min-w-[160px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
             value={search}
@@ -203,140 +234,88 @@ export function CourseManagement() {
         <div className="text-center py-12 text-sm text-red-500">
           加载失败，请刷新重试
         </div>
-      ) : !filteredInstances || filteredInstances.length === 0 ? (
-        <EmptyState title="暂无课程实例" />
+      ) : filteredInstances.length === 0 ? (
+        <EmptyCard
+          title={search || statusFilter ? '没有匹配的课程实例' : '暂无课程实例'}
+          description={search || statusFilter ? '尝试调整筛选或搜索词' : '点击右上角创建第一个课程实例'}
+          action={!search && !statusFilter ? { label: '+ 创建实例', onClick: () => setView('create') } : undefined}
+        />
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <CardGrid cols={3}>
           {filteredInstances.map((inst: any) => {
-            const st = statusLabels[inst.status] || statusLabels.draft;
-            const stripe = statusStripeColors[inst.status] || statusStripeColors.draft;
             const enrolled = inst.enrollmentCount ?? inst.enrolledCount ?? 0;
             const completionRate = inst.completionRate ?? 0;
+            const isClosed = inst.status === 'closed';
+
+            const cardData: DeliveryCardData = {
+              id: inst.id,
+              kind: 'course',
+              title: inst.title,
+              status: mapCourseStatus(inst.status),
+              description: inst.description,
+              meta: [
+                ...(inst.publishMode ? [publishModeLabels[inst.publishMode] || inst.publishMode] : []),
+                ...(inst.courseType ? [inst.courseType] : []),
+                { label: '已加入', value: `${enrolled} 人` },
+                ...(inst.status === 'active' ? [{ label: '完成率', value: `${completionRate}%` }] : []),
+              ],
+            };
 
             return (
-              <div
+              <DeliveryCard
                 key={inst.id}
-                className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md hover:border-slate-300 transition group"
-              >
-                {/* Color strip */}
-                <div className={`h-1.5 ${stripe}`} />
-
-                <div className="p-5">
-                  {/* Status badge + title */}
-                  <div className="flex items-start justify-between gap-2 mb-2">
-                    <button
-                      onClick={() => { setSelectedId(inst.id); setView('detail'); }}
-                      className="text-left flex-1 min-w-0"
-                    >
-                      <h3 className="font-semibold text-slate-900 truncate group-hover:text-brand-600 transition">
-                        {inst.title}
-                      </h3>
-                    </button>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium flex-shrink-0 ${st.color}`}>
-                      {st.text}
-                    </span>
-                  </div>
-
-                  {/* Meta: publish mode + course type */}
-                  <div className="flex items-center gap-2 mb-2 text-xs text-slate-400">
-                    {inst.publishMode && (
-                      <span className="px-1.5 py-0.5 bg-slate-50 rounded text-slate-500">
-                        {publishModeLabels[inst.publishMode] || inst.publishMode}
-                      </span>
-                    )}
-                    {inst.courseType && (
-                      <span className="px-1.5 py-0.5 bg-slate-50 rounded text-slate-500">
-                        {inst.courseType}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Description */}
-                  {inst.description && (
-                    <p className="text-sm text-slate-500 line-clamp-2 mb-3">{inst.description}</p>
-                  )}
-
-                  <div className="border-t border-slate-100 pt-3 mt-3">
-                    {/* Enrolled count + progress */}
-                    <div className="flex items-center justify-between text-xs text-slate-500 mb-2">
-                      <span className="flex items-center gap-1">
-                        <Users className="w-3.5 h-3.5" />
-                        {enrolled} 人已加入
-                      </span>
-                      {inst.status === 'active' && (
-                        <span>{completionRate}% 完成</span>
-                      )}
-                    </div>
-
-                    {/* Progress bar (active only) */}
-                    {inst.status === 'active' && (
-                      <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden mb-3">
-                        <div
-                          className="h-full bg-blue-500 rounded-full transition-all"
-                          style={{ width: `${Math.min(completionRate, 100)}%` }}
-                        />
-                      </div>
-                    )}
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-1">
+                data={cardData}
+                onOpen={() => { setSelectedId(inst.id); setView('detail'); }}
+                statusText={isClosed ? '已关闭' : undefined}
+                statusClassName={isClosed ? 'bg-amber-100 text-amber-700' : undefined}
+                actions={
+                  <>
+                    {/* Share link for public mode (active only) */}
+                    {inst.publishMode === 'public' && inst.status === 'active' && (
                       <button
-                        onClick={() => { setSelectedId(inst.id); setView('detail'); }}
-                        className="px-2.5 py-1.5 text-xs text-slate-600 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition font-medium"
+                        onClick={() => setShareModalId(inst.id)}
+                        className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                        title="分享报名链接"
                       >
-                        查看详情
+                        <Copy className="w-4 h-4" />
                       </button>
-
-                      {/* Share link for public mode */}
-                      {inst.publishMode === 'public' && inst.status === 'active' && (
-                        <button
-                          onClick={() => setShareModalId(inst.id)}
-                          className="p-1.5 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                          title="分享报名链接"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      {/* Activate (draft only) */}
-                      {inst.status === 'draft' && (
-                        <button
-                          onClick={() => handleActivate(inst.id)}
-                          className="p-1.5 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
-                          title="激活课程"
-                        >
-                          <Play className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      {/* Close (active only) */}
-                      {inst.status === 'active' && (
-                        <button
-                          onClick={() => handleClose(inst.id)}
-                          className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
-                          title="关闭课程"
-                        >
-                          <Square className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-
-                      {/* Delete (draft only) */}
-                      {inst.status === 'draft' && (
-                        <button
-                          onClick={() => handleDelete(inst.id)}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition ml-auto"
-                          title="删除"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
+                    )}
+                    {/* Activate (draft only) */}
+                    {inst.status === 'draft' && (
+                      <button
+                        onClick={() => handleActivate(inst.id)}
+                        className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+                        title="激活课程"
+                      >
+                        <Play className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* Close (active only) */}
+                    {inst.status === 'active' && (
+                      <button
+                        onClick={() => handleClose(inst.id)}
+                        className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                        title="关闭课程"
+                      >
+                        <Square className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* Delete (draft only) */}
+                    {inst.status === 'draft' && (
+                      <button
+                        onClick={() => handleDelete(inst.id)}
+                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                        title="删除"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </>
+                }
+              />
             );
           })}
-        </div>
+        </CardGrid>
       )}
 
       {/* Share Modal */}

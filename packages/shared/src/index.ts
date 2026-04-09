@@ -7,4 +7,6 @@ export * from './types/course';
 export * from './types/notification';
 export * from './types/compliance';
 export * from './types/report';
+export * from './types/service-instance';
+export * from './types/tier';
 export * from './schemas/triage-config';

@@ -9,11 +9,16 @@ import {
   useHomeworkSubmissions,
   useReviewHomework,
 } from '../../../api/useCourseInstances';
-import { PageLoading, useToast } from '../../../shared/components';
 import {
-  ArrowLeft,
+  PageLoading,
+  useToast,
+  ServiceDetailLayout,
+  ServiceTabBar,
+  type ServiceTab,
+} from '../../../shared/components';
+import type { ServiceStatus } from '@psynote/shared';
+import {
   Users,
-  BarChart,
   MessageSquare,
   BookOpen,
   Check,
@@ -22,28 +27,55 @@ import {
   Eye,
 } from 'lucide-react';
 
-// ─── Types ────────────────────────────────────────────────────
+/**
+ * Phase 4b — CourseInstanceDetail migrated to Phase 2 shared components.
+ *
+ * Visual & behavioural changes:
+ *  - Header (back / title / status pill / meta) is provided by `<ServiceDetailLayout variant="tabs">`.
+ *  - Tab bar uses `<ServiceTabBar>` with custom labels:
+ *      overview     → 总览
+ *      participants → 学员
+ *      timeline     → 进度
+ *      records      → 反馈与作业
+ *    The 5th standard tab "资产" is hidden via visibleTabs.
+ *  - "closed" status keeps its grey "已结束" text via the layout default.
+ *  - "archived" was previously yellow in courses; we preserve that via overrides.
+ *
+ * Tab content components (OverviewTab/MembersTab/ProgressTab/FeedbackHomeworkTab)
+ * are slotted in unchanged.
+ */
 
 interface Props {
   instanceId: string;
   onClose: () => void;
 }
 
-type TabType = 'overview' | 'members' | 'progress' | 'feedback';
-
-const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = [
-  { key: 'overview', label: '概览', icon: <BarChart className="w-4 h-4" /> },
-  { key: 'members', label: '学员', icon: <Users className="w-4 h-4" /> },
-  { key: 'progress', label: '进度', icon: <Eye className="w-4 h-4" /> },
-  { key: 'feedback', label: '反馈与作业', icon: <MessageSquare className="w-4 h-4" /> },
-];
-
-const statusLabels: Record<string, { text: string; color: string }> = {
-  draft: { text: '草稿', color: 'bg-slate-100 text-slate-600' },
-  active: { text: '进行中', color: 'bg-blue-100 text-blue-700' },
-  closed: { text: '已结束', color: 'bg-slate-100 text-slate-500' },
-  archived: { text: '已归档', color: 'bg-yellow-100 text-yellow-700' },
+const VISIBLE_TABS: ServiceTab[] = ['overview', 'participants', 'timeline', 'records'];
+const TAB_LABELS: Partial<Record<ServiceTab, string>> = {
+  participants: '学员',
+  timeline: '进度',
+  records: '反馈与作业',
 };
+const TAB_ICONS: Partial<Record<ServiceTab, React.ReactNode>> = {
+  participants: <Users className="w-4 h-4" />,
+  timeline: <Eye className="w-4 h-4" />,
+  records: <MessageSquare className="w-4 h-4" />,
+};
+
+function mapCourseStatus(s: string): ServiceStatus {
+  switch (s) {
+    case 'draft':
+      return 'draft';
+    case 'active':
+      return 'ongoing';
+    case 'closed':
+      return 'closed';
+    case 'archived':
+      return 'archived';
+    default:
+      return 'draft';
+  }
+}
 
 const approvalLabels: Record<string, { text: string; color: string }> = {
   pending: { text: '待审核', color: 'text-yellow-600 bg-yellow-50' },
@@ -67,62 +99,42 @@ const sourceLabels: Record<string, string> = {
 
 export function CourseInstanceDetail({ instanceId, onClose }: Props) {
   const { data: instance, isLoading } = useCourseInstance(instanceId);
-  const { toast } = useToast();
-  const [tab, setTab] = useState<TabType>('overview');
+  const [tab, setTab] = useState<ServiceTab>('overview');
 
   if (isLoading || !instance) return <PageLoading text="加载课程详情..." />;
 
-  const st = statusLabels[instance.status] || statusLabels.draft;
+  const isArchived = instance.status === 'archived';
 
   return (
-    <div>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-xl font-bold text-slate-900">{instance.title}</h2>
-              <span className={`text-xs px-2.5 py-0.5 rounded-full font-medium ${st.color}`}>
-                {st.text}
-              </span>
-            </div>
-            <div className="flex gap-4 mt-1 text-sm text-slate-500">
-              {instance.course?.title && <span>课程: {instance.course.title}</span>}
-              {instance.createdAt && (
-                <span>创建: {new Date(instance.createdAt).toLocaleDateString()}</span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-slate-100 rounded-xl p-1">
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            onClick={() => setTab(t.key)}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition ${
-              tab === t.key
-                ? 'bg-white text-slate-900 shadow-sm'
-                : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t.icon}
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Tab Content */}
+    <ServiceDetailLayout
+      title={instance.title}
+      status={mapCourseStatus(instance.status)}
+      // Preserve the previous yellow tone for "archived" courses
+      statusClassName={isArchived ? 'bg-yellow-100 text-yellow-700' : undefined}
+      metaLine={
+        <>
+          {(instance as any).course?.title && <span>课程: {(instance as any).course.title}</span>}
+          {instance.createdAt && (
+            <span>创建: {new Date(instance.createdAt).toLocaleDateString()}</span>
+          )}
+        </>
+      }
+      onBack={onClose}
+      tabBar={
+        <ServiceTabBar
+          value={tab}
+          onChange={setTab}
+          visibleTabs={VISIBLE_TABS}
+          labels={TAB_LABELS}
+          icons={TAB_ICONS}
+        />
+      }
+    >
       {tab === 'overview' && <OverviewTab instance={instance} />}
-      {tab === 'members' && <MembersTab instanceId={instanceId} />}
-      {tab === 'progress' && <ProgressTab instanceId={instanceId} instance={instance} />}
-      {tab === 'feedback' && <FeedbackHomeworkTab instanceId={instanceId} />}
-    </div>
+      {tab === 'participants' && <MembersTab instanceId={instanceId} />}
+      {tab === 'timeline' && <ProgressTab instanceId={instanceId} instance={instance} />}
+      {tab === 'records' && <FeedbackHomeworkTab instanceId={instanceId} />}
+    </ServiceDetailLayout>
   );
 }
 

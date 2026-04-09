@@ -46,6 +46,14 @@ import { courseEnrollmentRoutes } from './modules/course/course-enrollment.route
 import { publicCourseEnrollRoutes } from './modules/course/public-course-enroll.routes.js';
 import { feedbackRoutes as courseFeedbackRoutes } from './modules/course/feedback.routes.js';
 import { homeworkRoutes as courseHomeworkRoutes } from './modules/course/homework.routes.js';
+// Phase 5b — cross-module ServiceInstance aggregation
+import { deliveryRoutes } from './modules/delivery/delivery.routes.js';
+// Phase 6 — person archive (cross-module per-user history)
+import { personArchiveRoutes } from './modules/delivery/person-archive.routes.js';
+// Phase 7b — org branding settings (logo / theme color / report header+footer)
+import { brandingRoutes } from './modules/org/branding.routes.js';
+// Phase 7c — subscription info (read-only skeleton)
+import { subscriptionRoutes } from './modules/org/subscription.routes.js';
 
 const app = Fastify({
   logger: {
@@ -111,6 +119,16 @@ await app.register(courseInstanceRoutes, { prefix: '/api/orgs/:orgId/course-inst
 await app.register(courseEnrollmentRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
 await app.register(courseFeedbackRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
 await app.register(courseHomeworkRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
+
+// Delivery aggregation (Phase 5b) — exposes GET /api/orgs/:orgId/services
+await app.register(deliveryRoutes, { prefix: '/api/orgs/:orgId' });
+// Person archive (Phase 6) — exposes GET /api/orgs/:orgId/people[/:userId/archive]
+await app.register(personArchiveRoutes, { prefix: '/api/orgs/:orgId' });
+
+// Org branding (Phase 7b) — exposes GET/PATCH /api/orgs/:orgId/branding
+await app.register(brandingRoutes, { prefix: '/api/orgs/:orgId' });
+// Subscription info (Phase 7c) — exposes GET /api/orgs/:orgId/subscription
+await app.register(subscriptionRoutes, { prefix: '/api/orgs/:orgId' });
 
 // File upload
 await app.register(uploadRoutes, { prefix: '/api/orgs/:orgId/upload' });

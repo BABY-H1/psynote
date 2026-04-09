@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useCourse, useLessonBlocks, useUpdateCourseProgress } from '../../../api/useCourses';
+import { useCourse, useLessonBlocks, useUpdateCourseProgress } from '@client/api/useCourses';
 import { LESSON_BLOCK_LABELS, LESSON_BLOCK_ORDER, type LessonBlockType } from '@psynote/shared';
-import { PageLoading } from '../../../shared/components';
+import { PageLoading } from '@client/shared/components';
 import {
   ChevronLeft,
   ChevronRight,

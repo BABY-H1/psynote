@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { useMyDocuments, useSignDocument } from '../../../api/useConsent';
-import { PageLoading, useToast } from '../../../shared/components';
+import { useMyDocuments, useSignDocument } from '@client/api/useConsent';
+import { PageLoading, useToast } from '@client/shared/components';
 import { FileText, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
 
 const consentTypeLabels: Record<string, string> = {

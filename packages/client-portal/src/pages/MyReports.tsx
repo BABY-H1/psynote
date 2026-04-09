@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { useMyResults } from '../../../api/useClientPortal';
-import { PageLoading, EmptyState, RiskBadge } from '../../../shared/components';
-import { RISK_LABELS } from '../../assessment/constants';
+import { useMyResults } from '@client/api/useClientPortal';
+import { PageLoading, EmptyState, RiskBadge } from '@client/shared/components';
+import { RISK_LABELS } from '@client/features/assessment/constants';
 import { FileText, Download } from 'lucide-react';
 
 export function MyReports() {

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAvailableGroups, useAvailableCourses } from '../../../api/useClientPortal';
-import { useEnrollInGroup } from '../../../api/useGroups';
-import { useEnrollInCourse } from '../../../api/useCourses';
-import { PageLoading, EmptyState, useToast } from '../../../shared/components';
+import { useAvailableGroups, useAvailableCourses } from '@client/api/useClientPortal';
+import { useEnrollInGroup } from '@client/api/useGroups';
+import { useEnrollInCourse } from '@client/api/useCourses';
+import { PageLoading, EmptyState, useToast } from '@client/shared/components';
 import {
   Users, MapPin, Calendar, Clock, Target, BookOpen,
   ChevronRight, CheckCircle2, AlertCircle, X,
