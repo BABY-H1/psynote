@@ -13,13 +13,17 @@ import { ReminderSettings } from '../features/settings/pages/ReminderSettings';
 import { AvailabilitySettings } from '../features/counseling/pages/AvailabilitySettings';
 // Note: Phase 3 — CaseWorkbench / GroupCenter / CourseManagement / AssessmentManagement
 // are NO LONGER imported here. They are mounted inside DeliveryCenter (features/delivery).
-// Phase 8a — portal now lives in its own workspace package.
+// Phase 8a — portal lives in its own workspace package.
+// Phase 8c — portal restructured into a 4-tab mobile-first shell; the main
+// client mounts the same new shell and tab pages via the workspace export.
 import {
-  ClientPortalLayout,
-  ClientDashboard,
-  ServiceHall,
-  MyAppointments,
-  MyReports,
+  PortalAppShell,
+  HomeTab,
+  MyServicesTab,
+  ArchiveTab,
+  AccountTab,
+  ProfileSettings,
+  ServiceDetail,
   BookAppointment,
   CourseReader,
   ConsentCenter,
@@ -81,16 +85,20 @@ function AppRoutes() {
           <Route path="*" element={<Navigate to="/select-org" replace />} />
         </>
       ) : isClient ? (
-        /* Client (来访者) portal */
+        /* Phase 8c — Client (来访者) portal with 4-tab mobile shell.
+           See packages/client-portal/src/PortalApp.tsx for the standalone
+           equivalent; this route tree mirrors it 1:1. */
         <>
-          <Route path="/portal" element={<ClientPortalLayout />}>
-            <Route index element={<ClientDashboard />} />
-            <Route path="reports" element={<MyReports />} />
-            <Route path="services" element={<ServiceHall />} />
-            <Route path="appointments" element={<MyAppointments />} />
+          <Route path="/portal" element={<PortalAppShell />}>
+            <Route index element={<HomeTab />} />
+            <Route path="services" element={<MyServicesTab />} />
+            <Route path="services/course/:courseId" element={<CourseReader />} />
+            <Route path="services/:kind/:id" element={<ServiceDetail />} />
             <Route path="book" element={<BookAppointment />} />
-            <Route path="consents" element={<ConsentCenter />} />
-            <Route path="courses/:courseId" element={<CourseReader />} />
+            <Route path="archive" element={<ArchiveTab />} />
+            <Route path="account" element={<AccountTab />} />
+            <Route path="account/profile" element={<ProfileSettings />} />
+            <Route path="account/consents" element={<ConsentCenter />} />
           </Route>
           <Route path="*" element={<Navigate to="/portal" replace />} />
         </>

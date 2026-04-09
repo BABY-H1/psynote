@@ -2,36 +2,54 @@ import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@client/stores/authStore';
 import { LoginPage } from '@client/features/auth/pages/LoginPage';
-import { ClientPortalLayout } from './ClientPortalLayout';
-import { ClientDashboard } from './pages/ClientDashboard';
-import { ServiceHall } from './pages/ServiceHall';
-import { MyAppointments } from './pages/MyAppointments';
-import { MyReports } from './pages/MyReports';
+import { PortalAppShell } from './PortalAppShell';
+import { HomeTab } from './pages/HomeTab';
+import { MyServicesTab } from './pages/MyServicesTab';
+import { ArchiveTab } from './pages/ArchiveTab';
+import { AccountTab } from './pages/AccountTab';
+import { ProfileSettings } from './pages/ProfileSettings';
+import { ServiceDetail } from './pages/ServiceDetail';
 import { BookAppointment } from './pages/BookAppointment';
 import { CourseReader } from './pages/CourseReader';
 import { ConsentCenter } from './pages/ConsentCenter';
 
 /**
- * Phase 8b — Portal-only React Router tree.
+ * Phase 8c — Portal route tree (mobile-first, 4-tab bottom navigation).
  *
- * The main psynote client has a much larger `AppRoutes` tree with counselor,
- * org_admin, and system-admin branches. The portal intentionally renders a
- * much smaller subset:
+ *   /login                                          — shared LoginPage
  *
- *   /login         — shared LoginPage (imported from the client via @client/*)
- *   /portal/*      — the 5 portal tabs under ClientPortalLayout
- *   *              — everything else redirects to /portal (or /login if signed out)
+ *   /portal                                         — PortalAppShell wrapper
+ *     index                                         — HomeTab (waiting for you)
+ *     services                                      — MyServicesTab (active services)
+ *     services/:kind/:id                            — ServiceDetail drill-down
+ *     services/course/:courseId                     — CourseReader drill-down
+ *     book                                          — BookAppointment (from "下次预约" CTA)
+ *     archive                                       — ArchiveTab (测评历史 + 时间线)
+ *     account                                       — AccountTab (avatar + rows)
+ *     account/profile                               — ProfileSettings drill-down
+ *     account/consents                              — ConsentCenter drill-down
  *
- * This deliberately mirrors what the main client exposes for the `client`
- * role, but without the dispatch logic that would also send non-client roles
- * off to the counselor shell. A counselor/admin user who somehow lands on
- * the portal will just be bounced to /portal — they can still use the portal
- * pages (they're read-only reports of their own account, which is fine).
+ *   *                                               — fallback → /portal (or /login if signed out)
+ *
+ * Compared to Phase 8a/8b's route tree:
+ *   - 7 top-level routes → 4 tab roots + 4 drill-down routes
+ *   - services/reports/appointments/consents all REMOVED as top-level routes
+ *   - ServiceHall page deleted entirely (逛商店 heuristic removed per plan)
+ *   - The old `/portal/reports` / `/portal/appointments` URLs would 404 now,
+ *     but since portal users navigate via the bottom tab bar (not typed URLs),
+ *     this is acceptable. If we later get evidence that external systems link
+ *     to these, we can add redirects.
+ *
+ * ServiceDetail for `kind=counseling` resolves the counselor, shows upcoming
+ * + past appointments, and a "预约下一次" button that deep-links into
+ * BookAppointment with `?counselorId=...` preselected. kind=group/course
+ * just falls back to a "not implemented yet" message (Phase 8c ships
+ * counseling detail only, since group/course need new endpoints we won't
+ * touch this phase).
  */
 export function PortalApp() {
   const { user, _hydrated } = useAuthStore();
 
-  // Wait for Zustand to rehydrate before making routing decisions
   if (!_hydrated) {
     return null;
   }
@@ -40,21 +58,20 @@ export function PortalApp() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
 
-      {/* Public share routes (Phase 7 of main client may still link to these);
-          the portal hosts none of them — redirect to the main app. */}
-
       {!user ? (
         <Route path="*" element={<Navigate to="/login" replace />} />
       ) : (
         <>
-          <Route path="/portal" element={<ClientPortalLayout />}>
-            <Route index element={<ClientDashboard />} />
-            <Route path="reports" element={<MyReports />} />
-            <Route path="services" element={<ServiceHall />} />
-            <Route path="appointments" element={<MyAppointments />} />
+          <Route path="/portal" element={<PortalAppShell />}>
+            <Route index element={<HomeTab />} />
+            <Route path="services" element={<MyServicesTab />} />
+            <Route path="services/course/:courseId" element={<CourseReader />} />
+            <Route path="services/:kind/:id" element={<ServiceDetail />} />
             <Route path="book" element={<BookAppointment />} />
-            <Route path="consents" element={<ConsentCenter />} />
-            <Route path="courses/:courseId" element={<CourseReader />} />
+            <Route path="archive" element={<ArchiveTab />} />
+            <Route path="account" element={<AccountTab />} />
+            <Route path="account/profile" element={<ProfileSettings />} />
+            <Route path="account/consents" element={<ConsentCenter />} />
           </Route>
           <Route path="*" element={<Navigate to="/portal" replace />} />
         </>

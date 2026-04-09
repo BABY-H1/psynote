@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useCourse, useLessonBlocks, useUpdateCourseProgress } from '@client/api/useCourses';
 import { LESSON_BLOCK_LABELS, LESSON_BLOCK_ORDER, type LessonBlockType } from '@psynote/shared';
 import { PageLoading } from '@client/shared/components';
@@ -148,18 +148,32 @@ function ManualChapterContent({ chapter }: { chapter: { content?: string; videoU
 /*  Main component                                                    */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Phase 8c — CourseReader now accepts the enrollmentId via route state.
+ *
+ * MyServicesTab navigates with `navigate('/portal/services/course/:courseId',
+ * { state: { enrollmentId } })`, and we read it here via useLocation().
+ * This replaces the Phase 8a hardcoded `null` which broke progress tracking.
+ *
+ * Fallback: if the route state is missing (e.g. direct URL access, or the
+ * caller forgot to pass state), progress mutations are silently no-ops —
+ * the buttons still render but the user just navigates away without
+ * mutations firing. This matches pre-Phase-8c behavior.
+ */
 export function CourseReader() {
   const { courseId } = useParams<{ courseId: string }>();
+  const location = useLocation();
   const navigate = useNavigate();
   const { data: course, isLoading } = useCourse(courseId);
   const updateProgress = useUpdateCourseProgress();
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // TODO: We need the enrollment record to track progress & mark chapters complete.
-  // Currently the client-portal route doesn't provide enrollmentId via context.
-  // Once an enrollment context/hook is available, wire it up here.
-  const enrollmentId: string | null = null;
+  // Phase 8c bug fix — enrollmentId comes from route state (set by MyServicesTab
+  // when the user drills down from "我的课程"). Missing state → null, which
+  // silently no-ops the progress mutations below (pre-Phase-8c behavior).
+  const routeState = (location.state as { enrollmentId?: string | null } | null) ?? null;
+  const enrollmentId: string | null = routeState?.enrollmentId ?? null;
   const completedChapters: Record<string, boolean> = {};
 
   const chapters = course?.chapters?.slice().sort((a, b) => a.sortOrder - b.sortOrder) ?? [];

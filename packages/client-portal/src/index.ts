@@ -1,24 +1,32 @@
 /**
  * Phase 8a — `@psynote/client-portal` public API surface.
+ * Phase 8c — Restructured from 7 flat pages into a 4-tab mobile-first shell.
  *
- * This workspace package bundles the C-side portal (来访者 / 学员 / 受测者 UI)
- * into its own package so it can later be independently built for web,
- * independent hosting, or a small-shell adapter (Taro / uni-app for WeChat
- * Mini Program). Phase 8a ships the filesystem split only; the portal still
- * imports react-query hooks and shared UI components from `client/src/*` via
- * the `@client/*` path alias. See the tsconfig/paths setup.
+ * This workspace package bundles the C-side portal into its own package so
+ * it can be independently built (Phase 8b: `npm run build --workspace=@psynote/client-portal`)
+ * or re-used by the main psynote client via `@psynote/client-portal` imports.
  *
- * The main psynote client consumes this package exactly as it would any other
- * workspace package:
+ * Exports below are split into two groups:
  *
- *     import { ClientPortalLayout, ClientDashboard } from '@psynote/client-portal';
+ *   1. New (Phase 8c) — the 4-tab shell + tab pages + drill-down pages.
+ *      These are what the main psynote client imports to mount `/portal/*`,
+ *      and what PortalApp.tsx renders in the standalone build.
+ *
+ *   2. Leaf pages — still valid endpoints reached via drill-down from the
+ *      new tabs. Re-exported so main-client `AppRoutes` can mount them
+ *      directly inside the same route tree as the shell.
  */
 
-export { ClientPortalLayout } from './ClientPortalLayout';
-export { ClientDashboard } from './pages/ClientDashboard';
-export { ServiceHall } from './pages/ServiceHall';
-export { MyAppointments } from './pages/MyAppointments';
-export { MyReports } from './pages/MyReports';
+// Phase 8c — new mobile-first shell + tab pages
+export { PortalAppShell } from './PortalAppShell';
+export { HomeTab } from './pages/HomeTab';
+export { MyServicesTab } from './pages/MyServicesTab';
+export { ArchiveTab } from './pages/ArchiveTab';
+export { AccountTab } from './pages/AccountTab';
+export { ProfileSettings } from './pages/ProfileSettings';
+export { ServiceDetail } from './pages/ServiceDetail';
+
+// Leaf / drill-down pages — still used by the new shell
 export { BookAppointment } from './pages/BookAppointment';
 export { CourseReader } from './pages/CourseReader';
 export { ConsentCenter } from './pages/ConsentCenter';
