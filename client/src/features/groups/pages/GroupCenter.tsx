@@ -11,6 +11,7 @@ import {
   CardGrid,
   DeliveryCard,
   EmptyCard,
+  getFiltersForKind,
   type StatusFilterOption,
   type DeliveryCardData,
 } from '../../../shared/components';
@@ -49,20 +50,31 @@ function mapGroupStatus(s: GroupInstance['status']): ServiceStatus {
       // Best-fit ServiceStatus; the "已满" label is restored via statusText override.
       return 'ongoing';
     case 'ended':
-      return 'completed';
+      return 'archived';
+    case 'paused':
+      return 'paused';
+    case 'archived':
+      return 'archived';
     default:
       return 'draft';
   }
 }
 
-/** Status filter options (keys passed to client-side filter, not server). */
-const STATUS_FILTER_KEYS: { key: string; label: string }[] = [
-  { key: '', label: '全部' },
-  { key: 'draft', label: '草稿' },
-  { key: 'recruiting', label: '招募中' },
-  { key: 'ongoing', label: '进行中' },
-  { key: 'ended', label: '已结束' },
-];
+/** Map DB group status → unified filter key */
+function groupStatusToFilterKey(dbStatus: string): import('../../../shared/components').UnifiedFilterKey {
+  switch (dbStatus) {
+    case 'draft':      return 'draft';
+    case 'recruiting': return 'recruiting';
+    case 'ongoing':    return 'ongoing';
+    case 'full':       return 'ongoing';
+    case 'ended':      return 'archived';
+    case 'paused':     return 'paused';
+    case 'archived':   return 'archived';
+    default:           return 'draft';
+  }
+}
+
+const GROUP_FILTERS = getFiltersForKind('group');
 
 type ViewMode = 'list' | 'create' | 'detail';
 
@@ -84,8 +96,11 @@ export function GroupCenter() {
   const statusOptions = useMemo<StatusFilterOption[]>(() => {
     const all = instances ?? [];
     const counts: Record<string, number> = {};
-    for (const inst of all) counts[inst.status] = (counts[inst.status] || 0) + 1;
-    return STATUS_FILTER_KEYS.map((f) => ({
+    for (const inst of all) {
+      const key = groupStatusToFilterKey(inst.status);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return GROUP_FILTERS.map((f) => ({
       value: f.key,
       label: f.label,
       count: f.key === '' ? all.length : counts[f.key] || 0,
@@ -96,7 +111,7 @@ export function GroupCenter() {
   // Apply status + search filter on the client
   const filteredInstances = useMemo(() => {
     let arr = instances ?? [];
-    if (statusFilter) arr = arr.filter((i) => i.status === statusFilter);
+    if (statusFilter) arr = arr.filter((i) => groupStatusToFilterKey(i.status) === statusFilter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       arr = arr.filter((i) => i.title.toLowerCase().includes(q));

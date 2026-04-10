@@ -66,8 +66,8 @@ export function useAvailableCourses() {
   const orgId = useAuthStore((s) => s.currentOrgId);
   return useQuery({
     queryKey: ['availableCourses', orgId],
-    queryFn: () => api.get<{ id: string; title: string; description?: string; category?: string }[]>(
-      `${orgPrefix()}/courses`,
+    queryFn: () => api.get<{ enrollment: any; courseTitle: string; courseCategory?: string }[]>(
+      `${orgPrefix()}/my-courses`,
     ),
     enabled: !!orgId,
   });

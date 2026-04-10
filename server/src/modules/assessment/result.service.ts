@@ -29,9 +29,17 @@ export async function listResults(
 
   if (filters?.scope && filters.scope.type === 'assigned') {
     if (!filters.scope.allowedClientIds || filters.scope.allowedClientIds.length === 0) {
-      return [];
+      // Still allow anonymous results (userId IS NULL) even with no assigned clients
+      conditions.push(isNull(assessmentResults.userId));
+    } else {
+      // Allow assigned clients' results OR anonymous results (public screenings)
+      conditions.push(
+        or(
+          inArray(assessmentResults.userId, filters.scope.allowedClientIds),
+          isNull(assessmentResults.userId),
+        )!,
+      );
     }
-    conditions.push(inArray(assessmentResults.userId, filters.scope.allowedClientIds));
   }
 
   if (filters?.assessmentId) {

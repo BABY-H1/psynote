@@ -26,7 +26,7 @@ export type AppointmentSource = 'client_request' | 'risk_triage' | 'counselor_ma
 export type SessionType = 'online' | 'offline' | 'phone';
 
 /** Group instance status */
-export type GroupStatus = 'draft' | 'recruiting' | 'ongoing' | 'full' | 'ended';
+export type GroupStatus = 'draft' | 'recruiting' | 'ongoing' | 'full' | 'ended' | 'paused' | 'archived';
 
 /** Group enrollment status */
 export type EnrollmentStatus = 'pending' | 'approved' | 'rejected' | 'withdrawn' | 'waitlisted';

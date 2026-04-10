@@ -19,7 +19,7 @@ import './index.css';
  */
 if (import.meta.env.DEV) {
   const { seedDemoAuth } = await import('@client/dev-seed');
-  seedDemoAuth('client');
+  await seedDemoAuth('client');
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

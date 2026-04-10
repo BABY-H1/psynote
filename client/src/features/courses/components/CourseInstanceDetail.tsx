@@ -3,6 +3,10 @@ import {
   useCourseInstance,
   useInstanceEnrollments,
   useUpdateEnrollmentApproval,
+  useActivateCourseInstance,
+  useCloseCourseInstance,
+  useUpdateCourseInstance,
+  useAssignToInstance,
   useFeedbackForms,
   useHomeworkDefs,
   useFeedbackResponses,
@@ -100,10 +104,36 @@ const sourceLabels: Record<string, string> = {
 export function CourseInstanceDetail({ instanceId, onClose }: Props) {
   const { data: instance, isLoading } = useCourseInstance(instanceId);
   const [tab, setTab] = useState<ServiceTab>('overview');
+  const activate = useActivateCourseInstance();
+  const close = useCloseCourseInstance();
+  const updateInstance = useUpdateCourseInstance();
+  const { toast } = useToast();
 
   if (isLoading || !instance) return <PageLoading text="加载课程详情..." />;
 
   const isArchived = instance.status === 'archived';
+  const isDraft = instance.status === 'draft';
+  const isActive = instance.status === 'active';
+
+  const handleActivate = () => {
+    activate.mutate(instanceId, {
+      onSuccess: () => toast('课程实例已发布', 'success'),
+      onError: () => toast('发布失败', 'error'),
+    });
+  };
+
+  const handleClose = () => {
+    close.mutate(instanceId, {
+      onSuccess: () => toast('课程实例已关闭', 'success'),
+    });
+  };
+
+  const handleSetPublic = () => {
+    updateInstance.mutate(
+      { instanceId, publishMode: 'public' },
+      { onSuccess: () => toast('已切换为公开报名模式', 'success') },
+    );
+  };
 
   return (
     <ServiceDetailLayout
@@ -120,6 +150,37 @@ export function CourseInstanceDetail({ instanceId, onClose }: Props) {
         </>
       }
       onBack={onClose}
+      actions={
+        <div className="flex items-center gap-2 flex-wrap">
+          {isDraft && (
+            <button
+              onClick={handleActivate}
+              disabled={activate.isPending}
+              className="px-3 py-1.5 text-xs font-medium bg-green-600 text-white rounded-lg hover:bg-green-500 disabled:opacity-50"
+            >
+              {activate.isPending ? '发布中...' : '发布'}
+            </button>
+          )}
+          {isActive && (
+            <button
+              onClick={handleClose}
+              disabled={close.isPending}
+              className="px-3 py-1.5 text-xs font-medium bg-slate-600 text-white rounded-lg hover:bg-slate-500 disabled:opacity-50"
+            >
+              关闭
+            </button>
+          )}
+          {(isDraft || isActive) && instance.publishMode !== 'public' && (
+            <button
+              onClick={handleSetPublic}
+              disabled={updateInstance.isPending}
+              className="px-3 py-1.5 text-xs font-medium border border-blue-300 text-blue-600 rounded-lg hover:bg-blue-50 disabled:opacity-50"
+            >
+              公开报名
+            </button>
+          )}
+        </div>
+      }
       tabBar={
         <ServiceTabBar
           value={tab}
@@ -247,8 +308,11 @@ function OverviewTab({ instance }: { instance: any }) {
 function MembersTab({ instanceId }: { instanceId: string }) {
   const { data: enrollments = [], isLoading } = useInstanceEnrollments(instanceId);
   const updateApproval = useUpdateEnrollmentApproval();
+  const assignToInstance = useAssignToInstance();
   const { toast } = useToast();
   const [search, setSearch] = useState('');
+  const [showAssign, setShowAssign] = useState(false);
+  const [assignEmail, setAssignEmail] = useState('');
 
   if (isLoading) return <PageLoading text="加载学员列表..." />;
 
@@ -274,16 +338,71 @@ function MembersTab({ instanceId }: { instanceId: string }) {
 
   return (
     <div className="space-y-4">
-      {/* Search */}
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="搜索学员姓名或邮箱..."
-          className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+      {/* Assign + Search row */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="搜索学员姓名或邮箱..."
+            className="w-full pl-9 pr-4 py-2 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <button
+          onClick={() => setShowAssign(!showAssign)}
+          className="px-3 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 whitespace-nowrap"
+        >
+          + 指派学员
+        </button>
       </div>
+
+      {/* Quick assign panel */}
+      {showAssign && (
+        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 space-y-3">
+          <p className="text-xs text-blue-700 font-medium">输入来访者邮箱指派到此课程</p>
+          <div className="flex gap-2">
+            <input
+              value={assignEmail}
+              onChange={(e) => setAssignEmail(e.target.value)}
+              placeholder="邮箱，如 client@demo.psynote.cn"
+              className="flex-1 text-sm border border-blue-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            <button
+              onClick={async () => {
+                if (!assignEmail.trim()) return;
+                // Lookup user by email first via org members
+                try {
+                  const res = await fetch(`/api/orgs/${(window as any).__psynoteOrgId || '3241cbd8-5582-24f1-d9dd-ebbba95cb673'}/members`);
+                  const members = await res.json();
+                  const member = (members as any[]).find((m: any) => m.email === assignEmail.trim());
+                  if (!member) {
+                    toast('未找到该邮箱对应的成员', 'error');
+                    return;
+                  }
+                  assignToInstance.mutate(
+                    { instanceId, userIds: [member.userId] },
+                    {
+                      onSuccess: () => {
+                        toast(`已指派 ${member.name || assignEmail}`, 'success');
+                        setAssignEmail('');
+                        setShowAssign(false);
+                      },
+                      onError: () => toast('指派失败', 'error'),
+                    },
+                  );
+                } catch {
+                  toast('查询成员失败', 'error');
+                }
+              }}
+              disabled={assignToInstance.isPending || !assignEmail.trim()}
+              className="px-4 py-2 text-sm font-medium bg-blue-600 text-white rounded-lg hover:bg-blue-500 disabled:opacity-50"
+            >
+              {assignToInstance.isPending ? '指派中...' : '确认'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-white border border-slate-200 rounded-xl overflow-hidden">

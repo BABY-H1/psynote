@@ -74,7 +74,11 @@ export const TIER_FEATURES: Record<OrgTier, ReadonlySet<Feature>> = {
  * ```
  */
 export function hasFeature(tier: OrgTier, feature: Feature): boolean {
-  return TIER_FEATURES[tier].has(feature);
+  // Defensive fallback: if a stale/unknown tier slips in (e.g. raw DB plan
+  // string like 'pro' instead of the mapped OrgTier, or a legacy value from
+  // localStorage), treat it as 'solo' rather than crashing the whole shell.
+  const set = TIER_FEATURES[tier] ?? TIER_FEATURES.solo;
+  return set.has(feature);
 }
 
 /**

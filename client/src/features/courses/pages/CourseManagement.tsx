@@ -12,13 +12,14 @@ import {
   CardGrid,
   DeliveryCard,
   EmptyCard,
+  getFiltersForKind,
   type StatusFilterOption,
   type DeliveryCardData,
 } from '../../../shared/components';
 import { CourseInstanceDetail } from '../components/CourseInstanceDetail';
 import { PublishCourseForm } from '../components/PublishCourseForm';
 import {
-  Plus, Search, Trash2, Play, Square, Users, BookOpen, BarChart, X, Copy, Check,
+  Plus, Search, Trash2, Play, Square, X, Copy, Check,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { ServiceStatus } from '@psynote/shared';
@@ -53,7 +54,7 @@ function mapCourseStatus(s: string): ServiceStatus {
     case 'active':
       return 'ongoing';
     case 'closed':
-      return 'closed';
+      return 'paused';
     case 'archived':
       return 'archived';
     default:
@@ -61,13 +62,18 @@ function mapCourseStatus(s: string): ServiceStatus {
   }
 }
 
-const STATUS_FILTER_KEYS: { key: string; label: string }[] = [
-  { key: '', label: '全部' },
-  { key: 'draft', label: '草稿' },
-  { key: 'active', label: '进行中' },
-  { key: 'closed', label: '已关闭' },
-  { key: 'archived', label: '已归档' },
-];
+/** Map DB course status → unified filter key */
+function courseStatusToFilterKey(dbStatus: string): import('../../../shared/components').UnifiedFilterKey {
+  switch (dbStatus) {
+    case 'draft':    return 'draft';
+    case 'active':   return 'ongoing';
+    case 'closed':   return 'paused';
+    case 'archived': return 'archived';
+    default:         return 'draft';
+  }
+}
+
+const COURSE_FILTERS = getFiltersForKind('course');
 
 // ─── Main Component ─────────────────────────────────────────────
 
@@ -98,8 +104,11 @@ export function CourseManagement() {
   const statusOptions = useMemo<StatusFilterOption[]>(() => {
     const all = (instances ?? []) as any[];
     const counts: Record<string, number> = {};
-    for (const inst of all) counts[inst.status] = (counts[inst.status] || 0) + 1;
-    return STATUS_FILTER_KEYS.map((f) => ({
+    for (const inst of all) {
+      const key = courseStatusToFilterKey(inst.status);
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return COURSE_FILTERS.map((f) => ({
       value: f.key,
       label: f.label,
       count: f.key === '' ? all.length : counts[f.key] || 0,
@@ -109,7 +118,7 @@ export function CourseManagement() {
 
   const filteredInstances = useMemo(() => {
     let arr = ((instances as any[]) ?? []).slice();
-    if (statusFilter) arr = arr.filter((i) => i.status === statusFilter);
+    if (statusFilter) arr = arr.filter((i) => courseStatusToFilterKey(i.status) === statusFilter);
     if (search.trim()) {
       const q = search.trim().toLowerCase();
       arr = arr.filter((i) => (i.title || '').toLowerCase().includes(q));
@@ -134,25 +143,6 @@ export function CourseManagement() {
 
   // ── Stats ───────────────────────────────────────────────────
 
-  const totalInstances = instances?.length ?? 0;
-  const activeCount = instances?.filter((i: any) => i.status === 'active').length ?? 0;
-  const totalEnrolled =
-    instances?.reduce(
-      (sum: number, i: any) => sum + (i.enrollmentCount ?? i.enrolledCount ?? 0),
-      0,
-    ) ?? 0;
-  const avgCompletion = totalInstances > 0
-    ? Math.round(
-        instances!.reduce((sum: number, i: any) => sum + (i.completionRate ?? 0), 0) / totalInstances,
-      )
-    : 0;
-
-  const stats = [
-    { label: '课程实例', value: totalInstances, icon: BookOpen, bg: 'bg-purple-50', iconColor: 'text-purple-500' },
-    { label: '进行中', value: activeCount, icon: Play, bg: 'bg-blue-50', iconColor: 'text-blue-500' },
-    { label: '学员总数', value: totalEnrolled, icon: Users, bg: 'bg-green-50', iconColor: 'text-green-500' },
-    { label: '平均完成率', value: `${avgCompletion}%`, icon: BarChart, bg: 'bg-amber-50', iconColor: 'text-amber-500' },
-  ];
 
   // ── Handlers ────────────────────────────────────────────────
 
@@ -198,20 +188,6 @@ export function CourseManagement() {
         </button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        {stats.map((s) => (
-          <div key={s.label} className={`${s.bg} rounded-xl p-4 flex items-center gap-3`}>
-            <div className={`w-10 h-10 rounded-lg bg-white/70 flex items-center justify-center ${s.iconColor}`}>
-              <s.icon className="w-5 h-5" />
-            </div>
-            <div>
-              <p className="text-xs text-slate-500">{s.label}</p>
-              <p className="text-lg font-bold text-slate-900">{s.value}</p>
-            </div>
-          </div>
-        ))}
-      </div>
 
       {/* Filters: search input + StatusFilterTabs (Phase 4b) */}
       <div className="flex flex-wrap items-center gap-3 mb-4">
@@ -266,8 +242,8 @@ export function CourseManagement() {
                 key={inst.id}
                 data={cardData}
                 onOpen={() => { setSelectedId(inst.id); setView('detail'); }}
-                statusText={isClosed ? '已关闭' : undefined}
-                statusClassName={isClosed ? 'bg-amber-100 text-amber-700' : undefined}
+                statusText={isClosed ? '已暂停' : undefined}
+                statusClassName={isClosed ? 'bg-slate-100 text-slate-500' : undefined}
                 actions={
                   <>
                     {/* Share link for public mode (active only) */}

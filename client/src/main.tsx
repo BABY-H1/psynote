@@ -7,7 +7,7 @@ import './index.css';
 // Change the role param to 'client' or 'org_admin' to preview other layouts
 if (import.meta.env.DEV) {
   const { seedDemoAuth } = await import('./dev-seed');
-  seedDemoAuth('counselor'); // 'counselor' | 'client' | 'org_admin'
+  await seedDemoAuth('counselor'); // 'counselor' | 'client' | 'org_admin'
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

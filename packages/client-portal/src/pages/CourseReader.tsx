@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useCourse, useLessonBlocks, useUpdateCourseProgress } from '@client/api/useCourses';
-import { LESSON_BLOCK_LABELS, LESSON_BLOCK_ORDER, type LessonBlockType } from '@psynote/shared';
+import { useCourse, useUpdateCourseProgress } from '@client/api/useCourses';
 import { PageLoading } from '@client/shared/components';
 // Phase 9α — C-facing content block renderer
 import { ContentBlockRenderer } from '../components/ContentBlockRenderer';
@@ -10,141 +9,18 @@ import {
   ChevronRight,
   CheckCircle,
   Circle,
-  FileText,
-  Video,
-  Image,
-  Download,
   BookOpen,
   Target,
-  Lightbulb,
-  Users,
-  MessageSquare,
-  PenTool,
-  Star,
 } from 'lucide-react';
 
 /* ------------------------------------------------------------------ */
 /*  Block type icon mapping                                           */
 /* ------------------------------------------------------------------ */
 
-const blockIcons: Record<LessonBlockType, React.ElementType | null> = {
-  objectives: Target,
-  key_points: Star,
-  preparation: FileText,
-  warmup: Lightbulb,
-  main_activity: BookOpen,
-  experience: Users,
-  sharing: MessageSquare,
-  extension: PenTool,
-  reflection: null, // hidden from students
-};
-
-/** Accent colour per block type for the left-border & icon tint */
-const blockColors: Record<LessonBlockType, string> = {
-  objectives: 'border-blue-400 text-blue-600 bg-blue-50',
-  key_points: 'border-amber-400 text-amber-600 bg-amber-50',
-  preparation: 'border-slate-400 text-slate-600 bg-slate-50',
-  warmup: 'border-orange-400 text-orange-600 bg-orange-50',
-  main_activity: 'border-indigo-400 text-indigo-600 bg-indigo-50',
-  experience: 'border-emerald-400 text-emerald-600 bg-emerald-50',
-  sharing: 'border-purple-400 text-purple-600 bg-purple-50',
-  extension: 'border-cyan-400 text-cyan-600 bg-cyan-50',
-  reflection: '',
-};
-
-/* ------------------------------------------------------------------ */
-/*  Lesson blocks for AI-assisted chapters                            */
-/* ------------------------------------------------------------------ */
-
-function ChapterBlocks({ courseId, chapterId }: { courseId: string; chapterId: string }) {
-  const { data: blocks, isLoading } = useLessonBlocks(courseId, chapterId);
-
-  if (isLoading) {
-    return (
-      <div className="space-y-4">
-        {[1, 2, 3].map((i) => (
-          <div key={i} className="h-24 rounded-lg bg-slate-100 animate-pulse" />
-        ))}
-      </div>
-    );
-  }
-
-  if (!blocks || blocks.length === 0) {
-    return <p className="text-sm text-slate-400 italic">此章节尚未生成教案内容</p>;
-  }
-
-  // Sort by LESSON_BLOCK_ORDER
-  const sorted = [...blocks].sort(
-    (a, b) => LESSON_BLOCK_ORDER.indexOf(a.blockType) - LESSON_BLOCK_ORDER.indexOf(b.blockType),
-  );
-
-  return (
-    <div className="space-y-5">
-      {sorted.map((block) => {
-        // reflection is teacher-only, hide from students
-        if (block.blockType === 'reflection') return null;
-
-        const Icon = blockIcons[block.blockType];
-        const colorClasses = blockColors[block.blockType] || '';
-
-        return (
-          <section
-            key={block.id}
-            className={`border-l-4 rounded-r-lg pl-4 pr-4 py-4 ${colorClasses} transition-colors`}
-          >
-            <div className="flex items-center gap-2 mb-2">
-              {Icon && <Icon className="w-4 h-4 flex-shrink-0" />}
-              <h4 className="text-sm font-semibold">
-                {LESSON_BLOCK_LABELS[block.blockType]}
-              </h4>
-            </div>
-            {block.content ? (
-              <div className="prose prose-sm prose-slate max-w-none whitespace-pre-wrap text-slate-700">
-                {block.content}
-              </div>
-            ) : (
-              <p className="text-xs text-slate-400 italic">暂无内容</p>
-            )}
-          </section>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Manual chapter content                                            */
-/* ------------------------------------------------------------------ */
-
-function ManualChapterContent({ chapter }: { chapter: { content?: string; videoUrl?: string } }) {
-  return (
-    <>
-      {chapter.videoUrl && (
-        <div className="mb-6 rounded-lg overflow-hidden bg-black aspect-video">
-          <video
-            src={chapter.videoUrl}
-            controls
-            className="w-full h-full"
-            controlsList="nodownload"
-          >
-            <track kind="captions" />
-          </video>
-        </div>
-      )}
-
-      {chapter.content ? (
-        <div className="prose prose-sm prose-slate max-w-none whitespace-pre-wrap">
-          {chapter.content}
-        </div>
-      ) : (
-        <p className="text-sm text-slate-400 italic">此章节暂无内容</p>
-      )}
-
-      {/* TODO: Load chapter attachments from course_attachments API once the hook is available.
-         For now, there's no useCourseAttachments hook, so attachments are not shown. */}
-    </>
-  );
-}
+/* Lesson plan blocks (ChapterBlocks) and manual chapter content (ManualChapterContent)
+   are NOT rendered in the portal — they are the counselor's teaching notes. The portal
+   only shows ContentBlockRenderer (actual consumable content like video/audio/worksheets)
+   and the chapter header (title + session goal) + homework suggestion. */
 
 /* ------------------------------------------------------------------ */
 /*  Main component                                                    */
@@ -169,7 +45,8 @@ export function CourseReader() {
   const { data: course, isLoading } = useCourse(courseId);
   const updateProgress = useUpdateCourseProgress();
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // Mobile-first: sidebar closed by default on small screens
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
 
   // Phase 8c bug fix — enrollmentId comes from route state (set by MyServicesTab
   // when the user drills down from "我的课程"). Missing state → null, which
@@ -208,7 +85,6 @@ export function CourseReader() {
   const selectedChapter = currentIdx >= 0 ? chapters[currentIdx] : chapters[0];
   const isFirst = currentIdx <= 0;
   const isLast = currentIdx >= chapters.length - 1;
-  const isAiAssisted = course.creationMode === 'ai_assisted';
 
   const goTo = (idx: number) => {
     if (idx >= 0 && idx < chapters.length) {
@@ -240,12 +116,20 @@ export function CourseReader() {
   };
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50">
+    <div className="relative flex h-[calc(100vh-4rem)] overflow-hidden bg-slate-50">
+      {/* ── Backdrop (mobile only) ───────────────────────────────── */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/30 z-20 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       {/* ── Left sidebar ─────────────────────────────────────────── */}
       <aside
         className={`${
-          sidebarOpen ? 'w-64' : 'w-0'
-        } flex-shrink-0 transition-all duration-300 overflow-hidden border-r border-slate-200 bg-white`}
+          sidebarOpen ? 'w-64 translate-x-0' : 'w-0 -translate-x-64 md:translate-x-0'
+        } absolute md:relative inset-y-0 left-0 z-30 md:z-auto flex-shrink-0 transition-all duration-300 overflow-hidden border-r border-slate-200 bg-white`}
       >
         <div className="flex flex-col h-full w-64">
           {/* Course title */}
@@ -276,7 +160,11 @@ export function CourseReader() {
               return (
                 <button
                   key={ch.id}
-                  onClick={() => setSelectedChapterId(ch.id)}
+                  onClick={() => {
+                    setSelectedChapterId(ch.id);
+                    // Auto-close sidebar on mobile after selection
+                    if (window.innerWidth < 768) setSidebarOpen(false);
+                  }}
                   className={`w-full text-left px-4 py-3 flex items-start gap-3 transition-colors group ${
                     isSelected
                       ? 'bg-brand-50 border-r-2 border-brand-500'
@@ -324,14 +212,7 @@ export function CourseReader() {
         <div className="flex items-center gap-3 px-6 py-3 bg-white border-b border-slate-100 flex-shrink-0">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors lg:hidden"
-            title={sidebarOpen ? '收起目录' : '展开目录'}
-          >
-            {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          </button>
-          <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors hidden lg:block"
+            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors"
             title={sidebarOpen ? '收起目录' : '展开目录'}
           >
             {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
@@ -374,39 +255,24 @@ export function CourseReader() {
                 )}
               </header>
 
-              {/* Content body */}
+              {/* Phase 9α — C-facing content blocks (video / audio / reflection / quiz / ...) */}
+              {/* Lesson plan blocks (ChapterBlocks / ManualChapterContent) are intentionally
+                  NOT rendered here — those are the counselor's teaching notes, not student
+                  learning content. The ContentBlockRenderer shows actual consumable content
+                  (video, audio, worksheets, quizzes) that the counselor has published for
+                  the chapter. If none exist yet, it shows "本节暂无可消费的内容". */}
               <div className="mb-8">
-                {isAiAssisted ? (
-                  <ChapterBlocks courseId={course.id} chapterId={selectedChapter.id} />
-                ) : (
-                  <ManualChapterContent chapter={selectedChapter} />
-                )}
+                <ContentBlockRenderer
+                  parentType="course"
+                  parentId={selectedChapter.id}
+                  enrollmentId={enrollmentId || ''}
+                  enrollmentType="course"
+                />
               </div>
 
-              {/* Phase 9α — C-facing content blocks (video / audio / reflection / quiz / ...) */}
-              {enrollmentId && (
-                <div className="mb-8">
-                  <ContentBlockRenderer
-                    parentType="course"
-                    parentId={selectedChapter.id}
-                    enrollmentId={enrollmentId}
-                    enrollmentType="course"
-                  />
-                </div>
-              )}
-
-              {/* Homework suggestion (for both modes if present) */}
-              {selectedChapter.homeworkSuggestion && (
-                <div className="mb-8 p-4 bg-amber-50 rounded-lg border border-amber-100">
-                  <div className="flex items-center gap-2 mb-1">
-                    <PenTool className="w-4 h-4 text-amber-600" />
-                    <span className="text-xs font-semibold text-amber-700">课后练习</span>
-                  </div>
-                  <p className="text-sm text-amber-800 leading-relaxed whitespace-pre-wrap">
-                    {selectedChapter.homeworkSuggestion}
-                  </p>
-                </div>
-              )}
+              {/* homeworkSuggestion is part of the counselor's lesson plan (AI-suggested
+                 homework for the teacher to assign). Actual student homework is delivered
+                 via content blocks (worksheet / reflection types) in ContentBlockRenderer. */}
 
               {/* ── Progress controls ─────────────────────────────── */}
               <footer className="flex items-center justify-between pt-6 mt-8 border-t border-slate-200">

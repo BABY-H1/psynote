@@ -11,6 +11,7 @@ import {
   CardGrid,
   DeliveryCard,
   EmptyCard,
+  getFiltersForKind,
   type StatusFilterOption,
   type DeliveryCardData,
 } from '../../../shared/components';
@@ -60,7 +61,7 @@ function mapToServiceStatus(ls: LogicalStatus): ServiceStatus {
 const STATUS_OVERRIDE: Record<LogicalStatus, { text: string; cls: string }> = {
   draft: { text: '草稿', cls: 'bg-yellow-100 text-yellow-700' },
   active: { text: '进行中', cls: 'bg-green-100 text-green-700' },
-  paused: { text: '已停用', cls: 'bg-slate-100 text-slate-500' },
+  paused: { text: '已暂停', cls: 'bg-slate-100 text-slate-500' },
   archived: { text: '已归档', cls: 'bg-slate-100 text-slate-500' },
 };
 
@@ -70,13 +71,12 @@ type View =
   | { type: 'edit'; assessmentId: string }
   | { type: 'detail'; assessmentId: string };
 
-const STATUS_FILTER_KEYS: { key: '' | LogicalStatus; label: string }[] = [
-  { key: '', label: '全部' },
-  { key: 'active', label: '进行中' },
-  { key: 'draft', label: '草稿' },
-  { key: 'paused', label: '已停用' },
-  { key: 'archived', label: '已归档' },
-];
+const ASSESSMENT_FILTERS = getFiltersForKind('assessment');
+
+/** Map logical assessment status → unified filter key */
+function logicalToFilterKey(ls: LogicalStatus): import('../../../shared/components').UnifiedFilterKey {
+  return ls === 'active' ? 'ongoing' : ls;
+}
 
 export function AssessmentManagement() {
   const { data: assessments, isLoading } = useAssessments();
@@ -95,12 +95,15 @@ export function AssessmentManagement() {
   // Status counts for filter badges (always reflect ALL assessments)
   const statusOptions = useMemo<StatusFilterOption[]>(() => {
     const all = assessments ?? [];
-    const counts: Record<LogicalStatus, number> = { draft: 0, active: 0, paused: 0, archived: 0 };
-    for (const a of all) counts[getLogicalStatus(a)]++;
-    return STATUS_FILTER_KEYS.map((f) => ({
+    const counts: Record<string, number> = {};
+    for (const a of all) {
+      const key = logicalToFilterKey(getLogicalStatus(a));
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return ASSESSMENT_FILTERS.map((f) => ({
       value: f.key,
       label: f.label,
-      count: f.key === '' ? all.length : counts[f.key],
+      count: f.key === '' ? all.length : counts[f.key] || 0,
       countTone: 'slate' as const,
     }));
   }, [assessments]);
@@ -108,7 +111,7 @@ export function AssessmentManagement() {
   const filtered = useMemo(() => {
     let arr = assessments ?? [];
     if (statusFilter) {
-      arr = arr.filter((a) => getLogicalStatus(a) === statusFilter);
+      arr = arr.filter((a) => logicalToFilterKey(getLogicalStatus(a)) === statusFilter);
     }
     if (search.trim()) {
       const q = search.trim().toLowerCase();

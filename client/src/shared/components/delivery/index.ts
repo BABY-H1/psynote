@@ -39,3 +39,6 @@ export type { AIChatMessage, AIChatRole } from './AIChatPanel';
 
 export { CreateServiceWizard } from './CreateServiceWizard';
 export type { WizardStep } from './CreateServiceWizard';
+
+export { UNIFIED_STATUS_FILTERS, getFiltersForKind } from './statusFilterConfig';
+export type { UnifiedFilterKey, UnifiedFilterDef } from './statusFilterConfig';

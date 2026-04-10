@@ -95,15 +95,26 @@ export function MyServicesTab() {
     return (groups as any[]).filter((g) => !!g.myEnrollmentStatus);
   }, [groups]);
 
-  // "My courses" = courses where I've enrolled (myEnrollmentStatus set)
+  // "My courses" — /client/my-courses returns { enrollment, courseTitle, courseCategory }[]
   const myCourses = useMemo(() => {
     if (!courses) return [];
-    return (courses as any[]).filter(
-      (c) =>
-        !!c.myEnrollmentStatus ||
-        c.enrollmentId || // fallback shape: backend may expose enrollmentId directly
-        c.enrolled === true,
-    );
+    return (courses as any[]).map((c) => {
+      // Handle both old shape (flat course object) and new shape (enrollment wrapper)
+      if (c.enrollment) {
+        return {
+          id: c.enrollment.courseId,
+          instanceId: c.enrollment.instanceId,
+          enrollmentId: c.enrollment.id,
+          title: c.courseTitle || '课程',
+          description: null,
+          status: c.enrollment.status,
+          progress: c.enrollment.progress,
+        };
+      }
+      // Fallback: legacy flat shape
+      if (c.myEnrollmentStatus || c.enrollmentId || c.enrolled) return c;
+      return null;
+    }).filter(Boolean);
   }, [courses]);
 
   if (apptLoading || groupsLoading || coursesLoading) {
