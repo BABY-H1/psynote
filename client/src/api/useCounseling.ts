@@ -66,6 +66,28 @@ export function useTimeline(episodeId: string | undefined) {
   });
 }
 
+/** Phase 9δ — Enriched timeline merged from multiple source tables. */
+export interface EnrichedTimelineItem {
+  id: string;
+  kind: string;
+  occurredAt: string | null;
+  title: string;
+  summary?: string;
+  ref: { type: string; id?: string };
+}
+
+export function useEnrichedTimeline(episodeId: string | undefined) {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['enrichedTimeline', orgId, episodeId],
+    queryFn: () =>
+      api.get<EnrichedTimelineItem[]>(
+        `${orgPrefix()}/episodes/${episodeId}/timeline/enriched`,
+      ),
+    enabled: !!orgId && !!episodeId,
+  });
+}
+
 export function useCreateEpisode() {
   const qc = useQueryClient();
   return useMutation({

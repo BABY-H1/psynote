@@ -78,6 +78,56 @@ export async function resultRoutes(app: FastifyInstance) {
     await logAudit(request, 'delete', 'assessment_results', resultId);
     return reply.status(204).send();
   });
+
+  /**
+   * Phase 9β — Trajectory: time-ordered series of (score, risk, dimensions)
+   * for one client × one scale. Powers the longitudinal chart on the
+   * counselor archive and (when client_visible=true) the portal report detail.
+   *
+   * GET /api/orgs/:orgId/results/trajectory?userId=...&scaleId=...
+   */
+  app.get('/trajectory', async (request) => {
+    const q = request.query as { userId?: string; scaleId?: string };
+    if (!q.userId) throw new ValidationError('userId is required');
+    if (!q.scaleId) throw new ValidationError('scaleId is required');
+    return resultService.getTrajectory(request.org!.orgId, q.userId, q.scaleId);
+  });
+
+  /**
+   * Phase 9β — Toggle client visibility for a single result.
+   * Default is false; counselor flips it on per result.
+   * PATCH /api/orgs/:orgId/results/:resultId/client-visible
+   * body: { visible: boolean }
+   */
+  app.patch('/:resultId/client-visible', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const { resultId } = request.params as { resultId: string };
+    const body = request.body as { visible?: boolean };
+    if (typeof body.visible !== 'boolean') throw new ValidationError('visible (boolean) is required');
+    const row = await resultService.setClientVisible(resultId, body.visible);
+    await logAudit(request, 'update', 'assessment_results', resultId, {
+      clientVisible: { old: !body.visible, new: body.visible },
+    });
+    return row;
+  });
+
+  /**
+   * Phase 9β — Persist AI recommendations on a result row.
+   * Called by the counselor UI after running the triage AI.
+   * PATCH /api/orgs/:orgId/results/:resultId/recommendations
+   * body: { recommendations: TriageRecommendation[] }
+   */
+  app.patch('/:resultId/recommendations', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const { resultId } = request.params as { resultId: string };
+    const body = request.body as { recommendations?: unknown[] };
+    if (!Array.isArray(body.recommendations)) {
+      throw new ValidationError('recommendations (array) is required');
+    }
+    return resultService.setRecommendations(resultId, body.recommendations);
+  });
 }
 
 /**

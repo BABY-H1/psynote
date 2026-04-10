@@ -12,6 +12,8 @@ import { ServiceDetail } from './pages/ServiceDetail';
 import { BookAppointment } from './pages/BookAppointment';
 import { CourseReader } from './pages/CourseReader';
 import { ConsentCenter } from './pages/ConsentCenter';
+// Phase 9β — assessment report detail with trajectory + AI interpretation
+import { AssessmentReportDetail } from './pages/AssessmentReportDetail';
 
 /**
  * Phase 8c — Portal route tree (mobile-first, 4-tab bottom navigation).
@@ -69,6 +71,7 @@ export function PortalApp() {
             <Route path="services/:kind/:id" element={<ServiceDetail />} />
             <Route path="book" element={<BookAppointment />} />
             <Route path="archive" element={<ArchiveTab />} />
+            <Route path="archive/results/:resultId" element={<AssessmentReportDetail />} />
             <Route path="account" element={<AccountTab />} />
             <Route path="account/profile" element={<ProfileSettings />} />
             <Route path="account/consents" element={<ConsentCenter />} />

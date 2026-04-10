@@ -179,10 +179,33 @@ export interface AssessmentResult {
   totalScore: number;
   riskLevel?: RiskLevel;
   aiInterpretation?: string;
+  /** Phase 9β — counselor-controlled visibility on the client portal. */
+  clientVisible?: boolean;
+  /** Phase 9β — AI triage recommendations attached after run. */
+  recommendations?: TriageRecommendationLite[];
   batchId?: string;
   createdBy?: string;
   deletedAt?: string;
   createdAt: string;
+}
+
+/**
+ * Phase 9β — Mirror of the server's TriageRecommendation, kept here so
+ * the AssessmentResult type is fully shared. The server's pipeline file
+ * is not imported by clients.
+ */
+export interface TriageRecommendationLite {
+  actionType:
+    | 'launch_course'
+    | 'launch_group'
+    | 'create_episode'
+    | 'send_assessment'
+    | 'send_consent'
+    | 'create_referral';
+  title: string;
+  reason: string;
+  urgency: 'routine' | 'soon' | 'urgent' | 'immediate';
+  assetIdHint?: string;
 }
 
 export interface AssessmentBatch {

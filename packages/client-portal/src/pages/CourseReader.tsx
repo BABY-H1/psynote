@@ -3,6 +3,8 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useCourse, useLessonBlocks, useUpdateCourseProgress } from '@client/api/useCourses';
 import { LESSON_BLOCK_LABELS, LESSON_BLOCK_ORDER, type LessonBlockType } from '@psynote/shared';
 import { PageLoading } from '@client/shared/components';
+// Phase 9α — C-facing content block renderer
+import { ContentBlockRenderer } from '../components/ContentBlockRenderer';
 import {
   ChevronLeft,
   ChevronRight,
@@ -380,6 +382,18 @@ export function CourseReader() {
                   <ManualChapterContent chapter={selectedChapter} />
                 )}
               </div>
+
+              {/* Phase 9α — C-facing content blocks (video / audio / reflection / quiz / ...) */}
+              {enrollmentId && (
+                <div className="mb-8">
+                  <ContentBlockRenderer
+                    parentType="course"
+                    parentId={selectedChapter.id}
+                    enrollmentId={enrollmentId}
+                    enrollmentType="course"
+                  />
+                </div>
+              )}
 
               {/* Homework suggestion (for both modes if present) */}
               {selectedChapter.homeworkSuggestion && (

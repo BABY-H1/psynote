@@ -220,6 +220,159 @@ export async function getTimeline(episodeId: string) {
     .orderBy(desc(careTimeline.createdAt));
 }
 
+/**
+ * Phase 9δ — Enriched timeline.
+ *
+ * Pulls events from multiple source tables and merges them into a single
+ * chronological stream so the case timeline visualization can render a
+ * complete history without doing N round-trips on the client.
+ *
+ * Each item is normalized to TimelineItem and sorted by occurredAt desc.
+ */
+export async function getEnrichedTimeline(episodeId: string) {
+  const [episode] = await db
+    .select({ clientId: careEpisodes.clientId })
+    .from(careEpisodes)
+    .where(eq(careEpisodes.id, episodeId))
+    .limit(1);
+  if (!episode) return [];
+
+  const events: TimelineItem[] = [];
+
+  // 1. careTimeline
+  const tl = await db
+    .select()
+    .from(careTimeline)
+    .where(eq(careTimeline.careEpisodeId, episodeId));
+  for (const t of tl) {
+    events.push({
+      id: t.id,
+      kind: 'event',
+      occurredAt: t.createdAt,
+      title: t.title,
+      summary: t.summary ?? undefined,
+      ref: { type: t.eventType, id: t.refId ?? undefined },
+    });
+  }
+
+  // 2. session notes
+  const { sessionNotes } = await import('../../db/schema.js');
+  const notes = await db
+    .select()
+    .from(sessionNotes)
+    .where(eq(sessionNotes.careEpisodeId, episodeId));
+  for (const n of notes) {
+    events.push({
+      id: n.id,
+      kind: 'session_note',
+      occurredAt: n.createdAt,
+      title: '会谈记录',
+      summary: undefined,
+      ref: { type: 'session_note', id: n.id },
+    });
+  }
+
+  // 3. assessments
+  const { assessmentResults } = await import('../../db/schema.js');
+  const results = await db
+    .select()
+    .from(assessmentResults)
+    .where(eq(assessmentResults.careEpisodeId, episodeId));
+  for (const r of results) {
+    events.push({
+      id: r.id,
+      kind: 'assessment_result',
+      occurredAt: r.createdAt,
+      title: `测评 (${r.totalScore ?? '—'} 分)`,
+      summary: r.riskLevel ?? undefined,
+      ref: { type: 'assessment_result', id: r.id },
+    });
+  }
+
+  // 4. group enrollments
+  const { groupEnrollments } = await import('../../db/schema.js');
+  const groupEs = await db
+    .select()
+    .from(groupEnrollments)
+    .where(eq(groupEnrollments.careEpisodeId, episodeId));
+  for (const ge of groupEs) {
+    events.push({
+      id: ge.id,
+      kind: 'group_enrollment',
+      occurredAt: ge.enrolledAt ?? ge.createdAt,
+      title: '加入团辅',
+      ref: { type: 'group_enrollment', id: ge.id },
+    });
+  }
+
+  // 5. course enrollments
+  const { courseEnrollments } = await import('../../db/schema.js');
+  const courseEs = await db
+    .select()
+    .from(courseEnrollments)
+    .where(eq(courseEnrollments.careEpisodeId, episodeId));
+  for (const ce of courseEs) {
+    events.push({
+      id: ce.id,
+      kind: 'course_enrollment',
+      occurredAt: ce.enrolledAt,
+      title: '加入课程',
+      ref: { type: 'course_enrollment', id: ce.id },
+    });
+  }
+
+  // 6. referrals
+  const { referrals } = await import('../../db/schema.js');
+  const refs = await db
+    .select()
+    .from(referrals)
+    .where(eq(referrals.careEpisodeId, episodeId));
+  for (const r of refs) {
+    events.push({
+      id: r.id,
+      kind: 'referral',
+      occurredAt: r.createdAt,
+      title: `转介 (${r.status})`,
+      summary: r.targetName ?? undefined,
+      ref: { type: 'referral', id: r.id },
+    });
+  }
+
+  // 7. follow-up reviews
+  const { followUpReviews } = await import('../../db/schema.js');
+  const reviews = await db
+    .select()
+    .from(followUpReviews)
+    .where(eq(followUpReviews.careEpisodeId, episodeId));
+  for (const fr of reviews) {
+    events.push({
+      id: fr.id,
+      kind: 'follow_up_review',
+      occurredAt: fr.createdAt,
+      title: '随访回顾',
+      ref: { type: 'follow_up_review', id: fr.id },
+    });
+  }
+
+  // Sort by time desc
+  events.sort((a, b) => {
+    const ta = a.occurredAt ? new Date(a.occurredAt).getTime() : 0;
+    const tb = b.occurredAt ? new Date(b.occurredAt).getTime() : 0;
+    return tb - ta;
+  });
+
+  return events;
+}
+
+interface TimelineItem {
+  id: string;
+  kind: string;
+  occurredAt: Date | string | null;
+  title: string;
+  summary?: string;
+  ref: { type: string; id?: string };
+}
+
 /** Add a timeline event */
 export async function addTimelineEvent(input: {
   careEpisodeId: string;

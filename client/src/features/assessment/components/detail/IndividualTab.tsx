@@ -1,11 +1,13 @@
 import React, { useState } from 'react';
-import { useGenerateReport } from '../../../../api/useAssessments';
+import { useGenerateReport, useSetResultClientVisible } from '../../../../api/useAssessments';
 import type { AssessmentResult, AssessmentReport } from '@psynote/shared';
-import { Download, TrendingUp } from 'lucide-react';
+import { Download, TrendingUp, Eye, EyeOff } from 'lucide-react';
 import { RiskBadge, useToast } from '../../../../shared/components';
 import { useAuthStore } from '../../../../stores/authStore';
 import { IndividualReportView } from './IndividualReportView';
 import { TrendReportView } from './TrendReportView';
+// Phase 9β — MBC reusable building blocks
+import { AISuggestionPanel } from '../AISuggestionPanel';
 
 interface Props {
   assessmentId: string;
@@ -189,23 +191,89 @@ function TrackingUserCard({ userId, userResults, onViewReport, onViewTrend, tren
       {expanded && (
         <div className="border-t border-slate-100 px-4 pb-4 space-y-2 pt-3">
           {userResults.map((r, idx) => (
-            <div key={r.id} className="flex items-center justify-between py-2 px-3 bg-slate-50 rounded-lg">
-              <div className="flex items-center gap-3">
-                <span className="text-xs font-medium text-slate-500">第 {userResults.length - idx} 次</span>
-                <span className="text-xs text-slate-400">{new Date(r.createdAt).toLocaleString('zh-CN')}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-mono text-slate-600">{r.totalScore} 分</span>
-                {r.riskLevel && <RiskBadge level={r.riskLevel} />}
-                <button
-                  onClick={() => onViewReport(r.id)}
-                  className="px-2.5 py-1 text-xs text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition font-medium"
-                >
-                  查看报告
-                </button>
-              </div>
-            </div>
+            <ResultRow
+              key={r.id}
+              result={r}
+              displayIdx={userResults.length - idx}
+              onViewReport={onViewReport}
+            />
           ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase 9β — Single result row with inline visibility toggle and an
+ * expandable AI Suggestion panel.
+ */
+function ResultRow({
+  result,
+  displayIdx,
+  onViewReport,
+}: {
+  result: AssessmentResult;
+  displayIdx: number;
+  onViewReport: (resultId: string) => void;
+}) {
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const setVisible = useSetResultClientVisible();
+  const { toast } = useToast();
+
+  async function handleToggleVisible() {
+    try {
+      await setVisible.mutateAsync({
+        resultId: result.id,
+        visible: !result.clientVisible,
+      });
+      toast(result.clientVisible ? '已对来访者隐藏' : '已对来访者开放', 'success');
+    } catch (err: any) {
+      toast(err?.message ?? '切换失败', 'error');
+    }
+  }
+
+  return (
+    <div className="bg-slate-50 rounded-lg overflow-hidden">
+      <div className="flex items-center justify-between py-2 px-3">
+        <div className="flex items-center gap-3">
+          <span className="text-xs font-medium text-slate-500">第 {displayIdx} 次</span>
+          <span className="text-xs text-slate-400">{new Date(result.createdAt).toLocaleString('zh-CN')}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-mono text-slate-600">{result.totalScore} 分</span>
+          {result.riskLevel && <RiskBadge level={result.riskLevel} />}
+          <button
+            onClick={handleToggleVisible}
+            disabled={setVisible.isPending}
+            className={`px-2 py-1 text-xs rounded-lg transition flex items-center gap-1 disabled:opacity-50 ${
+              result.clientVisible
+                ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+            }`}
+            title={result.clientVisible ? '来访者可在 Portal 中看到此次结果' : '来访者无法在 Portal 中看到此次结果'}
+          >
+            {result.clientVisible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+            {result.clientVisible ? '已开放' : '不可见'}
+          </button>
+          <button
+            onClick={() => setShowSuggestions((v) => !v)}
+            className="px-2.5 py-1 text-xs text-violet-600 bg-violet-50 hover:bg-violet-100 rounded-lg transition font-medium"
+          >
+            AI 建议
+          </button>
+          <button
+            onClick={() => onViewReport(result.id)}
+            className="px-2.5 py-1 text-xs text-brand-600 bg-brand-50 hover:bg-brand-100 rounded-lg transition font-medium"
+          >
+            查看报告
+          </button>
+        </div>
+      </div>
+
+      {showSuggestions && (
+        <div className="px-3 pb-3">
+          <AISuggestionPanel result={result} />
         </div>
       )}
     </div>

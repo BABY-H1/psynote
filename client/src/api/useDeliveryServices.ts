@@ -219,3 +219,45 @@ function normalizeFilter<T extends string>(v: T | T[] | undefined): Set<T> | nul
   if (!v) return null;
   return new Set(Array.isArray(v) ? v : [v]);
 }
+
+// ─── Phase 9β — Unified launch verb ─────────────────────────────────
+
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+
+export type LaunchActionType =
+  | 'launch_course'
+  | 'launch_group'
+  | 'create_episode'
+  | 'send_assessment'
+  | 'send_consent'
+  | 'create_referral';
+
+export interface LaunchResult {
+  kind: 'course' | 'group' | 'counseling' | 'assessment' | 'consent' | 'referral';
+  instanceId: string;
+  enrollmentIds?: string[];
+  summary: string;
+}
+
+/**
+ * Phase 9β — Hook around the unified `POST /services/launch` endpoint.
+ * One call site for all 6 actionTypes; the AI suggestion panel uses this
+ * for one-click adoption.
+ */
+export function useLaunchService() {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { actionType: LaunchActionType; payload: unknown }) =>
+      api.post<LaunchResult>(`/orgs/${orgId}/services/launch`, input),
+    onSuccess: () => {
+      // Invalidate everything that may show the new instance
+      qc.invalidateQueries({ queryKey: ['delivery-services'] });
+      qc.invalidateQueries({ queryKey: ['episodes'] });
+      qc.invalidateQueries({ queryKey: ['group-instances'] });
+      qc.invalidateQueries({ queryKey: ['course-instances'] });
+      qc.invalidateQueries({ queryKey: ['assessments'] });
+      qc.invalidateQueries({ queryKey: ['referrals'] });
+    },
+  });
+}

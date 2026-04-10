@@ -154,6 +154,94 @@ export async function getResultById(resultId: string) {
 }
 
 /**
+ * Phase 9β — Longitudinal trend query.
+ *
+ * Returns a time-ordered series of (createdAt, totalScore, riskLevel,
+ * dimensionScores) for a single client × scale, used by the trajectory chart
+ * on both the counselor archive and the (gated) portal report detail page.
+ *
+ * To resolve "scale → results", we join through assessmentScales and
+ * filter by userId. The result rows themselves don't carry scaleId, only
+ * assessmentId, so we infer "this result is for scale X" via the junction.
+ *
+ * @param onlyClientVisible — when called from the portal, pass true so only
+ *   results the counselor opted-in for client visibility are returned.
+ */
+export async function getTrajectory(
+  orgId: string,
+  userId: string,
+  scaleId: string,
+  options?: { onlyClientVisible?: boolean },
+) {
+  const conditions = [
+    eq(assessmentResults.orgId, orgId),
+    eq(assessmentResults.userId, userId),
+    isNull(assessmentResults.deletedAt),
+  ];
+  if (options?.onlyClientVisible) {
+    conditions.push(eq(assessmentResults.clientVisible, true));
+  }
+
+  // Find all assessments that include this scale
+  const linkRows = await db
+    .select({ assessmentId: assessmentScales.assessmentId })
+    .from(assessmentScales)
+    .where(eq(assessmentScales.scaleId, scaleId));
+  const allowedAssessmentIds = linkRows.map((r) => r.assessmentId);
+
+  if (allowedAssessmentIds.length === 0) return [];
+
+  conditions.push(inArray(assessmentResults.assessmentId, allowedAssessmentIds));
+
+  const rows = await db
+    .select({
+      id: assessmentResults.id,
+      assessmentId: assessmentResults.assessmentId,
+      totalScore: assessmentResults.totalScore,
+      riskLevel: assessmentResults.riskLevel,
+      dimensionScores: assessmentResults.dimensionScores,
+      clientVisible: assessmentResults.clientVisible,
+      createdAt: assessmentResults.createdAt,
+    })
+    .from(assessmentResults)
+    .where(and(...conditions))
+    .orderBy(asc(assessmentResults.createdAt));
+
+  return rows;
+}
+
+/**
+ * Phase 9β — Toggle the per-result `clientVisible` flag.
+ * Used by the counselor's "让来访者看到" switch.
+ */
+export async function setClientVisible(resultId: string, visible: boolean) {
+  const [updated] = await db
+    .update(assessmentResults)
+    .set({ clientVisible: visible })
+    .where(eq(assessmentResults.id, resultId))
+    .returning();
+  if (!updated) throw new NotFoundError('AssessmentResult', resultId);
+  return updated;
+}
+
+/**
+ * Phase 9β — Save the AI triage recommendations to a result row so the
+ * suggestion panel can render them without re-running the LLM.
+ */
+export async function setRecommendations(
+  resultId: string,
+  recommendations: unknown[],
+) {
+  const [updated] = await db
+    .update(assessmentResults)
+    .set({ recommendations: recommendations as any })
+    .where(eq(assessmentResults.id, resultId))
+    .returning();
+  if (!updated) throw new NotFoundError('AssessmentResult', resultId);
+  return updated;
+}
+
+/**
  * Score and save an assessment submission.
  * Calculates dimension scores based on answers + scale structure.
  */

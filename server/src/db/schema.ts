@@ -153,6 +153,14 @@ export const assessmentResults = pgTable('assessment_results', {
   totalScore: numeric('total_score'),
   riskLevel: text('risk_level'),
   aiInterpretation: text('ai_interpretation'),
+  // Phase 9β — counselor controls whether the client can see the result in the portal.
+  // Default false: clinician must explicitly opt-in per result, mirroring SimplePractice MBC
+  // but going one step further (SimplePractice doesn't expose results to clients at all).
+  clientVisible: boolean('client_visible').notNull().default(false),
+  // Phase 9β — AI-generated structured recommendations attached to a completed result.
+  // Stored on the result row so the suggestion panel can show them without a re-run.
+  // Shape: TriageRecommendation[] from triage.ts
+  recommendations: jsonb('recommendations').notNull().default([]),
   batchId: uuid('batch_id').references(() => assessmentBatches.id),
   createdBy: uuid('created_by').references(() => users.id),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -413,13 +421,40 @@ export const referrals = pgTable('referrals', {
   targetType: text('target_type'),
   targetName: text('target_name'),
   targetContact: text('target_contact'),
+  // Phase 9δ — extended status state machine for the bidirectional flow:
+  //   pending  → 已发起，等待来访者同意
+  //   consented → 来访者已同意，等待接收方接受 (or PDF download for external mode)
+  //   accepted  → 接收方接受
+  //   rejected  → 接收方拒绝
+  //   completed → 整个流程结束
+  //   cancelled → 发送方撤销 (before consented)
   status: text('status').notNull().default('pending'),
   followUpPlan: text('follow_up_plan'),
   followUpNotes: text('follow_up_notes'),
+  // Phase 9δ — destination mode: 'platform' = receiver is a psynote user/org;
+  // 'external' = generate a PDF + one-time download link for offline transfer.
+  mode: text('mode').notNull().default('external'),
+  // Phase 9δ — receiver fields for platform-internal transfer
+  toCounselorId: uuid('to_counselor_id').references(() => users.id),
+  toOrgId: uuid('to_org_id').references(() => organizations.id),
+  // Phase 9δ — structured data package selection (which records to share)
+  // { sessionNoteIds: string[], assessmentResultIds: string[], treatmentPlanIds: string[],
+  //   includeChiefComplaint: boolean, includeRiskHistory: boolean }
+  dataPackageSpec: jsonb('data_package_spec').notNull().default({}),
+  // Phase 9δ — client knowledge & consent
+  consentedAt: timestamp('consented_at', { withTimezone: true }),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }),
+  rejectedAt: timestamp('rejected_at', { withTimezone: true }),
+  rejectionReason: text('rejection_reason'),
+  // Phase 9δ — for external mode: opaque token + expiry for the one-time download link
+  downloadToken: text('download_token'),
+  downloadExpiresAt: timestamp('download_expires_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('idx_referrals_episode').on(t.careEpisodeId),
+  index('idx_referrals_to_counselor').on(t.toCounselorId, t.status),
+  index('idx_referrals_to_org').on(t.toOrgId, t.status),
 ]);
 
 export const followUpPlans = pgTable('follow_up_plans', {
@@ -680,6 +715,68 @@ export const courseAttachments = pgTable('course_attachments', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('idx_course_attachments_chapter').on(t.chapterId),
+]);
+
+/**
+ * Phase 9α — C-facing consumable content blocks attached to course chapters.
+ * Distinct from `courseLessonBlocks` (teacher-oriented outline); that table is
+ * kept as the authoring draft area, this table holds what the learner sees.
+ */
+export const courseContentBlocks = pgTable('course_content_blocks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  chapterId: uuid('chapter_id').notNull().references(() => courseChapters.id, { onDelete: 'cascade' }),
+  blockType: text('block_type').notNull(), // video | audio | rich_text | pdf | quiz | reflection | worksheet | check_in
+  visibility: text('visibility').notNull().default('participant'), // participant | facilitator | both
+  sortOrder: integer('sort_order').notNull().default(0),
+  payload: jsonb('payload').notNull().default({}),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_course_content_blocks_chapter').on(t.chapterId, t.sortOrder),
+]);
+
+/**
+ * Phase 9α — Content blocks attached to a group scheme session.
+ * Shares type & payload shape with courseContentBlocks via packages/shared.
+ */
+export const groupSessionBlocks = pgTable('group_session_blocks', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  schemeSessionId: uuid('scheme_session_id').notNull().references(() => groupSchemeSessions.id, { onDelete: 'cascade' }),
+  blockType: text('block_type').notNull(),
+  visibility: text('visibility').notNull().default('both'), // default 'both' for group sessions
+  sortOrder: integer('sort_order').notNull().default(0),
+  payload: jsonb('payload').notNull().default({}),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_group_session_blocks_session').on(t.schemeSessionId, t.sortOrder),
+]);
+
+/**
+ * Phase 9α — A learner's response/progress for a single content block within an enrollment.
+ * Handles two types of enrollment via `enrollmentType` discriminator.
+ * `response` is jsonb (or null for "seen/completed" markers with no data).
+ * `safetyFlags` carries keyword scan results for reflection/worksheet submissions.
+ */
+export const enrollmentBlockResponses = pgTable('enrollment_block_responses', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  enrollmentId: uuid('enrollment_id').notNull(), // points to course_enrollments.id or group_enrollments.id
+  enrollmentType: text('enrollment_type').notNull(), // 'course' | 'group'
+  blockId: uuid('block_id').notNull(), // points to course_content_blocks.id or group_session_blocks.id
+  blockType: text('block_type').notNull(),
+  response: jsonb('response'),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  safetyFlags: jsonb('safety_flags').notNull().default([]),
+  reviewedByCounselor: boolean('reviewed_by_counselor').notNull().default(false),
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_enrollment_block_response').on(t.enrollmentId, t.enrollmentType, t.blockId),
+  index('idx_enrollment_block_responses_enrollment').on(t.enrollmentId, t.enrollmentType),
+  index('idx_enrollment_block_responses_safety').on(t.reviewedByCounselor),
 ]);
 
 export const courseInstances = pgTable('course_instances', {

@@ -7,7 +7,9 @@ import { ValidationError } from '../../lib/errors.js';
 import { db } from '../../config/database.js';
 import {
   careEpisodes, careTimeline, assessmentResults, appointments,
-  groupInstances, groupEnrollments, groupSchemes, courses, courseEnrollments,
+  groupInstances, groupEnrollments, groupSchemes, groupSchemeSessions,
+  groupSessionRecords, groupSessionAttendance,
+  courses, courseEnrollments,
   notifications, orgMembers, users,
 } from '../../db/schema.js';
 import * as appointmentService from '../counseling/appointment.service.js';
@@ -76,7 +78,12 @@ export async function clientPortalRoutes(app: FastifyInstance) {
     };
   });
 
-  /** My assessment results */
+  /**
+   * My assessment results.
+   *
+   * Phase 9β — Only returns results the counselor has explicitly opted in
+   * for client visibility. Clients never see scores by default.
+   */
   app.get('/results', async (request) => {
     const userId = request.user!.id;
     const orgId = request.org!.orgId;
@@ -87,9 +94,50 @@ export async function clientPortalRoutes(app: FastifyInstance) {
       .where(and(
         eq(assessmentResults.orgId, orgId),
         eq(assessmentResults.userId, userId),
+        eq(assessmentResults.clientVisible, true),
         isNull(assessmentResults.deletedAt),
       ))
       .orderBy(desc(assessmentResults.createdAt));
+  });
+
+  /**
+   * Phase 9β — Single result detail for the portal.
+   * Owned by user only. Returns 404 if the counselor hasn't opted-in.
+   */
+  app.get('/results/:resultId', async (request) => {
+    const userId = request.user!.id;
+    const orgId = request.org!.orgId;
+    const { resultId } = request.params as { resultId: string };
+
+    const [row] = await db
+      .select()
+      .from(assessmentResults)
+      .where(and(
+        eq(assessmentResults.id, resultId),
+        eq(assessmentResults.orgId, orgId),
+        eq(assessmentResults.userId, userId),
+        eq(assessmentResults.clientVisible, true),
+        isNull(assessmentResults.deletedAt),
+      ))
+      .limit(1);
+
+    if (!row) {
+      throw new Error('Result not available');
+    }
+    return row;
+  });
+
+  /**
+   * Phase 9β — Trajectory query scoped to the calling user only.
+   * Filters by clientVisible inside the service layer.
+   */
+  app.get('/results/trajectory/:scaleId', async (request) => {
+    const userId = request.user!.id;
+    const orgId = request.org!.orgId;
+    const { scaleId } = request.params as { scaleId: string };
+
+    const { getTrajectory } = await import('../assessment/result.service.js');
+    return getTrajectory(orgId, userId, scaleId, { onlyClientVisible: true });
   });
 
   /** My appointments */
@@ -222,6 +270,187 @@ export async function clientPortalRoutes(app: FastifyInstance) {
       .leftJoin(courses, eq(courses.id, courseEnrollments.courseId))
       .where(eq(courseEnrollments.userId, userId))
       .orderBy(desc(courseEnrollments.enrolledAt));
+  });
+
+  /**
+   * Phase 9γ — Group instance detail for the participant.
+   *
+   * Returns the instance + scheme + sessions in one envelope so the portal
+   * can render a session list. Each session is decorated with the
+   * participant's attendance status (if any).
+   *
+   * Verifies the caller is enrolled in this group before returning anything.
+   */
+  app.get('/groups/:instanceId', async (request) => {
+    const userId = request.user!.id;
+    const orgId = request.org!.orgId;
+    const { instanceId } = request.params as { instanceId: string };
+
+    // Ownership check via enrollment
+    const [enrollment] = await db
+      .select()
+      .from(groupEnrollments)
+      .where(and(
+        eq(groupEnrollments.instanceId, instanceId),
+        eq(groupEnrollments.userId, userId),
+      ))
+      .limit(1);
+    if (!enrollment) throw new ValidationError('You are not enrolled in this group');
+
+    // Instance + scheme
+    const [instance] = await db
+      .select()
+      .from(groupInstances)
+      .where(and(
+        eq(groupInstances.id, instanceId),
+        eq(groupInstances.orgId, orgId),
+      ))
+      .limit(1);
+    if (!instance) throw new ValidationError('Group instance not found');
+
+    let scheme = null;
+    let schemeSessions: any[] = [];
+    if (instance.schemeId) {
+      const [s] = await db
+        .select()
+        .from(groupSchemes)
+        .where(eq(groupSchemes.id, instance.schemeId))
+        .limit(1);
+      scheme = s ?? null;
+
+      schemeSessions = await db
+        .select()
+        .from(groupSchemeSessions)
+        .where(eq(groupSchemeSessions.schemeId, instance.schemeId));
+    }
+
+    // Session records (actual instance-time records, may differ from scheme)
+    const records = await db
+      .select()
+      .from(groupSessionRecords)
+      .where(eq(groupSessionRecords.instanceId, instanceId))
+      .orderBy(groupSessionRecords.sessionNumber);
+
+    // Attendance for the calling user
+    const attendance = records.length > 0
+      ? await db
+          .select()
+          .from(groupSessionAttendance)
+          .where(eq(groupSessionAttendance.enrollmentId, enrollment.id))
+      : [];
+    const attendanceMap = new Map(attendance.map((a) => [a.sessionRecordId, a]));
+
+    return {
+      enrollment,
+      instance,
+      scheme,
+      schemeSessions,
+      sessionRecords: records.map((r) => ({
+        ...r,
+        myAttendance: attendanceMap.get(r.id) ?? null,
+      })),
+    };
+  });
+
+  /**
+   * Phase 9γ — Mark attendance for a session record (participant self check-in).
+   * POST /api/orgs/:orgId/client/groups/:instanceId/sessions/:sessionRecordId/check-in
+   */
+  app.post('/groups/:instanceId/sessions/:sessionRecordId/check-in', async (request, reply) => {
+    const userId = request.user!.id;
+    const { instanceId, sessionRecordId } = request.params as {
+      instanceId: string;
+      sessionRecordId: string;
+    };
+
+    // Resolve enrollment id
+    const [enrollment] = await db
+      .select()
+      .from(groupEnrollments)
+      .where(and(
+        eq(groupEnrollments.instanceId, instanceId),
+        eq(groupEnrollments.userId, userId),
+      ))
+      .limit(1);
+    if (!enrollment) throw new ValidationError('Not enrolled in this group');
+
+    // Validate the session record belongs to this instance
+    const [sessionRecord] = await db
+      .select()
+      .from(groupSessionRecords)
+      .where(and(
+        eq(groupSessionRecords.id, sessionRecordId),
+        eq(groupSessionRecords.instanceId, instanceId),
+      ))
+      .limit(1);
+    if (!sessionRecord) throw new ValidationError('Session record not found');
+
+    // Upsert attendance
+    const [existing] = await db
+      .select()
+      .from(groupSessionAttendance)
+      .where(and(
+        eq(groupSessionAttendance.sessionRecordId, sessionRecordId),
+        eq(groupSessionAttendance.enrollmentId, enrollment.id),
+      ))
+      .limit(1);
+
+    if (existing) {
+      const [updated] = await db
+        .update(groupSessionAttendance)
+        .set({ status: 'present' })
+        .where(eq(groupSessionAttendance.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [created] = await db
+        .insert(groupSessionAttendance)
+        .values({
+          sessionRecordId,
+          enrollmentId: enrollment.id,
+          status: 'present',
+        })
+        .returning();
+      await logAudit(request, 'create', 'group_session_attendance', created.id);
+      return reply.status(201).send(created);
+    }
+  });
+
+  // ─── Phase 9δ — Referral consent (client-side) ────────────────
+
+  /**
+   * GET /api/orgs/:orgId/client/referrals
+   * List referrals where the calling user is the subject and status is pending.
+   */
+  app.get('/referrals', async (request) => {
+    const userId = request.user!.id;
+    const { referrals: referralsTable } = await import('../../db/schema.js');
+    return db
+      .select()
+      .from(referralsTable)
+      .where(and(
+        eq(referralsTable.clientId, userId),
+        eq(referralsTable.status, 'pending'),
+      ));
+  });
+
+  /**
+   * POST /api/orgs/:orgId/client/referrals/:referralId/consent
+   * body: { consent: boolean }
+   * Records the client's decision; on consent, mints download token (if external mode)
+   * or notifies the platform receiver.
+   */
+  app.post('/referrals/:referralId/consent', async (request, reply) => {
+    const userId = request.user!.id;
+    const { referralId } = request.params as { referralId: string };
+    const body = request.body as { consent?: boolean };
+    if (typeof body.consent !== 'boolean') {
+      throw new ValidationError('consent (boolean) is required');
+    }
+
+    const referralService = await import('../referral/referral.service.js');
+    const updated = await referralService.recordClientConsent(referralId, userId, body.consent);
+    return reply.status(200).send(updated);
   });
 
   /** My group enrollments */

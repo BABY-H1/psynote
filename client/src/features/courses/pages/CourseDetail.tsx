@@ -22,6 +22,8 @@ import {
   useRefineLessonBlock,
 } from '../../../api/useCourseAuthoring';
 import { PageLoading, useToast } from '../../../shared/components';
+// Phase 9α — C-facing content blocks for learner consumption
+import { ContentBlockPanel } from '../../knowledge/components/ContentBlockPanel';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -636,6 +638,19 @@ function ChapterDetailView({
               onChange={(v) => onUpdateBlock(blockType, v)}
             />
           ))}
+        </div>
+      </div>
+
+      {/* Phase 9α — C-facing content blocks (what the learner consumes in the portal) */}
+      <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100">
+          <h3 className="text-sm font-semibold text-slate-700">学员可见内容</h3>
+          <p className="text-xs text-slate-400 mt-0.5">
+            来访者在 Portal 里实际看到 / 听到 / 填写的内容块
+          </p>
+        </div>
+        <div className="p-4">
+          <ContentBlockPanel parentType="course" parentId={chapter.id} />
         </div>
       </div>
     </div>

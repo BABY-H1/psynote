@@ -37,19 +37,40 @@ export function useRiskAssess() {
   });
 }
 
-/** Triage recommendation */
+/**
+ * Triage recommendation (Phase 9β shape).
+ *
+ * Returns an array of structured `recommendations` plus a free-form `summary`,
+ * matching the server `TriageResult` type. Each recommendation has an
+ * `actionType` that corresponds 1:1 with the launch verb's accepted asset
+ * types so the suggestion panel can fire a one-click "采纳" mutation.
+ */
+export interface TriageRecommendation {
+  actionType:
+    | 'launch_course'
+    | 'launch_group'
+    | 'create_episode'
+    | 'send_assessment'
+    | 'send_consent'
+    | 'create_referral';
+  title: string;
+  reason: string;
+  urgency: 'routine' | 'soon' | 'urgent' | 'immediate';
+  assetIdHint?: string;
+}
+
+export interface TriageResult {
+  recommendations: TriageRecommendation[];
+  summary: string;
+}
+
 export function useTriageRecommendation() {
   return useMutation({
     mutationFn: (data: {
       riskLevel: string;
       dimensions: { name: string; score: number; label: string }[];
       chiefComplaint?: string;
-    }) => api.post<{
-      interventionType: string;
-      reason: string;
-      urgency: string;
-      additionalSuggestions: string[];
-    }>(`${orgPrefix()}/triage`, data),
+    }) => api.post<TriageResult>(`${orgPrefix()}/triage`, data),
   });
 }
 

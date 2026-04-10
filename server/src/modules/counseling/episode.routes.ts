@@ -64,10 +64,19 @@ export async function episodeRoutes(app: FastifyInstance) {
     return episode;
   });
 
-  /** Get episode timeline */
+  /** Get episode timeline (raw care_timeline events only) */
   app.get('/:episodeId/timeline', async (request) => {
     const { episodeId } = validate(EpisodeIdParam, request.params);
     return episodeService.getTimeline(episodeId);
+  });
+
+  /**
+   * Phase 9δ — Enriched timeline (sessions / assessments / groups / courses /
+   * referrals / follow-ups merged into one chronological stream).
+   */
+  app.get('/:episodeId/timeline/enriched', async (request) => {
+    const { episodeId } = validate(EpisodeIdParam, request.params);
+    return episodeService.getEnrichedTimeline(episodeId);
   });
 
   /** Create a new episode */

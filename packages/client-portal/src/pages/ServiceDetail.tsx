@@ -4,6 +4,8 @@ import { Calendar, Clock, MapPin, User as UserIcon, Video, Phone } from 'lucide-
 import { useMyAppointments } from '@client/api/useClientPortal';
 import { PageLoading, StatusBadge } from '@client/shared/components';
 import { SectionHeader } from '../components/SectionHeader';
+// Phase 9γ — group drill-down
+import { GroupDetailView } from './GroupDetailView';
 
 /**
  * Phase 8c — ServiceDetail: counseling service drill-down.
@@ -30,14 +32,16 @@ export function ServiceDetail() {
 
   if (isLoading) return <PageLoading />;
 
+  // Phase 9γ — group drill-down delegates to GroupDetailView.
+  if (kind === 'group') {
+    return <GroupDetailView />;
+  }
+
   if (kind !== 'counseling') {
-    // Group and course drill-down aren't implemented this phase.
+    // Course drill-down has its own dedicated route via /portal/services/course/:id.
     return (
       <div className="rounded-2xl border border-dashed border-slate-200 p-8 text-center bg-white">
         <div className="text-sm font-medium text-slate-500">此服务详情暂不可用</div>
-        <div className="text-xs text-slate-400 mt-1">
-          后续版本将支持团辅与课程的详情查看
-        </div>
         <button
           type="button"
           onClick={() => navigate('/portal/services')}

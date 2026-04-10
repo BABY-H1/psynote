@@ -113,6 +113,68 @@ export function useResult(resultId: string | undefined) {
   });
 }
 
+// ─── Phase 9β — MBC trajectory, client visibility, recommendations ────
+
+export interface TrajectoryPoint {
+  id: string;
+  assessmentId: string;
+  totalScore: number | string | null;
+  riskLevel: string | null;
+  dimensionScores: Record<string, number> | unknown;
+  clientVisible: boolean;
+  createdAt: string;
+}
+
+/**
+ * Time-ordered series of (score, risk, dimensions) for one client × one scale.
+ * Powers the longitudinal chart.
+ */
+export function useTrajectory(userId: string | undefined, scaleId: string | undefined) {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['trajectory', orgId, userId, scaleId],
+    queryFn: () =>
+      api.get<TrajectoryPoint[]>(
+        `${orgPrefix()}/results/trajectory?userId=${userId}&scaleId=${scaleId}`,
+      ),
+    enabled: !!orgId && !!userId && !!scaleId,
+  });
+}
+
+/**
+ * Toggle a single result's `clientVisible` flag.
+ * Default is false; counselor flips it on per result.
+ */
+export function useSetResultClientVisible() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ resultId, visible }: { resultId: string; visible: boolean }) =>
+      api.patch<AssessmentResult>(
+        `${orgPrefix()}/results/${resultId}/client-visible`,
+        { visible },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['results'] });
+      qc.invalidateQueries({ queryKey: ['trajectory'] });
+    },
+  });
+}
+
+/** Persist AI triage recommendations on a result row. */
+export function useSetResultRecommendations() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ resultId, recommendations }: { resultId: string; recommendations: unknown[] }) =>
+      api.patch<AssessmentResult>(
+        `${orgPrefix()}/results/${resultId}/recommendations`,
+        { recommendations },
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['results'] });
+    },
+  });
+}
+
 export function useSubmitResult() {
   const qc = useQueryClient();
   return useMutation({

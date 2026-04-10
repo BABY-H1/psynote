@@ -54,6 +54,16 @@ import { personArchiveRoutes } from './modules/delivery/person-archive.routes.js
 import { brandingRoutes } from './modules/org/branding.routes.js';
 // Phase 7c — subscription info (read-only skeleton)
 import { subscriptionRoutes } from './modules/org/subscription.routes.js';
+// Phase 9α — Content blocks (C-facing consumable blocks for courses & group sessions)
+import { contentBlockRoutes } from './modules/content-block/content-block.routes.js';
+import {
+  enrollmentResponseRoutes,
+  clientEnrollmentResponseRoutes,
+} from './modules/enrollment-response/response.routes.js';
+// Phase 9δ — Public referral download (no auth, token-gated)
+import { publicReferralRoutes } from './modules/referral/public-referral.routes.js';
+// Phase 9ε — Org-internal collaboration page (派单 / 授权 / 督导 / 转介接收 / 审计)
+import { collaborationRoutes } from './modules/collaboration/collaboration.routes.js';
 
 const app = Fastify({
   logger: {
@@ -161,6 +171,17 @@ await app.register(adminRoutes, { prefix: '/api/admin' });
 // Client assignment & access grants
 await app.register(clientAssignmentRoutes, { prefix: '/api/orgs/:orgId/client-assignments' });
 await app.register(clientAccessGrantRoutes, { prefix: '/api/orgs/:orgId/client-access-grants' });
+
+// Phase 9α — Content blocks & enrollment responses
+await app.register(contentBlockRoutes, { prefix: '/api/orgs/:orgId/content-blocks' });
+await app.register(enrollmentResponseRoutes, { prefix: '/api/orgs/:orgId/enrollment-responses' });
+await app.register(clientEnrollmentResponseRoutes, { prefix: '/api/orgs/:orgId/client/enrollment-responses' });
+
+// Phase 9δ — Public referral download (no auth)
+await app.register(publicReferralRoutes, { prefix: '/api/public/referrals' });
+
+// Phase 9ε — Org-internal collaboration
+await app.register(collaborationRoutes, { prefix: '/api/orgs/:orgId/collaboration' });
 
 // Start
 try {

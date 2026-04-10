@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { FileText, Folder } from 'lucide-react';
+import { FileText, Folder, ChevronRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useMyResults } from '@client/api/useClientPortal';
 import { useMyTimeline } from '@client/api/useClientPortal';
 import { PageLoading, RiskBadge } from '@client/shared/components';
@@ -26,6 +27,7 @@ export function ArchiveTab() {
   const { data: results, isLoading: resultsLoading } = useMyResults();
   const { data: timeline, isLoading: timelineLoading } = useMyTimeline();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   if (resultsLoading || timelineLoading) {
     return <PageLoading />;
@@ -124,6 +126,19 @@ export function ArchiveTab() {
                           </div>
                         </div>
                       )}
+
+                      {/* Phase 9β — link to detail page with full report + AI interpretation */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/portal/archive/results/${r.id}`);
+                        }}
+                        className="w-full mt-2 py-2 text-sm text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-xl flex items-center justify-center gap-1"
+                      >
+                        查看完整报告
+                        <ChevronRight className="w-4 h-4" />
+                      </button>
                     </div>
                   )}
                 </div>

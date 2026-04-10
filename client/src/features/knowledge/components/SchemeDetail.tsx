@@ -8,6 +8,8 @@ import {
 } from '../../../api/useAI';
 import { PageLoading, useToast } from '../../../shared/components';
 import type { SessionPhase, KeyResult } from '@psynote/shared';
+// Phase 9α — C-facing content blocks (learner-consumable)
+import { ContentBlockPanel } from './ContentBlockPanel';
 import {
   ArrowLeft, Edit3, Trash2, Save, X, Plus,
   Sparkles, Send, Loader2, Check, ChevronDown, ChevronRight, Clock,
@@ -476,6 +478,25 @@ function SessionDetailView({ session, index, editing, specificGoals, onUpdate, o
             onChange={(v) => onUpdate('assessmentNotes', v)} placeholder="带领者需要观察的行为指标和要点" />
         </div>
       </div>
+
+      {/* Phase 9α — C-facing content blocks (what participants see in the portal during this session) */}
+      {session.id ? (
+        <div className="mt-4 bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100">
+            <h3 className="text-sm font-semibold text-slate-700">本次会议物料</h3>
+            <p className="text-xs text-slate-400 mt-0.5">
+              带组人现场播放 / 参与者填写的内容块，可按"仅带组人 / 仅学员 / 双方可见"分配
+            </p>
+          </div>
+          <div className="p-4">
+            <ContentBlockPanel parentType="group" parentId={session.id} />
+          </div>
+        </div>
+      ) : (
+        <div className="mt-4 px-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500">
+          保存方案后即可在此添加学员可见 / 带组人专用的内容块（视频、音频、图文、反思等）
+        </div>
+      )}
     </div>
   );
 }
