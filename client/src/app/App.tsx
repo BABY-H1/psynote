@@ -1,14 +1,15 @@
 import React from 'react';
 import { Routes, Route, Navigate, NavLink, Outlet } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { api } from '../api/client';
 import { Providers } from './providers';
 import { useAuthStore } from '../stores/authStore';
-import { api } from '../api/client';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { ScaleLibrary } from '../features/assessment/pages/ScaleLibrary';
 import { AssessmentRunner } from '../features/assessment/pages/AssessmentRunner';
 import { EpisodeDetail } from '../features/counseling/pages/EpisodeDetail';
 import { CreateEpisodeWizard } from '../features/counseling/pages/CreateEpisodeWizard';
-import { MemberManagement } from '../features/settings/pages/MemberManagement';
+// MemberManagement now embedded inside OrgSettingsPage
 import { ReminderSettings } from '../features/settings/pages/ReminderSettings';
 import { AvailabilitySettings } from '../features/counseling/pages/AvailabilitySettings';
 // Note: Phase 3 — CaseWorkbench / GroupCenter / CourseManagement / AssessmentManagement
@@ -29,6 +30,7 @@ import {
   ConsentCenter,
 } from '@psynote/client-portal';
 import { DashboardHome } from '../features/dashboard/pages/DashboardHome';
+import { OrgAdminDashboard } from '../features/dashboard/pages/OrgAdminDashboard';
 import { KnowledgeBase } from '../features/knowledge/pages/KnowledgeBase';
 import { GoalLibrary } from '../features/knowledge/pages/GoalLibrary';
 import { CoursesTab } from '../features/knowledge/pages/PlaceholderTabs';
@@ -46,10 +48,12 @@ import { DeliveryCenter } from '../features/delivery';
 // Phase 6 — person archive (cross-module per-user history)
 import { PeopleList } from '../features/delivery/pages/PeopleList';
 import { PersonArchive } from '../features/delivery/pages/PersonArchive';
-// Phase 7b — org branding settings
-import { OrgBrandingSettings } from '../features/settings/pages/OrgBrandingSettings';
+// Phase 7b — org branding (now embedded inside OrgSettingsPage)
 import { useOrgBranding } from '../api/useOrgBranding';
-import { useHasFeature } from '../shared/hooks/useFeature';
+// Phase 10 — org collaboration & audit & settings
+import { OrgCollaboration } from '../features/collaboration/OrgCollaboration';
+import { AuditLogViewer } from '../features/collaboration/AuditLogViewer';
+import { OrgSettingsPage } from '../features/settings/pages/OrgSettingsPage';
 
 function AppRoutes() {
   const { user, currentOrgId, currentRole, isSystemAdmin, _hydrated } = useAuthStore();
@@ -105,7 +109,7 @@ function AppRoutes() {
       ) : (
         /* Counselor / Admin shell */
         <Route path="/" element={<AppShell />}>
-          <Route index element={<DashboardHome />} />
+          <Route index element={<RoleBasedHome />} />
           <Route path="knowledge" element={<KnowledgeBase />}>
             <Route path="scales" element={<ScaleLibrary />} />
             <Route path="goals" element={<GoalLibrary />} />
@@ -129,10 +133,16 @@ function AppRoutes() {
           {/* Per-module detail and wizard routes — kept; entered from inside the delivery center */}
           <Route path="episodes/new" element={<CreateEpisodeWizard />} />
           <Route path="episodes/:episodeId" element={<EpisodeDetail />} />
-          <Route path="settings/members" element={<MemberManagement />} />
+          {/* Phase 10 — collaboration center (org_admin + counselor) */}
+          <Route path="collaboration" element={<OrgCollaboration />} />
+          {/* Phase 10 — audit log (org_admin, also embedded in settings later) */}
+          <Route path="audit" element={<AuditLogViewer />} />
+          {/* Phase 10 — unified org settings */}
+          <Route path="settings" element={<OrgSettingsPage />} />
+          {/* Legacy redirects — old standalone pages now embedded as tabs */}
+          <Route path="settings/members" element={<Navigate to="/settings" replace />} />
+          <Route path="settings/branding" element={<Navigate to="/settings" replace />} />
           <Route path="settings/reminders" element={<ReminderSettings />} />
-          {/* Phase 7b — org branding (gated by branding feature inside the page) */}
-          <Route path="settings/branding" element={<OrgBrandingSettings />} />
           <Route path="availability" element={<AvailabilitySettings />} />
           {isSystemAdmin && (
             <Route path="admin" element={<AdminDashboard />} />
@@ -203,36 +213,39 @@ interface NavItem {
   label: string;
   end?: boolean;
   disabled?: boolean;
-  /** If set, only show when the current org tier includes this feature */
-  requiresFeature?: 'branding';
 }
 
 const allNavItems: NavItem[] = [
   { to: '/', label: '首页', end: true },
   { to: '/knowledge', label: '知识库' },
   { to: '/delivery', label: '交付中心' },
-  { to: '/settings/members', label: '成员管理' },
-  { to: '/settings/branding', label: '品牌定制', requiresFeature: 'branding' },
+  { to: '/collaboration', label: '协作中心' },
+  { to: '/settings', label: '机构设置' },
 ];
 
-const adminStaffPaths = new Set(['/', '/settings/members']);
+const adminStaffPaths = new Set(['/', '/settings']);
+/** Roles that can see the collaboration center */
+const collabRoles = new Set(['org_admin', 'counselor']);
+/** Roles that can see org settings */
+const settingsRoles = new Set(['org_admin']);
 
-function getNavItems(role: string | null, hasBranding: boolean): NavItem[] {
+function getNavItems(role: string | null): NavItem[] {
   let items = allNavItems;
   if (role === 'admin_staff') {
     items = items.filter((item) => adminStaffPaths.has(item.to));
+  } else {
+    items = items.filter((item) => {
+      if (item.to === '/collaboration') return collabRoles.has(role ?? '');
+      if (item.to === '/settings') return settingsRoles.has(role ?? '');
+      return true;
+    });
   }
-  // Filter feature-gated items
-  return items.filter((item) => {
-    if (item.requiresFeature === 'branding') return hasBranding;
-    return true;
-  });
+  return items;
 }
 
 function AppShell() {
   const { user, currentRole, currentOrgId, currentOrgTier, setOrg, isSystemAdmin, logout } = useAuthStore();
-  const hasBranding = useHasFeature('branding');
-  const navItems = getNavItems(currentRole, hasBranding);
+  const navItems = getNavItems(currentRole);
 
   // Phase 7a bootstrap — if the persisted auth state predates Phase 7, it may
   // be missing `currentOrgTier`. On first mount after login, pull it from
@@ -325,7 +338,10 @@ function AppShell() {
           )}
         </nav>
         <div className="px-4 py-4 border-t border-slate-100">
-          <div className="text-sm text-slate-700 font-medium truncate">{user?.name}</div>
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-slate-700 font-medium truncate">{user?.name}</div>
+            <NotificationBadge />
+          </div>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-xs px-2 py-0.5 bg-brand-100 text-brand-700 rounded-full">
               {currentRole}
@@ -348,6 +364,38 @@ function AppShell() {
       </main>
     </div>
   );
+}
+
+/** Notification bell with unread count */
+function NotificationBadge() {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  const { data } = useQuery({
+    queryKey: ['notification-unread-count', orgId],
+    queryFn: () => api.get<{ count: number }>(`/orgs/${orgId}/notifications/unread-count`),
+    enabled: !!orgId,
+    refetchInterval: 30_000,
+  });
+  const count = data?.count ?? 0;
+
+  return (
+    <div className="relative" title={count > 0 ? `${count} 条未读通知` : '无未读通知'}>
+      <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+      </svg>
+      {count > 0 && (
+        <span className="absolute -top-1.5 -right-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full min-w-[16px] h-4 flex items-center justify-center px-1">
+          {count > 99 ? '99+' : count}
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** Render different home pages based on org role */
+function RoleBasedHome() {
+  const role = useAuthStore((s) => s.currentRole);
+  if (role === 'org_admin') return <OrgAdminDashboard />;
+  return <DashboardHome />;
 }
 
 export function App() {

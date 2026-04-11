@@ -17,6 +17,18 @@ export interface OrgMember {
   status: string;
   permissions: Record<string, unknown>;
   validUntil?: string;
+  supervisorId?: string | null;
+  certifications?: Array<{
+    name: string;
+    issuer: string;
+    number: string;
+    issuedAt: string;
+    expiresAt?: string;
+    fileUrl?: string;
+  }>;
+  specialties?: string[];
+  maxCaseload?: number | null;
+  bio?: string | null;
   createdAt: string;
 }
 

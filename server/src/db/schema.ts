@@ -37,6 +37,11 @@ export const orgMembers = pgTable('org_members', {
   validUntil: timestamp('valid_until', { withTimezone: true }),
   supervisorId: uuid('supervisor_id'),
   fullPracticeAccess: boolean('full_practice_access').notNull().default(false),
+  // Phase 10 — counselor profile fields
+  certifications: jsonb('certifications').default([]),
+  specialties: text('specialties').array().default([]),
+  maxCaseload: integer('max_caseload'),
+  bio: text('bio'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_org_members_org_user').on(t.orgId, t.userId),
@@ -955,6 +960,25 @@ export const consentRecords = pgTable('consent_records', {
   status: text('status').notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// ─── Service Intakes (Phase 10) ─────────────────────────────────
+
+export const serviceIntakes = pgTable('service_intakes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  serviceId: text('service_id').notNull(),
+  clientUserId: uuid('client_user_id').notNull().references(() => users.id),
+  preferredCounselorId: uuid('preferred_counselor_id'),
+  intakeSource: text('intake_source').notNull().default('org_portal'),
+  intakeData: jsonb('intake_data').default({}),
+  status: text('status').notNull().default('pending'), // pending | assigned | cancelled
+  assignedCounselorId: uuid('assigned_counselor_id'),
+  assignedAt: timestamp('assigned_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_service_intakes_org').on(t.orgId),
+  index('idx_service_intakes_status').on(t.orgId, t.status),
+]);
 
 // ─── Permission & Data Isolation ─────────────────────────────────
 

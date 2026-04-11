@@ -87,6 +87,100 @@ export function useReviewPendingNote() {
   });
 }
 
+// ─── Tab A: Create / Delete assignment ──────────────────────────────
+
+export function useCreateAssignment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { clientId: string; counselorId: string; isPrimary?: boolean }) => {
+      const orgId = useAuthStore.getState().currentOrgId;
+      return api.post(`/orgs/${orgId}/client-assignments`, data);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['collab-assignments'] });
+      qc.invalidateQueries({ queryKey: ['collab-unassigned'] });
+    },
+  });
+}
+
+export function useDeleteAssignment() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (assignmentId: string) => {
+      const orgId = useAuthStore.getState().currentOrgId;
+      return api.delete(`/orgs/${orgId}/client-assignments/${assignmentId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['collab-assignments'] });
+      qc.invalidateQueries({ queryKey: ['collab-unassigned'] });
+    },
+  });
+}
+
+// ─── Tab B: Access Grants ───────────────────────────────────────────
+
+export interface AccessGrant {
+  id: string;
+  orgId: string;
+  clientId: string;
+  grantedToCounselorId: string;
+  grantedBy: string;
+  reason: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  createdAt: string;
+}
+
+export function useAccessGrants() {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['collab-grants', orgId],
+    queryFn: () => api.get<AccessGrant[]>(`/orgs/${orgId}/client-access-grants`),
+    enabled: !!orgId,
+  });
+}
+
+export function useCreateAccessGrant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { clientId: string; grantedToCounselorId: string; reason: string; expiresAt?: string }) => {
+      const orgId = useAuthStore.getState().currentOrgId;
+      return api.post(`/orgs/${orgId}/client-access-grants`, data);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['collab-grants'] });
+    },
+  });
+}
+
+export function useRevokeAccessGrant() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (grantId: string) => {
+      const orgId = useAuthStore.getState().currentOrgId;
+      return api.delete(`/orgs/${orgId}/client-access-grants/${grantId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['collab-grants'] });
+    },
+  });
+}
+
+// ─── Tab D: Referral respond ────────────────────────────────────────
+
+export function useRespondReferral() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ referralId, decision, reason }: { referralId: string; decision: 'accept' | 'reject'; reason?: string }) => {
+      const orgId = useAuthStore.getState().currentOrgId;
+      return api.post(`/orgs/${orgId}/referrals/${referralId}/respond`, { decision, reason });
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['referral-inbox'] });
+    },
+  });
+}
+
 // ─── Audit query ────────────────────────────────────────────────────
 
 export interface AuditRow {

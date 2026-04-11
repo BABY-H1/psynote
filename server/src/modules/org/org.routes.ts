@@ -1,7 +1,8 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../../config/database.js';
-import { organizations, orgMembers, users } from '../../db/schema.js';
+import { organizations, orgMembers, users, clientAssignments } from '../../db/schema.js';
+import { createNotification } from '../notification/notification.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
@@ -132,6 +133,11 @@ export async function orgRoutes(app: FastifyInstance) {
       status: m.member.status,
       permissions: m.member.permissions,
       validUntil: m.member.validUntil,
+      supervisorId: m.member.supervisorId,
+      certifications: m.member.certifications,
+      specialties: m.member.specialties,
+      maxCaseload: m.member.maxCaseload,
+      bio: m.member.bio,
       createdAt: m.member.createdAt,
     }));
   });
@@ -205,12 +211,26 @@ export async function orgRoutes(app: FastifyInstance) {
     preHandler: [orgContextGuard, requireRole('org_admin')],
   }, async (request) => {
     const { memberId } = request.params as { memberId: string };
-    const body = request.body as { role?: string; status?: string; permissions?: Record<string, unknown> };
+    const body = request.body as {
+      role?: string;
+      status?: string;
+      permissions?: Record<string, unknown>;
+      supervisorId?: string | null;
+      certifications?: unknown[];
+      specialties?: string[];
+      maxCaseload?: number | null;
+      bio?: string | null;
+    };
 
     const updates: Record<string, unknown> = {};
     if (body.role) updates.role = body.role;
     if (body.status) updates.status = body.status;
     if (body.permissions) updates.permissions = body.permissions;
+    if (body.supervisorId !== undefined) updates.supervisorId = body.supervisorId;
+    if (body.certifications !== undefined) updates.certifications = body.certifications;
+    if (body.specialties !== undefined) updates.specialties = body.specialties;
+    if (body.maxCaseload !== undefined) updates.maxCaseload = body.maxCaseload;
+    if (body.bio !== undefined) updates.bio = body.bio;
 
     if (Object.keys(updates).length === 0) {
       throw new ValidationError('No fields to update');
@@ -281,5 +301,65 @@ export async function orgRoutes(app: FastifyInstance) {
     });
 
     return org.triageConfig;
+  });
+
+  /** Batch transfer cases from one counselor to another (org_admin only) */
+  app.post('/:orgId/members/:memberId/transfer-cases', {
+    preHandler: [orgContextGuard, requireRole('org_admin')],
+  }, async (request) => {
+    const { orgId, memberId } = request.params as { orgId: string; memberId: string };
+    const { transfers } = request.body as {
+      transfers: Array<{ clientId: string; toCounselorId: string }>;
+    };
+
+    if (!transfers?.length) {
+      throw new ValidationError('transfers array is required');
+    }
+
+    // Resolve source counselor userId
+    const [sourceMember] = await db.select().from(orgMembers).where(eq(orgMembers.id, memberId)).limit(1);
+    if (!sourceMember) throw new NotFoundError('Member', memberId);
+
+    const results: Array<{ clientId: string; toCounselorId: string; success: boolean }> = [];
+
+    for (const t of transfers) {
+      try {
+        // Delete old assignment
+        await db.delete(clientAssignments).where(
+          and(
+            eq(clientAssignments.orgId, orgId),
+            eq(clientAssignments.clientId, t.clientId),
+            eq(clientAssignments.counselorId, sourceMember.userId),
+          ),
+        );
+
+        // Create new assignment
+        await db.insert(clientAssignments).values({
+          orgId,
+          clientId: t.clientId,
+          counselorId: t.toCounselorId,
+          isPrimary: true,
+        });
+
+        // Notify the receiving counselor
+        await createNotification({
+          orgId,
+          userId: t.toCounselorId,
+          type: 'case_transfer',
+          title: '个案转入',
+          body: '管理员将一位来访者转交给您，请查看交付中心。',
+        });
+
+        results.push({ clientId: t.clientId, toCounselorId: t.toCounselorId, success: true });
+      } catch {
+        results.push({ clientId: t.clientId, toCounselorId: t.toCounselorId, success: false });
+      }
+    }
+
+    await logAudit(request, 'transfer_cases', 'org_members', memberId, {
+      transfers: { old: null, new: transfers },
+    });
+
+    return { results, successCount: results.filter((r) => r.success).length };
   });
 }

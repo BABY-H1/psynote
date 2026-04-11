@@ -77,14 +77,14 @@ export async function collaborationRoutes(app: FastifyInstance) {
     const result = await db.execute(sql`
       SELECT
         ca.id, ca.client_id, ca.counselor_id, ca.is_primary,
-        ca.assigned_at,
+        ca.created_at AS assigned_at,
         client.name AS client_name,
         counselor.name AS counselor_name
       FROM client_assignments ca
       JOIN users client ON client.id = ca.client_id
       JOIN users counselor ON counselor.id = ca.counselor_id
       WHERE ca.org_id = ${orgId}::uuid
-      ORDER BY ca.assigned_at DESC
+      ORDER BY ca.created_at AS assigned_at DESC
     `);
     return Array.isArray(result) ? result : ((result as any).rows ?? []);
   });

@@ -52,6 +52,8 @@ import { deliveryRoutes } from './modules/delivery/delivery.routes.js';
 import { personArchiveRoutes } from './modules/delivery/person-archive.routes.js';
 // Phase 7b — org branding settings (logo / theme color / report header+footer)
 import { brandingRoutes } from './modules/org/branding.routes.js';
+import { dashboardRoutes } from './modules/org/dashboard.routes.js';
+import { publicServiceRoutes, serviceIntakeRoutes } from './modules/org/public-services.routes.js';
 // Phase 7c — subscription info (read-only skeleton)
 import { subscriptionRoutes } from './modules/org/subscription.routes.js';
 // Phase 9α — Content blocks (C-facing consumable blocks for courses & group sessions)
@@ -139,6 +141,12 @@ await app.register(personArchiveRoutes, { prefix: '/api/orgs/:orgId' });
 await app.register(brandingRoutes, { prefix: '/api/orgs/:orgId' });
 // Subscription info (Phase 7c) — exposes GET /api/orgs/:orgId/subscription
 await app.register(subscriptionRoutes, { prefix: '/api/orgs/:orgId' });
+// Phase 10 — dashboard stats
+await app.register(dashboardRoutes, { prefix: '/api/orgs/:orgId' });
+// Phase 10 — service intakes (authenticated)
+await app.register(serviceIntakeRoutes, { prefix: '/api/orgs/:orgId/service-intakes' });
+// Phase 10 — public services & intake (no auth, registered at root)
+await app.register(publicServiceRoutes);
 
 // File upload
 await app.register(uploadRoutes, { prefix: '/api/orgs/:orgId/upload' });

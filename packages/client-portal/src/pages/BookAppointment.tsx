@@ -145,6 +145,8 @@ export function BookAppointment() {
 
 function CounselorStep({ onSelect }: { onSelect: (id: string, name: string) => void }) {
   const { data: counselors, isLoading } = useCounselors();
+  const [searchParams] = useSearchParams();
+  const preferredId = searchParams.get('counselorId');
 
   if (isLoading) return <PageLoading />;
 
@@ -152,25 +154,62 @@ function CounselorStep({ onSelect }: { onSelect: (id: string, name: string) => v
     return <EmptyState title="暂无可预约的咨询师" />;
   }
 
+  // Sort: preferred (from link) first, then isMyCounselor (from backend), then rest
+  const sorted = [...counselors].sort((a, b) => {
+    if (preferredId) {
+      if (a.id === preferredId && b.id !== preferredId) return -1;
+      if (a.id !== preferredId && b.id === preferredId) return 1;
+    }
+    const aIsMine = (a as any).isMyCounselor;
+    const bIsMine = (b as any).isMyCounselor;
+    if (aIsMine && !bIsMine) return -1;
+    if (!aIsMine && bIsMine) return 1;
+    return 0;
+  });
+
   return (
     <div className="grid gap-3">
-      {counselors.map((c) => (
-        <button
-          key={c.id}
-          onClick={() => onSelect(c.id, c.name)}
-          className="bg-white rounded-2xl border border-slate-200 p-4 text-left hover:border-brand-500 hover:bg-brand-50 transition"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-bold">
-              {c.name.charAt(0)}
+      {sorted.map((c) => {
+        const isMine = (c as any).isMyCounselor;
+        const isPreferred = c.id === preferredId;
+        const specialties = (c as any).specialties as string[] | undefined;
+
+        return (
+          <button
+            key={c.id}
+            onClick={() => onSelect(c.id, c.name)}
+            className={`bg-white rounded-2xl border p-4 text-left hover:border-brand-500 hover:bg-brand-50 transition ${
+              isPreferred || isMine ? 'border-brand-300 bg-brand-50/30' : 'border-slate-200'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-brand-100 text-brand-700 flex items-center justify-center text-sm font-bold">
+                {c.name.charAt(0)}
+              </div>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-slate-900">{c.name}</span>
+                  {isMine && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-brand-100 text-brand-700 rounded-full">
+                      您的咨询师
+                    </span>
+                  )}
+                  {isPreferred && !isMine && (
+                    <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded-full">
+                      推荐
+                    </span>
+                  )}
+                </div>
+                {specialties && specialties.length > 0 ? (
+                  <div className="text-xs text-slate-400 mt-0.5">{specialties.join(' · ')}</div>
+                ) : (
+                  <div className="text-xs text-slate-400">心理咨询师</div>
+                )}
+              </div>
             </div>
-            <div>
-              <div className="font-medium text-slate-900">{c.name}</div>
-              <div className="text-xs text-slate-400">心理咨询师</div>
-            </div>
-          </div>
-        </button>
-      ))}
+          </button>
+        );
+      })}
     </div>
   );
 }

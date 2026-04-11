@@ -12,7 +12,7 @@ import {
   groupSessionRecords, groupSessionAttendance,
   courses, courseInstances, courseEnrollments,
   assessments,
-  notifications, orgMembers, users,
+  notifications, orgMembers, users, clientAssignments,
 } from '../../db/schema.js';
 import * as appointmentService from '../counseling/appointment.service.js';
 import * as consentService from '../compliance/consent.service.js';
@@ -576,12 +576,15 @@ export async function clientPortalRoutes(app: FastifyInstance) {
   /** List counselors in this org (for appointment booking) */
   app.get('/counselors', async (request) => {
     const orgId = request.org!.orgId;
+    const clientUserId = request.user!.id;
 
-    return db
+    const counselors = await db
       .select({
         id: users.id,
         name: users.name,
         avatarUrl: users.avatarUrl,
+        specialties: orgMembers.specialties,
+        bio: orgMembers.bio,
       })
       .from(orgMembers)
       .innerJoin(users, eq(users.id, orgMembers.userId))
@@ -590,6 +593,28 @@ export async function clientPortalRoutes(app: FastifyInstance) {
         eq(orgMembers.role, 'counselor'),
         eq(orgMembers.status, 'active'),
       ));
+
+    // Find this client's current primary counselor
+    const [assignment] = await db
+      .select({ counselorId: clientAssignments.counselorId })
+      .from(clientAssignments)
+      .where(and(
+        eq(clientAssignments.orgId, orgId),
+        eq(clientAssignments.clientId, clientUserId),
+        eq(clientAssignments.isPrimary, true),
+      ))
+      .limit(1);
+
+    const myCounselorId = assignment?.counselorId;
+
+    // Sort: my counselor first, then others
+    return counselors
+      .map((c) => ({ ...c, isMyCounselor: c.id === myCounselorId }))
+      .sort((a, b) => {
+        if (a.isMyCounselor && !b.isMyCounselor) return -1;
+        if (!a.isMyCounselor && b.isMyCounselor) return 1;
+        return 0;
+      });
   });
 
   /** Submit an appointment request (client-initiated) */
