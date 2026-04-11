@@ -187,6 +187,16 @@ await app.register(collaborationRoutes, { prefix: '/api/orgs/:orgId/collaboratio
 try {
   await app.listen({ port: env.PORT, host: env.HOST });
   app.log.info(`Server running on http://${env.HOST}:${env.PORT}`);
+
+  // Start follow-up worker (requires Redis — gracefully skip if unavailable)
+  try {
+    const { startFollowUpWorker, scheduleDailyFollowUpScan } = await import('./jobs/follow-up.worker.js');
+    startFollowUpWorker();
+    await scheduleDailyFollowUpScan();
+    app.log.info('Follow-up worker started');
+  } catch (workerErr: any) {
+    app.log.warn(`Follow-up worker skipped: ${workerErr.message}`);
+  }
 } catch (err) {
   app.log.error(err);
   process.exit(1);

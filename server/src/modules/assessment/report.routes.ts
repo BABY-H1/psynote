@@ -61,6 +61,18 @@ export async function reportRoutes(app: FastifyInstance) {
         });
         break;
       }
+      case 'group_longitudinal': {
+        if (!body.instanceId || !body.instanceType) {
+          throw new ValidationError('instanceId and instanceType are required for group_longitudinal');
+        }
+        report = await reportService.generateGroupLongitudinalReport({
+          orgId: request.org!.orgId,
+          instanceId: body.instanceId,
+          instanceType: body.instanceType,
+          generatedBy: request.user!.id,
+        });
+        break;
+      }
       case 'individual_trend': {
         if (!body.assessmentId || !body.userId) {
           throw new ValidationError('assessmentId and userId are required for individual_trend');

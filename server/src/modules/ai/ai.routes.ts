@@ -655,4 +655,19 @@ export async function aiRoutes(app: FastifyInstance) {
     await logAudit(request, 'ai_call', 'create-scheme-chat');
     return result;
   });
+
+  /** Generate marketing copy for group/course poster */
+  app.post('/groups/poster-copy', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    if (!aiClient.isConfigured) {
+      return { headline: '', subtitle: '', points: [] };
+    }
+    const body = request.body as { title: string; description?: string; schedule?: string; location?: string };
+    if (!body.title) throw new ValidationError('title is required');
+    const { generatePosterCopy } = await import('./pipelines/poster-copy.js');
+    const result = await generatePosterCopy(body);
+    await logAudit(request, 'ai_call', 'groups/poster-copy');
+    return result;
+  });
 }

@@ -1,7 +1,9 @@
-import { eq, and, desc, or } from 'drizzle-orm';
+import { eq, and, desc, or, inArray } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import {
   assessmentReports, assessmentResults, scaleDimensions, dimensionRules,
+  groupInstances, groupEnrollments, courseInstances, courseEnrollments,
+  users,
 } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
 
@@ -261,6 +263,158 @@ export async function generateTrendReport(input: {
     reportType: 'individual_trend',
     resultIds: userResults.map((r) => r.id),
     assessmentId: input.assessmentId,
+    content,
+    generatedBy: input.generatedBy,
+  }).returning();
+
+  return report;
+}
+
+/**
+ * Generate a group-level longitudinal report for a group/course instance.
+ * Compares pre vs post assessment results across all members, computing
+ * group mean trajectories and effect sizes (Cohen's d).
+ */
+export async function generateGroupLongitudinalReport(input: {
+  orgId: string;
+  instanceId: string;
+  instanceType: 'group' | 'course';
+  generatedBy: string;
+}) {
+  // 1. Get instance + assessmentConfig
+  let instance: any;
+  let memberUserIds: string[] = [];
+
+  if (input.instanceType === 'group') {
+    [instance] = await db.select().from(groupInstances).where(eq(groupInstances.id, input.instanceId)).limit(1);
+    if (!instance) throw new NotFoundError('GroupInstance', input.instanceId);
+    const enrollments = await db.select({ userId: groupEnrollments.userId })
+      .from(groupEnrollments)
+      .where(and(eq(groupEnrollments.instanceId, input.instanceId), eq(groupEnrollments.status, 'approved')));
+    memberUserIds = enrollments.map((e) => e.userId);
+  } else {
+    [instance] = await db.select().from(courseInstances).where(eq(courseInstances.id, input.instanceId)).limit(1);
+    if (!instance) throw new NotFoundError('CourseInstance', input.instanceId);
+    const enrollments = await db.select({ userId: courseEnrollments.userId })
+      .from(courseEnrollments)
+      .where(eq(courseEnrollments.instanceId, input.instanceId));
+    memberUserIds = enrollments.map((e) => e.userId);
+  }
+
+  if (memberUserIds.length === 0) {
+    throw new Error('No enrolled members found');
+  }
+
+  const config = (instance.assessmentConfig || {}) as Record<string, unknown>;
+  const preGroupIds = (config.preGroup || []) as string[];
+  const postGroupIds = (config.postGroup || []) as string[];
+
+  // Collect all assessment IDs to query
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  const allAssessmentIds = [...new Set([...preGroupIds, ...postGroupIds])].filter((id) => uuidRegex.test(id));
+
+  if (allAssessmentIds.length === 0) {
+    throw new Error('No valid assessment IDs in assessmentConfig');
+  }
+
+  // 2. Fetch all results for these members + assessments
+  const allResults = await db
+    .select()
+    .from(assessmentResults)
+    .where(and(
+      inArray(assessmentResults.userId, memberUserIds),
+      inArray(assessmentResults.assessmentId, allAssessmentIds),
+    ))
+    .orderBy(assessmentResults.createdAt);
+
+  // 3. Group results by assessmentId → userId → time-ordered list
+  const resultMap = new Map<string, Map<string, any[]>>();
+  for (const r of allResults) {
+    if (!resultMap.has(r.assessmentId)) resultMap.set(r.assessmentId, new Map());
+    const userMap = resultMap.get(r.assessmentId)!;
+    if (!userMap.has(r.userId!)) userMap.set(r.userId!, []);
+    userMap.get(r.userId!)!.push(r);
+  }
+
+  // 4. Compute per-assessment statistics
+  const assessmentComparisons: Array<{
+    assessmentId: string;
+    participantCount: number;
+    prePostPairs: number;
+    preMean: number;
+    postMean: number;
+    meanChange: number;
+    cohensD: number | null;
+    memberDetails: Array<{ userId: string; preScore: number | null; postScore: number | null; change: number | null }>;
+  }> = [];
+
+  for (const assessmentId of allAssessmentIds) {
+    const userMap = resultMap.get(assessmentId);
+    if (!userMap) continue;
+
+    const memberDetails: Array<{ userId: string; preScore: number | null; postScore: number | null; change: number | null }> = [];
+    const preScores: number[] = [];
+    const postScores: number[] = [];
+    const changes: number[] = [];
+
+    for (const userId of memberUserIds) {
+      const results = userMap.get(userId) || [];
+      const preScore = results.length > 0 ? results[0].totalScore : null;
+      const postScore = results.length > 1 ? results[results.length - 1].totalScore : null;
+      const change = preScore != null && postScore != null ? postScore - preScore : null;
+
+      memberDetails.push({ userId, preScore, postScore, change });
+      if (preScore != null) preScores.push(preScore);
+      if (postScore != null) postScores.push(postScore);
+      if (change != null) changes.push(change);
+    }
+
+    const preMean = preScores.length > 0 ? preScores.reduce((a, b) => a + b, 0) / preScores.length : 0;
+    const postMean = postScores.length > 0 ? postScores.reduce((a, b) => a + b, 0) / postScores.length : 0;
+    const meanChange = postMean - preMean;
+
+    // Cohen's d = (postMean - preMean) / pooled SD
+    let cohensD: number | null = null;
+    if (preScores.length >= 2 && postScores.length >= 2) {
+      const preVar = preScores.reduce((s, v) => s + (v - preMean) ** 2, 0) / (preScores.length - 1);
+      const postVar = postScores.reduce((s, v) => s + (v - postMean) ** 2, 0) / (postScores.length - 1);
+      const pooledSD = Math.sqrt((preVar + postVar) / 2);
+      if (pooledSD > 0) cohensD = Math.round((meanChange / pooledSD) * 100) / 100;
+    }
+
+    assessmentComparisons.push({
+      assessmentId,
+      participantCount: memberUserIds.length,
+      prePostPairs: changes.length,
+      preMean: Math.round(preMean * 100) / 100,
+      postMean: Math.round(postMean * 100) / 100,
+      meanChange: Math.round(meanChange * 100) / 100,
+      cohensD,
+      memberDetails,
+    });
+  }
+
+  // 5. Get member names
+  const memberRows = memberUserIds.length > 0
+    ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, memberUserIds))
+    : [];
+  const nameMap = new Map(memberRows.map((u) => [u.id, u.name]));
+
+  const content = {
+    instanceTitle: instance.title,
+    memberCount: memberUserIds.length,
+    memberNames: Object.fromEntries(nameMap),
+    assessmentComparisons,
+    generatedAt: new Date().toISOString(),
+  };
+
+  // 6. Save report
+  const [report] = await db.insert(assessmentReports).values({
+    orgId: input.orgId,
+    title: `${instance.title} — 纵向对比报告`,
+    reportType: 'group_longitudinal',
+    resultIds: allResults.map((r) => r.id),
+    assessmentId: allAssessmentIds[0] || null,
     content,
     generatedBy: input.generatedBy,
   }).returning();
