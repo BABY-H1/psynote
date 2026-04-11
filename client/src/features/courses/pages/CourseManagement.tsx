@@ -4,6 +4,7 @@ import {
   useDeleteCourseInstance,
   useActivateCourseInstance,
   useCloseCourseInstance,
+  useArchiveCourseInstance,
 } from '../../../api/useCourseInstances';
 import {
   PageLoading,
@@ -17,9 +18,9 @@ import {
   type DeliveryCardData,
 } from '../../../shared/components';
 import { CourseInstanceDetail } from '../components/CourseInstanceDetail';
-import { PublishCourseForm } from '../components/PublishCourseForm';
+import { CourseWizard } from './course-wizard/CourseWizard';
 import {
-  Plus, Search, Trash2, Play, Square, X, Copy, Check,
+  Plus, Search, Trash2, Play, PauseCircle, PlayCircle, Send, Edit3, Archive, X, Copy, Check,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { ServiceStatus } from '@psynote/shared';
@@ -98,6 +99,7 @@ export function CourseManagement() {
   const deleteInstance = useDeleteCourseInstance();
   const activateInstance = useActivateCourseInstance();
   const closeInstance = useCloseCourseInstance();
+  const archiveInstance = useArchiveCourseInstance();
   const { toast } = useToast();
 
   // Status counts for filter badges (always reflect ALL instances).
@@ -138,7 +140,7 @@ export function CourseManagement() {
   }
 
   if (view === 'create') {
-    return <PublishCourseForm onClose={() => setView('list')} />;
+    return <CourseWizard onClose={() => setView('list')} />;
   }
 
   // ── Stats ───────────────────────────────────────────────────
@@ -221,7 +223,11 @@ export function CourseManagement() {
           {filteredInstances.map((inst: any) => {
             const enrolled = inst.enrollmentCount ?? inst.enrolledCount ?? 0;
             const completionRate = inst.completionRate ?? 0;
-            const isClosed = inst.status === 'closed';
+            const uKey = courseStatusToFilterKey(inst.status);
+            const isDraft = uKey === 'draft';
+            const isActive = uKey === 'ongoing';
+            const isPaused = uKey === 'paused';
+            const isArchived = uKey === 'archived';
 
             const cardData: DeliveryCardData = {
               id: inst.id,
@@ -233,7 +239,7 @@ export function CourseManagement() {
                 ...(inst.publishMode ? [publishModeLabels[inst.publishMode] || inst.publishMode] : []),
                 ...(inst.courseType ? [inst.courseType] : []),
                 { label: '已加入', value: `${enrolled} 人` },
-                ...(inst.status === 'active' ? [{ label: '完成率', value: `${completionRate}%` }] : []),
+                ...(isActive ? [{ label: '完成率', value: `${completionRate}%` }] : []),
               ],
             };
 
@@ -242,50 +248,85 @@ export function CourseManagement() {
                 key={inst.id}
                 data={cardData}
                 onOpen={() => { setSelectedId(inst.id); setView('detail'); }}
-                statusText={isClosed ? '已暂停' : undefined}
-                statusClassName={isClosed ? 'bg-slate-100 text-slate-500' : undefined}
+                statusText={isPaused ? '已暂停' : undefined}
+                statusClassName={isPaused ? 'bg-slate-100 text-slate-500' : undefined}
                 actions={
                   <>
-                    {/* Share link for public mode (active only) */}
-                    {inst.publishMode === 'public' && inst.status === 'active' && (
+                    {/* 编辑（非归档） */}
+                    {!isArchived && (
                       <button
-                        onClick={() => setShareModalId(inst.id)}
+                        onClick={() => { setSelectedId(inst.id); setView('detail'); }}
                         className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                        title="分享报名链接"
+                        title="编辑"
                       >
-                        <Copy className="w-4 h-4" />
+                        <Edit3 className="w-4 h-4" />
                       </button>
                     )}
-                    {/* Activate (draft only) */}
-                    {inst.status === 'draft' && (
+                    {/* 发布（仅草稿） */}
+                    {isDraft && (
                       <button
                         onClick={() => handleActivate(inst.id)}
                         className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
-                        title="激活课程"
+                        title="发布课程"
                       >
                         <Play className="w-4 h-4" />
                       </button>
                     )}
-                    {/* Close (active only) */}
-                    {inst.status === 'active' && (
+                    {/* 分享链接（进行中） */}
+                    {isActive && (
+                      <button
+                        onClick={() => setShareModalId(inst.id)}
+                        className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                        title="分享链接"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 暂停（进行中） */}
+                    {isActive && (
                       <button
                         onClick={() => handleClose(inst.id)}
                         className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
-                        title="关闭课程"
+                        title="暂停"
                       >
-                        <Square className="w-4 h-4" />
+                        <PauseCircle className="w-4 h-4" />
                       </button>
                     )}
-                    {/* Delete (draft only) */}
-                    {inst.status === 'draft' && (
+                    {/* 恢复（已暂停） */}
+                    {isPaused && (
                       <button
-                        onClick={() => handleDelete(inst.id)}
-                        className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
-                        title="删除"
+                        onClick={() => handleActivate(inst.id)}
+                        className="p-2 text-amber-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+                        title="恢复"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        <PlayCircle className="w-4 h-4" />
                       </button>
                     )}
+                    {/* 归档（进行中/已暂停） */}
+                    {(isActive || isPaused) && (
+                      <button
+                        onClick={() => {
+                          if (confirm('确定归档此课程？归档后不可恢复。')) {
+                            archiveInstance.mutate(inst.id, {
+                              onSuccess: () => toast('已归档', 'success'),
+                              onError: (err: any) => toast(err.message || '归档失败', 'error'),
+                            });
+                          }
+                        }}
+                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                        title="归档"
+                      >
+                        <Archive className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 删除（任何状态） */}
+                    <button
+                      onClick={() => handleDelete(inst.id)}
+                      className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition"
+                      title="删除"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </>
                 }
               />

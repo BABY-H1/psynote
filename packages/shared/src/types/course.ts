@@ -139,6 +139,10 @@ export interface CourseInstance {
   capacity?: number;
   targetGroupLabel?: string;
   responsibleId?: string;
+  assessmentConfig?: import('./group').AssessmentConfig;
+  location?: string;
+  startDate?: string;
+  schedule?: string;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

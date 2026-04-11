@@ -43,9 +43,14 @@ export async function courseInstanceRoutes(app: FastifyInstance) {
       title: string;
       description?: string;
       publishMode: string;
+      status?: string;
       capacity?: number;
       targetGroupLabel?: string;
       responsibleId?: string;
+      assessmentConfig?: object;
+      location?: string;
+      startDate?: string;
+      schedule?: string;
     };
 
     if (!body.courseId) throw new ValidationError('courseId is required');
@@ -72,9 +77,14 @@ export async function courseInstanceRoutes(app: FastifyInstance) {
       title: string;
       description: string;
       publishMode: string;
+      status: string;
       capacity: number;
       targetGroupLabel: string;
       responsibleId: string;
+      assessmentConfig: object;
+      location: string;
+      startDate: string;
+      schedule: string;
     }>;
 
     const updated = await instanceService.updateInstance(instanceId, body);

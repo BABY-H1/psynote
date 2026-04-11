@@ -95,9 +95,14 @@ export async function createInstance(input: {
   title: string;
   description?: string;
   publishMode: string;
+  status?: string;
   capacity?: number;
   targetGroupLabel?: string;
   responsibleId?: string;
+  assessmentConfig?: object;
+  location?: string;
+  startDate?: string;
+  schedule?: string;
   createdBy: string;
 }) {
   const [sourceCourse] = await db
@@ -133,9 +138,13 @@ export async function createInstance(input: {
       publishMode: input.publishMode || 'assign',
       capacity: input.capacity,
       targetGroupLabel: input.targetGroupLabel,
-      responsibleId: input.responsibleId || null,
+      responsibleId: input.responsibleId || input.createdBy,
+      assessmentConfig: input.assessmentConfig || {},
+      location: input.location,
+      startDate: input.startDate,
+      schedule: input.schedule,
       createdBy: input.createdBy,
-      status: 'draft',
+      status: input.status || 'draft',
     })
     .returning();
 
@@ -148,9 +157,14 @@ export async function updateInstance(
     title: string;
     description: string;
     publishMode: string;
+    status: string;
     capacity: number;
     targetGroupLabel: string;
     responsibleId: string;
+    assessmentConfig: object;
+    location: string;
+    startDate: string;
+    schedule: string;
   }>,
 ) {
   const [updated] = await db
