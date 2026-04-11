@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { useAssessments, useUpdateAssessment, useDeleteAssessment } from '../../../api/useAssessments';
 import { AssessmentWizard } from '../components/AssessmentWizard';
 import { AssessmentDetail } from '../components/AssessmentDetail';
-import { Search, Plus, PauseCircle, PlayCircle, Edit3, Send, Trash2, X, Copy, Check } from 'lucide-react';
+import { Search, Plus, Play, PauseCircle, PlayCircle, Edit3, Send, Archive, Trash2, X, Copy, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import {
   PageLoading,
@@ -208,8 +208,13 @@ export function AssessmentManagement() {
         <CardGrid cols={2}>
           {filtered.map((assessment) => {
             const ls = getLogicalStatus(assessment);
+            const uKey = logicalToFilterKey(ls);
             const ovr = STATUS_OVERRIDE[ls];
             const typeLabel = ASSESSMENT_TYPE_LABELS[(assessment as any).assessmentType] || '';
+            const isDraft = uKey === 'draft';
+            const isActive = uKey === 'ongoing';
+            const isPaused = uKey === 'paused';
+            const isArchived = uKey === 'archived';
 
             const cardData: DeliveryCardData = {
               id: assessment.id,
@@ -235,36 +240,89 @@ export function AssessmentManagement() {
                 statusClassName={ovr.cls}
                 actions={
                   <>
-                    <button
-                      onClick={() =>
-                        updateAssessment.mutate(
-                          { assessmentId: assessment.id, isActive: !assessment.isActive },
-                          { onSuccess: () => toast(assessment.isActive ? '已暂停' : '已启用', 'success') },
-                        )
-                      }
-                      className={`p-2 rounded-lg transition ${
-                        assessment.isActive
-                          ? 'text-slate-400 hover:text-amber-600 hover:bg-amber-50'
-                          : 'text-amber-500 hover:text-green-600 hover:bg-green-50'
-                      }`}
-                      title={assessment.isActive ? '暂停发放' : '恢复发放'}
-                    >
-                      {assessment.isActive ? <PauseCircle className="w-4 h-4" /> : <PlayCircle className="w-4 h-4" />}
-                    </button>
-                    <button
-                      onClick={() => setShareModalId(assessment.id)}
-                      className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                      title="发放链接"
-                    >
-                      <Send className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setView({ type: 'edit', assessmentId: assessment.id })}
-                      className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                      title="编辑"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
+                    {/* 编辑（非归档） */}
+                    {!isArchived && (
+                      <button
+                        onClick={() => setView({ type: 'edit', assessmentId: assessment.id })}
+                        className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                        title="编辑"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 发布（仅草稿） */}
+                    {isDraft && (
+                      <button
+                        onClick={() =>
+                          updateAssessment.mutate(
+                            { assessmentId: assessment.id, status: 'active', isActive: true },
+                            { onSuccess: () => toast('已发布', 'success') },
+                          )
+                        }
+                        className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+                        title="发布"
+                      >
+                        <Play className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 分享链接（进行中） */}
+                    {isActive && (
+                      <button
+                        onClick={() => setShareModalId(assessment.id)}
+                        className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                        title="分享链接"
+                      >
+                        <Send className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 暂停（进行中） */}
+                    {isActive && (
+                      <button
+                        onClick={() =>
+                          updateAssessment.mutate(
+                            { assessmentId: assessment.id, isActive: false },
+                            { onSuccess: () => toast('已暂停', 'success') },
+                          )
+                        }
+                        className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                        title="暂停"
+                      >
+                        <PauseCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 恢复（已暂停） */}
+                    {isPaused && (
+                      <button
+                        onClick={() =>
+                          updateAssessment.mutate(
+                            { assessmentId: assessment.id, isActive: true },
+                            { onSuccess: () => toast('已恢复', 'success') },
+                          )
+                        }
+                        className="p-2 text-amber-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+                        title="恢复"
+                      >
+                        <PlayCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 归档（进行中/已暂停） */}
+                    {(isActive || isPaused) && (
+                      <button
+                        onClick={() => {
+                          if (confirm('确定归档此测评？归档后不可恢复。')) {
+                            updateAssessment.mutate(
+                              { assessmentId: assessment.id, status: 'archived' },
+                              { onSuccess: () => toast('已归档', 'success') },
+                            );
+                          }
+                        }}
+                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                        title="归档"
+                      >
+                        <Archive className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 删除（任何状态） */}
                     <button
                       onClick={() => {
                         if (confirm('确定删除此测评？')) {

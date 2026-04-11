@@ -59,7 +59,7 @@ export function SelectClientStep({ clientId, onSelect, onNext }: Props) {
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
             </div>
             <div>
-              <label className="block text-xs text-slate-500 mb-1">��名</label>
+              <label className="block text-xs text-slate-500 mb-1">姓名</label>
               <input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="来访者姓名"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm" />
             </div>
@@ -76,7 +76,7 @@ export function SelectClientStep({ clientId, onSelect, onNext }: Props) {
 
       {isLoading ? <PageLoading /> : filtered.length === 0 ? (
         <div className="text-center py-8 text-sm text-slate-400">
-          {clients.length === 0 ? '暂无来访者��请先添加' : '未找到匹配的来访者'}
+          {clients.length === 0 ? '暂无来访者，请先添加' : '未找到匹配的来访者'}
         </div>
       ) : (
         <div className="space-y-2 max-h-64 overflow-y-auto">
