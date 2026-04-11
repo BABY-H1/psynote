@@ -113,6 +113,7 @@ export async function publicCourseEnrollRoutes(app: FastifyInstance) {
       [user] = await db
         .insert(users)
         .values({
+          id: randomUUID(),
           name: body.name,
           email: body.email,
           passwordHash: randomUUID(),

@@ -73,6 +73,22 @@ export function useAvailableCourses() {
   });
 }
 
+export function useMyAssessments() {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['myAssessments', orgId],
+    queryFn: () => api.get<Array<{
+      id: string;
+      title: string;
+      description?: string;
+      completed: boolean;
+      context?: { instanceTitle: string; phase: string };
+      runnerUrl: string;
+    }>>(`${orgPrefix()}/my-assessments`),
+    enabled: !!orgId,
+  });
+}
+
 export function useCounselors() {
   const orgId = useAuthStore((s) => s.currentOrgId);
   return useQuery({

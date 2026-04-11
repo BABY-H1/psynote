@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar } from 'lucide-react';
-import { useMyAppointments, useAvailableGroups, useAvailableCourses } from '@client/api/useClientPortal';
+import { Calendar, ClipboardList, CheckCircle2 } from 'lucide-react';
+import { useMyAppointments, useAvailableGroups, useAvailableCourses, useMyAssessments } from '@client/api/useClientPortal';
 import { PageLoading } from '@client/shared/components';
 import { ServiceCard } from '../components/ServiceCard';
 import { SectionHeader } from '../components/SectionHeader';
@@ -47,6 +47,7 @@ export function MyServicesTab() {
   const { data: appointments, isLoading: apptLoading } = useMyAppointments();
   const { data: groups, isLoading: groupsLoading } = useAvailableGroups();
   const { data: courses, isLoading: coursesLoading } = useAvailableCourses();
+  const { data: myAssessments } = useMyAssessments();
 
   // "My counseling" = distinct counselors from the appointments list. For
   // each counselor, we also compute the next upcoming appointment (if any).
@@ -204,10 +205,53 @@ export function MyServicesTab() {
         </section>
       )}
 
+      {/* 我的量表 */}
+      {myAssessments && myAssessments.length > 0 && (
+        <section>
+          <SectionHeader title="我的量表" count={myAssessments.length} />
+          <div className="space-y-2">
+            {myAssessments.map((a: any) => (
+              <button
+                key={a.id}
+                onClick={() => {
+                  if (!a.completed) window.open(a.runnerUrl, '_blank');
+                }}
+                className={`w-full flex items-center gap-3 p-3 rounded-xl border text-left transition ${
+                  a.completed
+                    ? 'bg-green-50 border-green-200'
+                    : 'bg-white border-slate-200 hover:border-brand-300'
+                }`}
+              >
+                {a.completed ? (
+                  <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0" />
+                ) : (
+                  <ClipboardList className="w-5 h-5 text-brand-500 shrink-0" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className={`text-sm font-medium ${a.completed ? 'text-green-700' : 'text-slate-900'}`}>
+                    {a.title}
+                  </div>
+                  {a.context && (
+                    <div className="text-xs text-slate-400 mt-0.5">
+                      来自：{a.context.instanceTitle}
+                    </div>
+                  )}
+                </div>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  a.completed ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'
+                }`}>
+                  {a.completed ? '已完成' : '待填写'}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
       {/* 我的课程 */}
       {myCourses.length > 0 && (
         <section>
-          <SectionHeader title="我的课程" count={myCourses.length} />
+          <SectionHeader title="��的课程" count={myCourses.length} />
           <div className="space-y-2">
             {myCourses.map((c: any) => {
               const total = c.chapterCount ?? c.chapters?.length ?? 0;
