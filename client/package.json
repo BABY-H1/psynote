@@ -12,7 +12,9 @@
   "dependencies": {
     "@psynote/shared": "*",
     "@tanstack/react-query": "^5.62.0",
+    "html2canvas": "^1.4.1",
     "lucide-react": "^0.562.0",
+    "papaparse": "^5.5.3",
     "qrcode.react": "^4.2.0",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
@@ -23,6 +25,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@types/papaparse": "^5.5.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",

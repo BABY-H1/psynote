@@ -12,6 +12,24 @@ export interface SessionPhase {
   facilitatorNotes?: string;
 }
 
+/** A single follow-up assessment round after group ends */
+export interface FollowUpRound {
+  assessments: string[];   // assessment IDs
+  delayDays: number;       // days after group ends
+  label?: string;          // e.g. "第一次随访"
+}
+
+/** Full lifecycle assessment configuration for a group instance */
+export interface AssessmentConfig {
+  screening?: string[];                    // 报名筛查量表
+  preGroup?: string[];                     // 入组前测量表
+  preGroupStartDate?: string;              // 入组前测开始填写日期 (截止日期 = startDate)
+  perSession?: Record<string, string[]>;   // 每节量表, key = sessionNumber as string
+  postGroup?: string[];                    // 结组后测量表
+  followUp?: FollowUpRound[];             // 多轮随访
+  satisfaction?: string[];                 // 满意度调查量表
+}
+
 export interface GroupScheme {
   id: string;
   orgId?: string;
@@ -77,9 +95,12 @@ export interface GroupInstance {
   location?: string;
   status: GroupStatus;
   capacity?: number;
+  /** @deprecated Use assessmentConfig.screening instead */
   recruitmentAssessments?: string[];
+  /** @deprecated Use assessmentConfig.preGroup/postGroup instead */
   overallAssessments?: string[];
   screeningNotes?: string;
+  assessmentConfig?: AssessmentConfig;
   createdBy?: string;
   createdAt: string;
   updatedAt: string;

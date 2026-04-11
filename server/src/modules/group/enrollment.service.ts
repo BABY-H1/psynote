@@ -1,7 +1,63 @@
 import { eq, and, asc, sql } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
 import { db } from '../../config/database.js';
-import { groupEnrollments, groupInstances, careTimeline } from '../../db/schema.js';
+import { groupEnrollments, groupInstances, careTimeline, users, orgMembers } from '../../db/schema.js';
 import { NotFoundError, ConflictError } from '../../lib/errors.js';
+
+/**
+ * Find an existing user by email, or create a new one and add them to the org.
+ * Used by batch enrollment and CSV import flows.
+ */
+export async function findOrCreateUserByEmail(input: {
+  email: string;
+  name?: string;
+  phone?: string;
+  orgId: string;
+}): Promise<{ id: string }> {
+  // Try to find existing user by email
+  const [existing] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(eq(users.email, input.email))
+    .limit(1);
+
+  if (existing) {
+    // Ensure they're an org member
+    const [membership] = await db
+      .select()
+      .from(orgMembers)
+      .where(and(
+        eq(orgMembers.orgId, input.orgId),
+        eq(orgMembers.userId, existing.id),
+      ))
+      .limit(1);
+
+    if (!membership) {
+      await db.insert(orgMembers).values({
+        orgId: input.orgId,
+        userId: existing.id,
+        role: 'client',
+      });
+    }
+    return existing;
+  }
+
+  // Create new user
+  const [newUser] = await db.insert(users).values({
+    id: randomUUID(),
+    email: input.email,
+    name: input.name || input.email.split('@')[0],
+  }).returning();
+
+  // Add to org as client
+  await db.insert(orgMembers).values({
+    orgId: input.orgId,
+    userId: newUser.id,
+    role: 'client',
+  });
+
+  return newUser;
+}
 
 export async function enroll(input: {
   instanceId: string;

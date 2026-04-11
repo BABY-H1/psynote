@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { GroupScheme, GroupInstance, GroupEnrollment, GroupSessionRecord } from '@psynote/shared';
+import type { GroupScheme, GroupInstance, GroupEnrollment, GroupSessionRecord, AssessmentConfig } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
 
@@ -90,10 +90,12 @@ export function useCreateGroupInstance() {
       duration?: string;
       startDate?: string;
       location?: string;
+      status?: string;
       capacity?: number;
       recruitmentAssessments?: string[];
       overallAssessments?: string[];
       screeningNotes?: string;
+      assessmentConfig?: AssessmentConfig;
     }) => api.post<GroupInstance>(`${orgPrefix()}/group-instances`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupInstances'] }); },
   });
@@ -103,8 +105,11 @@ export function useUpdateGroupInstance() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ instanceId, ...data }: { instanceId: string } & Partial<{
-      title: string; status: string; capacity: number;
+      title: string; description: string; location: string; schedule: string;
+      duration: string; startDate: string; leaderId: string;
+      status: string; capacity: number;
       recruitmentAssessments: string[]; overallAssessments: string[]; screeningNotes: string;
+      assessmentConfig: AssessmentConfig;
     }>) => api.patch<GroupInstance>(`${orgPrefix()}/group-instances/${instanceId}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupInstances'] }); },
   });
@@ -215,5 +220,34 @@ export function useAttendanceSummary(instanceId: string | undefined) {
       `${orgPrefix()}/group-instances/${instanceId}/attendance-summary`,
     ),
     enabled: !!orgId && !!instanceId,
+  });
+}
+
+// ─── Batch Enrollment ──────────────────────────────────────────
+
+export function useBulkEnroll() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ instanceId, members }: {
+      instanceId: string;
+      members: Array<{ userId?: string; name?: string; email?: string; phone?: string }>;
+    }) => api.post<{ enrolled: number; errors: Array<{ index: number; message: string }> }>(
+      `${orgPrefix()}/group-instances/${instanceId}/enroll-batch`,
+      { members },
+    ),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupInstances'] }); },
+  });
+}
+
+/** Fetch session detail with attendance for real-time check-in polling */
+export function useSessionAttendance(instanceId: string | undefined, sessionId: string | undefined, pollInterval?: number) {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['sessionAttendance', orgId, instanceId, sessionId],
+    queryFn: () => api.get<GroupSessionRecord>(
+      `${orgPrefix()}/group-instances/${instanceId}/sessions/${sessionId}`,
+    ),
+    enabled: !!orgId && !!instanceId && !!sessionId,
+    refetchInterval: pollInterval || false,
   });
 }

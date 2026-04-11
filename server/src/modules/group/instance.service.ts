@@ -61,6 +61,7 @@ export async function createInstance(input: {
   recruitmentAssessments?: string[];
   overallAssessments?: string[];
   screeningNotes?: string;
+  assessmentConfig?: object;
   createdBy: string;
 }) {
   const [instance] = await db.insert(groupInstances).values({
@@ -69,7 +70,7 @@ export async function createInstance(input: {
     title: input.title,
     description: input.description,
     category: input.category,
-    leaderId: input.leaderId || null,
+    leaderId: input.leaderId || input.createdBy,
     schedule: input.schedule,
     duration: input.duration,
     startDate: input.startDate,
@@ -79,6 +80,7 @@ export async function createInstance(input: {
     recruitmentAssessments: input.recruitmentAssessments || [],
     overallAssessments: input.overallAssessments || [],
     screeningNotes: input.screeningNotes,
+    assessmentConfig: input.assessmentConfig || {},
     createdBy: input.createdBy,
   }).returning();
 
@@ -122,6 +124,7 @@ export async function updateInstance(
     recruitmentAssessments: string[];
     overallAssessments: string[];
     screeningNotes: string;
+    assessmentConfig: object;
   }>,
 ) {
   const [updated] = await db

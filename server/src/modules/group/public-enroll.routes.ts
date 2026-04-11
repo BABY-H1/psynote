@@ -1,5 +1,6 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, asc } from 'drizzle-orm';
+import { randomUUID } from 'crypto';
+import { eq, and, asc, sql } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import {
   groupInstances, groupSchemes, groupSchemeSessions, groupEnrollments,
@@ -127,15 +128,16 @@ export async function publicEnrollRoutes(app: FastifyInstance) {
 
     // Check capacity
     if (instance.capacity) {
-      const [{ count }] = await db
-        .select({ count: groupEnrollments.id })
+      const [countResult] = await db
+        .select({ count: sql<number>`count(*)` })
         .from(groupEnrollments)
         .where(and(
           eq(groupEnrollments.instanceId, instanceId),
           eq(groupEnrollments.status, 'approved'),
         ));
-      // Note: count here is actually the last id, we need proper count
-      // For now, we allow enrollment and let admin manage capacity
+      if (Number(countResult?.count || 0) >= instance.capacity) {
+        return reply.status(400).send({ error: '报名已满，暂无空位' });
+      }
     }
 
     // Find or create a user record for this applicant
@@ -154,6 +156,7 @@ export async function publicEnrollRoutes(app: FastifyInstance) {
         const [newUser] = await db
           .insert(users)
           .values({
+            id: randomUUID(),
             email: body.email,
             name: body.name,
           })
@@ -165,6 +168,7 @@ export async function publicEnrollRoutes(app: FastifyInstance) {
       const [newUser] = await db
         .insert(users)
         .values({
+          id: randomUUID(),
           name: body.name,
         })
         .returning();

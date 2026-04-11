@@ -47,6 +47,7 @@ export async function instanceRoutes(app: FastifyInstance) {
       recruitmentAssessments?: string[];
       overallAssessments?: string[];
       screeningNotes?: string;
+      assessmentConfig?: object;
     };
 
     if (!body.title) throw new ValidationError('title is required');
@@ -79,6 +80,7 @@ export async function instanceRoutes(app: FastifyInstance) {
       recruitmentAssessments: string[];
       overallAssessments: string[];
       screeningNotes: string;
+      assessmentConfig: object;
     }>;
 
     const updated = await instanceService.updateInstance(instanceId, body);

@@ -6,8 +6,9 @@ import {
 import { PageLoading, EmptyState, useToast } from '../../../../shared/components';
 import {
   CheckCircle2, Circle, XCircle, Plus, Calendar,
-  ChevronDown, ChevronRight, Users, FileText, ClipboardList, BookOpen, Link,
+  ChevronDown, ChevronRight, Users, FileText, ClipboardList, BookOpen, QrCode,
 } from 'lucide-react';
+import { CheckinModal } from './CheckinModal';
 import type { GroupInstance, GroupEnrollment, GroupSchemeSession, SessionPhase } from '@psynote/shared';
 
 const sessionStatusConfig: Record<string, { icon: React.ReactNode; color: string; text: string }> = {
@@ -35,6 +36,7 @@ export function SessionsTab({ instance }: Props) {
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [attendanceModalId, setAttendanceModalId] = useState<string | null>(null);
+  const [checkinModalId, setCheckinModalId] = useState<string | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
 
   if (isLoading) return <PageLoading />;
@@ -169,23 +171,11 @@ export function SessionsTab({ instance }: Props) {
                       )}
                       {(sess.status === 'planned' || sess.status === 'completed') && (
                         <button
-                          onClick={() => {
-                            const url = `${window.location.origin}/checkin/${instance.id}/${sess.id}`;
-                            navigator.clipboard.writeText(url);
-                            toast('签到链接已复制', 'success');
-                          }}
-                          className="text-xs px-2.5 py-1 text-slate-400 rounded-lg hover:bg-slate-100 flex items-center gap-1"
-                          title="复制签到链接"
+                          onClick={() => setCheckinModalId(sess.id)}
+                          className="text-xs px-2.5 py-1 bg-green-50 text-green-700 rounded-lg hover:bg-green-100 flex items-center gap-1"
+                          title="开启签到"
                         >
-                          <Link className="w-3 h-3" /> 签到链接
-                        </button>
-                      )}
-                      {sess.status === 'completed' && (
-                        <button
-                          onClick={() => setAttendanceModalId(sess.id)}
-                          className="text-xs px-2.5 py-1 bg-blue-50 text-blue-700 rounded-lg hover:bg-blue-100 flex items-center gap-1"
-                        >
-                          <Users className="w-3 h-3" /> 签到管理
+                          <QrCode className="w-3 h-3" /> 开启签到
                         </button>
                       )}
                     </div>
@@ -200,7 +190,7 @@ export function SessionsTab({ instance }: Props) {
                       <div className="p-4 bg-violet-50/50">
                         <div className="flex items-center gap-2 mb-2">
                           <BookOpen className="w-3.5 h-3.5 text-violet-500" />
-                          <span className="text-xs font-medium text-violet-600">方案环节（参考）</span>
+                          <span className="text-xs font-medium text-violet-600">方案环节</span>
                         </div>
                         <div className="space-y-1.5">
                           {schemeSess.phases.map((phase: SessionPhase, i: number) => (
@@ -267,13 +257,24 @@ export function SessionsTab({ instance }: Props) {
         </div>
       )}
 
-      {/* Attendance Modal */}
+      {/* Attendance Modal (legacy) */}
       {attendanceModalId && (
         <AttendanceModal
           sessionId={attendanceModalId}
           instanceId={instance.id}
           enrollments={approvedEnrollments}
           onClose={() => setAttendanceModalId(null)}
+        />
+      )}
+
+      {/* Checkin Modal (enhanced with QR + real-time polling) */}
+      {checkinModalId && (
+        <CheckinModal
+          instanceId={instance.id}
+          sessionId={checkinModalId}
+          sessionTitle={sessions?.find((s) => s.id === checkinModalId)?.title || ''}
+          enrollments={instance.enrollments || []}
+          onClose={() => setCheckinModalId(null)}
         />
       )}
     </div>

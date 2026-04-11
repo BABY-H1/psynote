@@ -1,9 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import {
-  useGroupSchemes, useGroupInstances, useCreateGroupInstance,
+  useGroupInstances,
   useUpdateGroupInstance, useDeleteGroupInstance,
 } from '../../../api/useGroups';
-import { useAssessments } from '../../../api/useAssessments';
 import {
   PageLoading,
   useToast,
@@ -16,7 +15,8 @@ import {
   type DeliveryCardData,
 } from '../../../shared/components';
 import { GroupInstanceDetail } from '../components/GroupInstanceDetail';
-import { Plus, Search, UserPlus, UserMinus, Send, Edit3, Trash2, X, Copy, Check } from 'lucide-react';
+import { GroupWizard } from './group-wizard/GroupWizard';
+import { Plus, Search, Play, PauseCircle, PlayCircle, Send, Edit3, Archive, Trash2, X, Copy, Check } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import type { GroupInstance, ServiceStatus } from '@psynote/shared';
 
@@ -124,7 +124,7 @@ export function GroupCenter() {
   }
 
   if (view === 'create') {
-    return <CreateInstancePage onClose={() => setView('list')} />;
+    return <GroupWizard onClose={() => setView('list')} onCreated={(id) => { setSelectedId(id); setView('detail'); }} />;
   }
 
   return (
@@ -169,7 +169,12 @@ export function GroupCenter() {
       ) : (
         <CardGrid cols={2}>
           {filteredInstances.map((inst) => {
-            const isRecruiting = inst.status === 'recruiting';
+            const uKey = groupStatusToFilterKey(inst.status);
+            const isDraft = uKey === 'draft';
+            const isActive = uKey === 'recruiting' || uKey === 'ongoing';
+            const isPaused = uKey === 'paused';
+            const isArchived = uKey === 'archived';
+
             const cardData: DeliveryCardData = {
               id: inst.id,
               kind: 'group',
@@ -192,42 +197,83 @@ export function GroupCenter() {
                 statusClassName={inst.status === 'full' ? 'bg-yellow-100 text-yellow-700' : undefined}
                 actions={
                   <>
-                    {/* Recruit toggle */}
-                    {(inst.status === 'draft' || inst.status === 'recruiting') && (
+                    {/* 编辑（非归档） */}
+                    {!isArchived && (
                       <button
-                        onClick={() => updateInstance.mutate(
-                          { instanceId: inst.id, status: isRecruiting ? 'draft' : 'recruiting' },
-                          { onSuccess: () => toast(isRecruiting ? '已停止招募' : '已开始招募', 'success') },
-                        )}
-                        className={`p-2 rounded-lg transition ${
-                          isRecruiting
-                            ? 'text-green-500 hover:text-amber-600 hover:bg-amber-50'
-                            : 'text-slate-400 hover:text-green-600 hover:bg-green-50'
-                        }`}
-                        title={isRecruiting ? '停止招募' : '开始招募'}
+                        onClick={() => { setSelectedId(inst.id); setView('detail'); }}
+                        className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
+                        title="编辑"
                       >
-                        {isRecruiting ? <UserMinus className="w-4 h-4" /> : <UserPlus className="w-4 h-4" />}
+                        <Edit3 className="w-4 h-4" />
                       </button>
                     )}
-                    {/* Share/publish recruitment */}
-                    {inst.status === 'recruiting' && (
+                    {/* 发布（仅草稿） */}
+                    {isDraft && (
+                      <button
+                        onClick={() => updateInstance.mutate(
+                          { instanceId: inst.id, status: 'recruiting' },
+                          { onSuccess: () => toast('已发布招募', 'success') },
+                        )}
+                        className="p-2 text-slate-400 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+                        title="发布招募"
+                      >
+                        <Play className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 分享链接（招募中/进行中） */}
+                    {isActive && (
                       <button
                         onClick={() => setShareModalId(inst.id)}
                         className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                        title="发布招募链接"
+                        title="分享链接"
                       >
                         <Send className="w-4 h-4" />
                       </button>
                     )}
-                    {/* Edit (opens detail) */}
-                    <button
-                      onClick={() => { setSelectedId(inst.id); setView('detail'); }}
-                      className="p-2 text-slate-400 hover:text-brand-600 hover:bg-brand-50 rounded-lg transition"
-                      title="编辑"
-                    >
-                      <Edit3 className="w-4 h-4" />
-                    </button>
-                    {/* Delete */}
+                    {/* 暂停（招募中/进行中） */}
+                    {isActive && (
+                      <button
+                        onClick={() => updateInstance.mutate(
+                          { instanceId: inst.id, status: 'paused' },
+                          { onSuccess: () => toast('已暂停', 'success') },
+                        )}
+                        className="p-2 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition"
+                        title="暂停"
+                      >
+                        <PauseCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 恢复（已暂停） */}
+                    {isPaused && (
+                      <button
+                        onClick={() => updateInstance.mutate(
+                          { instanceId: inst.id, status: 'ongoing' },
+                          { onSuccess: () => toast('已恢复', 'success') },
+                        )}
+                        className="p-2 text-amber-500 hover:text-green-600 hover:bg-green-50 rounded-lg transition"
+                        title="恢复"
+                      >
+                        <PlayCircle className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 归档（进行中/已暂停） */}
+                    {(uKey === 'ongoing' || isPaused) && (
+                      <button
+                        onClick={() => {
+                          if (confirm('确定归档此团辅活动？归档后不可恢复。')) {
+                            updateInstance.mutate(
+                              { instanceId: inst.id, status: 'ended' },
+                              { onSuccess: () => toast('已归档', 'success') },
+                            );
+                          }
+                        }}
+                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition"
+                        title="归档"
+                      >
+                        <Archive className="w-4 h-4" />
+                      </button>
+                    )}
+                    {/* 删除（任何状态） */}
                     <button
                       onClick={() => {
                         if (confirm('确定删除此团辅活动？相关的报名和出勤记录也将被删除。')) {
@@ -311,195 +357,3 @@ function RecruitmentShareModal({ instanceId, onClose }: { instanceId: string; on
   );
 }
 
-// ─── Create Instance Page ─────────────────────────────────────
-
-function CreateInstancePage({ onClose }: { onClose: () => void }) {
-  const { data: schemes } = useGroupSchemes();
-  const { data: assessments } = useAssessments();
-  const createInstance = useCreateGroupInstance();
-  const { toast } = useToast();
-
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [schemeId, setSchemeId] = useState('');
-  const [location, setLocation] = useState('');
-  const [capacity, setCapacity] = useState(12);
-  const [startDate, setStartDate] = useState('');
-  const [schedule, setSchedule] = useState('');
-  const [recruitmentAssessments, setRecruitmentAssessments] = useState<string[]>([]);
-  const [overallAssessments, setOverallAssessments] = useState<string[]>([]);
-
-  const selectedScheme = schemes?.find((s) => s.id === schemeId);
-
-  const handleSchemeChange = (sid: string) => {
-    setSchemeId(sid);
-    const scheme = schemes?.find((s: any) => s.id === sid);
-    if (scheme) {
-      if (!title) setTitle(scheme.title);
-      if (!description) setDescription(scheme.description || '');
-      // Inherit assessment config from scheme
-      setRecruitmentAssessments((scheme as any).recruitmentAssessments || []);
-      setOverallAssessments((scheme as any).overallAssessments || []);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      await createInstance.mutateAsync({
-        title,
-        description: description || undefined,
-        schemeId: schemeId || undefined,
-        location: location || undefined,
-        capacity,
-        startDate: startDate || undefined,
-        schedule: schedule || undefined,
-        recruitmentAssessments: recruitmentAssessments.length > 0 ? recruitmentAssessments : undefined,
-        overallAssessments: overallAssessments.length > 0 ? overallAssessments : undefined,
-      });
-      toast('活动发布成功', 'success');
-      onClose();
-    } catch {
-      toast('发布失败', 'error');
-    }
-  };
-
-  const activeAssessments = assessments?.filter((a: any) => a.status !== 'archived') || [];
-
-  return (
-    <div>
-      <div className="flex items-center gap-3 mb-6">
-        <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-sm">
-          &larr; 返回
-        </button>
-        <h2 className="text-xl font-bold text-slate-900">发布团辅活动</h2>
-      </div>
-
-      <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
-        {/* Scheme Selection */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5">
-          <h3 className="text-sm font-semibold text-slate-900 mb-3">选择方案模板</h3>
-          <select
-            value={schemeId}
-            onChange={(e) => handleSchemeChange(e.target.value)}
-            className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-          >
-            <option value="">不使用方案模板（手动填写）</option>
-            {schemes?.map((s) => (
-              <option key={s.id} value={s.id}>{s.title} ({s.sessions?.length || 0}次活动)</option>
-            ))}
-          </select>
-          {selectedScheme && (
-            <div className="mt-3 p-3 bg-violet-50 rounded-lg text-xs text-violet-700">
-              {selectedScheme.description && <p>{selectedScheme.description}</p>}
-              <p className="mt-1">共 {selectedScheme.sessions?.length || 0} 次活动</p>
-            </div>
-          )}
-        </div>
-
-        {/* Basic Info */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-slate-900">基本信息</h3>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">活动名称 *</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} required
-              placeholder="如：大学生压力管理团体辅导"
-              className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-          </div>
-          <div>
-            <label className="block text-xs text-slate-500 mb-1">活动描述</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3}
-              placeholder="活动简介..."
-              className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-          </div>
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">地点</label>
-              <input value={location} onChange={(e) => setLocation(e.target.value)}
-                placeholder="如：心理咨询中心团辅室"
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">容量</label>
-              <input type="number" value={capacity} onChange={(e) => setCapacity(Number(e.target.value))}
-                min={1}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">开始日期</label>
-              <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)}
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-            </div>
-            <div>
-              <label className="block text-xs text-slate-500 mb-1">安排频率</label>
-              <input value={schedule} onChange={(e) => setSchedule(e.target.value)}
-                placeholder="如：每周三 14:00-15:30"
-                className="w-full px-4 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-brand-500" />
-            </div>
-          </div>
-        </div>
-
-        {/* Assessment Binding */}
-        <div className="bg-white rounded-xl border border-slate-200 p-5 space-y-4">
-          <h3 className="text-sm font-semibold text-slate-900">评估量表配置（可选）</h3>
-          <p className="text-xs text-slate-400">
-            {schemeId ? '已从方案继承，可调整' : '绑定量表用于招募筛选和效果评估'}
-          </p>
-
-          {/* Recruitment assessments */}
-          <div>
-            <label className="block text-xs text-slate-500 mb-2">招募量表</label>
-            <p className="text-xs text-slate-400 mb-2">报名时来访者需要填写的量表</p>
-            <div className="space-y-1">
-              {activeAssessments.map((a: any) => (
-                <label key={a.id} className="flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={recruitmentAssessments.includes(a.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) setRecruitmentAssessments([...recruitmentAssessments, a.id]);
-                      else setRecruitmentAssessments(recruitmentAssessments.filter((id) => id !== a.id));
-                    }}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
-                  {a.title}
-                </label>
-              ))}
-            </div>
-            {activeAssessments.length === 0 && (
-              <p className="text-xs text-slate-400 italic">暂无可用量表，请先在测评管理中创建</p>
-            )}
-          </div>
-
-          {/* Overall assessments (longitudinal tracking) */}
-          <div>
-            <label className="block text-xs text-slate-500 mb-2">整体评估量表</label>
-            <p className="text-xs text-slate-400 mb-2">用于纵向追踪（入组时测 + 结束时测，对比效果）</p>
-            <div className="space-y-1">
-              {activeAssessments.map((a: any) => (
-                <label key={a.id} className="flex items-center gap-2 text-sm text-slate-700">
-                  <input type="checkbox" checked={overallAssessments.includes(a.id)}
-                    onChange={(e) => {
-                      if (e.target.checked) setOverallAssessments([...overallAssessments, a.id]);
-                      else setOverallAssessments(overallAssessments.filter((id) => id !== a.id));
-                    }}
-                    className="rounded border-slate-300 text-brand-600 focus:ring-brand-500" />
-                  {a.title}
-                </label>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* Submit */}
-        <div className="flex gap-3 justify-end">
-          <button type="button" onClick={onClose}
-            className="px-4 py-2 border border-slate-200 rounded-lg text-sm text-slate-600 hover:bg-slate-50">
-            取消
-          </button>
-          <button type="submit" disabled={createInstance.isPending || !title}
-            className="px-6 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 disabled:opacity-50 transition">
-            {createInstance.isPending ? '发布中...' : '发布活动'}
-          </button>
-        </div>
-      </form>
-    </div>
-  );
-}

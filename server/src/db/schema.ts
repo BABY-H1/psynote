@@ -573,6 +573,7 @@ export const groupInstances = pgTable('group_instances', {
   recruitmentAssessments: jsonb('recruitment_assessments').default([]), // uuid[] — actual recruitment assessments
   overallAssessments: jsonb('overall_assessments').default([]), // uuid[] — actual overall assessments (longitudinal)
   screeningNotes: text('screening_notes'),
+  assessmentConfig: jsonb('assessment_config').default({}), // full lifecycle assessment config
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
