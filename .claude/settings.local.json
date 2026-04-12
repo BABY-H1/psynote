@@ -207,7 +207,15 @@
       "Read(//d/tmp/**)",
       "Bash(npm init:*)",
       "Bash(node scripts/gen-deck-v3.cjs)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(node -e \"process.stdin.on\\('data',d=>{console.log\\(d.toString\\(\\)\\)}\\)\")",
+      "Bash(node -e \"process.stdin.on\\('data',d=>{try{const r=JSON.parse\\(d\\);console.log\\(Array.isArray\\(r\\)?'Count: '+r.length:JSON.stringify\\(r\\).slice\\(0,200\\)\\)}catch\\(e\\){console.log\\(d.toString\\(\\).slice\\(0,200\\)\\)}}\\)\")",
+      "Bash(node -e \"process.stdin.on\\('data',d=>{const r=JSON.parse\\(d\\);console.log\\('Count:',r.length\\);r.forEach\\(m=>console.log\\('  ',m.name,m.role\\)\\)}\\)\")",
+      "Bash(node -e \"process.stdin.on\\('data',d=>{const r=JSON.parse\\(d\\);console.log\\(typeof r, Object.keys\\(r\\).slice\\(0,5\\), r.instances?.length ?? r.data?.length ?? 'check keys'\\)}\\)\")",
+      "Bash(node -e \"process.stdin.on\\('data',d=>{const r=JSON.parse\\(d\\);console.log\\(Array.isArray\\(r\\)?'Count: '+r.length:JSON.stringify\\(r\\).slice\\(0,200\\)\\)}\\)\")",
+      "Bash(node -e \"process.stdin.on\\('data',d=>{try{const r=JSON.parse\\(d\\);console.log\\(typeof r==='object'?'OK, keys: '+Object.keys\\(r\\).join\\(','\\):r\\)}catch\\(e\\){console.log\\(d.toString\\(\\).slice\\(0,200\\)\\)}}\\)\")",
+      "Bash(node -e \"const p=require\\('postgres'\\);const s=p\\('postgresql://postgres:psynote123@localhost:5432/psynote'\\);s\\\\`SELECT u.email, u.name FROM org_members om JOIN users u ON u.id=om.user_id WHERE om.role='counselor' AND om.status='active' LIMIT 3\\\\`.then\\(r=>{r.forEach\\(x=>console.log\\(x.email,x.name\\)\\);s.end\\(\\)}\\)\")",
+      "Bash(node -e \"const p=require\\('postgres'\\);const b=require\\('bcryptjs'\\);\\(async\\(\\)=>{const s=p\\('postgresql://postgres:psynote123@localhost:5432/psynote'\\);const h=await b.hash\\('admin123',10\\);const r=await s\\\\`UPDATE users SET password_hash=\\\\${h} WHERE email='counselor@demo.psynote.cn'\\\\`;console.log\\('Updated:',r.count\\);await s.end\\(\\)}\\)\\(\\)\")"
     ]
   }
 }

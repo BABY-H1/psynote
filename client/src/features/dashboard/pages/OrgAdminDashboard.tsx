@@ -12,7 +12,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
   Users, UserCheck, Calendar, AlertTriangle, ClipboardList, Bell,
-  ArrowRight, FileWarning, ShieldAlert,
+  ArrowRight, FileWarning, ShieldAlert, UsersRound, BookOpen,
+  ClipboardCheck, Inbox,
 } from 'lucide-react';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
@@ -24,6 +25,10 @@ interface DashboardStats {
   unassignedCount: number;
   pendingNoteCount: number;
   expiringConsentCount: number;
+  activeGroupCount: number;
+  activeCourseCount: number;
+  monthlyAssessmentCount: number;
+  pendingIntakeCount: number;
 }
 
 interface Notification {
@@ -74,7 +79,7 @@ export function OrgAdminDashboard() {
         <p className="text-sm text-slate-500 mt-1">机构运营概览</p>
       </div>
 
-      {/* Metrics cards */}
+      {/* Metrics cards — 2 rows of 3 */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
         <MetricCard
           icon={<UserCheck className="w-5 h-5 text-blue-600" />}
@@ -90,22 +95,52 @@ export function OrgAdminDashboard() {
         />
         <MetricCard
           icon={<Calendar className="w-5 h-5 text-violet-600" />}
-          label="本月咨询"
+          label="本月个咨"
           value={stats?.monthlySessionCount}
           loading={isLoading}
           suffix="场"
+        />
+        <MetricCard
+          icon={<UsersRound className="w-5 h-5 text-orange-600" />}
+          label="进行中团辅"
+          value={stats?.activeGroupCount}
+          loading={isLoading}
+          onClick={() => navigate('/delivery')}
+        />
+        <MetricCard
+          icon={<BookOpen className="w-5 h-5 text-teal-600" />}
+          label="进行中课程"
+          value={stats?.activeCourseCount}
+          loading={isLoading}
+          onClick={() => navigate('/delivery')}
+        />
+        <MetricCard
+          icon={<ClipboardCheck className="w-5 h-5 text-indigo-600" />}
+          label="本月测评"
+          value={stats?.monthlyAssessmentCount}
+          loading={isLoading}
+          suffix="份"
+          onClick={() => navigate('/delivery')}
         />
       </div>
 
       {/* Action items */}
       <div>
         <h2 className="text-sm font-semibold text-slate-500 tracking-wider uppercase mb-3">待办事项</h2>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <ActionCard
             icon={<AlertTriangle className="w-4 h-4" />}
             label="待分配来访者"
             count={stats?.unassignedCount ?? 0}
             color="amber"
+            onClick={() => navigate('/collaboration')}
+            loading={isLoading}
+          />
+          <ActionCard
+            icon={<Inbox className="w-4 h-4" />}
+            label="待处理申请"
+            count={stats?.pendingIntakeCount ?? 0}
+            color="violet"
             onClick={() => navigate('/collaboration')}
             loading={isLoading}
           />
@@ -122,7 +157,7 @@ export function OrgAdminDashboard() {
             label="即将过期同意书"
             count={stats?.expiringConsentCount ?? 0}
             color="red"
-            onClick={() => navigate('/settings/members')}
+            onClick={() => navigate('/settings')}
             loading={isLoading}
           />
         </div>
@@ -172,15 +207,21 @@ export function OrgAdminDashboard() {
   );
 }
 
-function MetricCard({ icon, label, value, loading, suffix }: {
+function MetricCard({ icon, label, value, loading, suffix, onClick }: {
   icon: React.ReactNode;
   label: string;
   value?: number;
   loading: boolean;
   suffix?: string;
+  onClick?: () => void;
 }) {
+  const Tag = onClick ? 'button' : 'div';
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4">
+    <Tag
+      type={onClick ? 'button' : undefined}
+      onClick={onClick}
+      className={`bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4 text-left ${onClick ? 'hover:border-slate-300 hover:bg-slate-50 transition cursor-pointer' : ''}`}
+    >
       <div className="p-2 bg-slate-50 rounded-lg">{icon}</div>
       <div>
         <div className="text-2xl font-bold text-slate-900">
@@ -188,7 +229,7 @@ function MetricCard({ icon, label, value, loading, suffix }: {
         </div>
         <div className="text-xs text-slate-500">{label}</div>
       </div>
-    </div>
+    </Tag>
   );
 }
 
@@ -196,6 +237,7 @@ const colorMap = {
   amber: { bg: 'bg-amber-50', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-800' },
   blue: { bg: 'bg-blue-50', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800' },
   red: { bg: 'bg-red-50', text: 'text-red-700', badge: 'bg-red-100 text-red-800' },
+  violet: { bg: 'bg-violet-50', text: 'text-violet-700', badge: 'bg-violet-100 text-violet-800' },
 } as const;
 
 function ActionCard({ icon, label, count, color, onClick, loading }: {

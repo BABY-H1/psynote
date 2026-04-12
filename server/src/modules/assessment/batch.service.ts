@@ -2,6 +2,7 @@ import { eq, and, desc } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { assessmentBatches, assessmentResults } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
+import { notifyOrgAdmins } from '../../lib/notify-org-admins.js';
 
 export async function listBatches(orgId: string) {
   return db
@@ -63,6 +64,14 @@ export async function createBatch(input: {
     stats: { total: input.totalTargets },
     createdBy: input.createdBy,
   }).returning();
+
+  // Notify org admins about the new assessment batch
+  notifyOrgAdmins(input.orgId, {
+    type: 'counselor_content_created',
+    title: `新测评批次「${input.title}」已下发`,
+    refType: 'assessment_batch',
+    refId: batch.id,
+  });
 
   return batch;
 }

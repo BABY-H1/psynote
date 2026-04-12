@@ -2,6 +2,7 @@ import { eq, and, desc, sql, count, or, isNull } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { courseInstances, courseEnrollments, courses } from '../../db/schema.js';
 import { ConflictError, NotFoundError } from '../../lib/errors.js';
+import { notifyOrgAdmins } from '../../lib/notify-org-admins.js';
 
 export async function listInstances(
   orgId: string,
@@ -147,6 +148,14 @@ export async function createInstance(input: {
       status: input.status || 'draft',
     })
     .returning();
+
+  // Notify org admins about the new course instance
+  notifyOrgAdmins(input.orgId, {
+    type: 'counselor_content_created',
+    title: `新课程交付「${input.title}」已创建`,
+    refType: 'course_instance',
+    refId: instance.id,
+  });
 
   return instance;
 }

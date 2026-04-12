@@ -84,7 +84,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
       JOIN users client ON client.id = ca.client_id
       JOIN users counselor ON counselor.id = ca.counselor_id
       WHERE ca.org_id = ${orgId}::uuid
-      ORDER BY ca.created_at AS assigned_at DESC
+      ORDER BY ca.created_at DESC
     `);
     return Array.isArray(result) ? result : ((result as any).rows ?? []);
   });

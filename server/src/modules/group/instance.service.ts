@@ -2,6 +2,7 @@ import { eq, and, asc, desc, inArray } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { groupInstances, groupEnrollments, groupSchemeSessions, groupSessionRecords, users, followUpPlans, notifications } from '../../db/schema.js';
 import { NotFoundError } from '../../lib/errors.js';
+import { notifyOrgAdmins } from '../../lib/notify-org-admins.js';
 
 export async function listInstances(orgId: string, status?: string, leaderId?: string, leaderIds?: string[]) {
   const conditions = [eq(groupInstances.orgId, orgId)];
@@ -104,6 +105,14 @@ export async function createInstance(input: {
       );
     }
   }
+
+  // Notify org admins about the new group instance
+  notifyOrgAdmins(input.orgId, {
+    type: 'counselor_content_created',
+    title: `新团辅活动「${input.title}」已创建`,
+    refType: 'group_instance',
+    refId: instance.id,
+  });
 
   return instance;
 }
