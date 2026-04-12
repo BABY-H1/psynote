@@ -56,6 +56,8 @@ import { dashboardRoutes } from './modules/org/dashboard.routes.js';
 import { publicServiceRoutes, serviceIntakeRoutes } from './modules/org/public-services.routes.js';
 // Phase 7c — subscription info (read-only skeleton)
 import { subscriptionRoutes } from './modules/org/subscription.routes.js';
+// License activation / management
+import { licenseRoutes } from './modules/org/license.routes.js';
 // Phase 9α — Content blocks (C-facing consumable blocks for courses & group sessions)
 import { contentBlockRoutes } from './modules/content-block/content-block.routes.js';
 import {
@@ -141,6 +143,8 @@ await app.register(personArchiveRoutes, { prefix: '/api/orgs/:orgId' });
 await app.register(brandingRoutes, { prefix: '/api/orgs/:orgId' });
 // Subscription info (Phase 7c) — exposes GET /api/orgs/:orgId/subscription
 await app.register(subscriptionRoutes, { prefix: '/api/orgs/:orgId' });
+// License management — exposes POST/DELETE /api/orgs/:orgId/license
+await app.register(licenseRoutes, { prefix: '/api/orgs/:orgId' });
 // Phase 10 — dashboard stats
 await app.register(dashboardRoutes, { prefix: '/api/orgs/:orgId' });
 // Phase 10 — service intakes (authenticated)

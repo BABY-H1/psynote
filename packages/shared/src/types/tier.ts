@@ -101,6 +101,18 @@ export function planToTier(plan: string | null | undefined): OrgTier {
   }
 }
 
+// ---------------------------------------------------------------------------
+// License info — shared between server responses and client state
+// ---------------------------------------------------------------------------
+
+export type LicenseStatus = 'active' | 'expired' | 'invalid' | 'none';
+
+export interface LicenseInfo {
+  status: LicenseStatus;
+  maxSeats: number | null;
+  expiresAt: string | null;
+}
+
 /**
  * Human-readable tier labels for UI display.
  */

@@ -17,6 +17,7 @@ import {
 import { MemberManagement } from './MemberManagement';
 import { OrgBrandingSettings } from './OrgBrandingSettings';
 import { AuditLogViewer } from '../../collaboration/AuditLogViewer';
+import { LicenseCard } from '../components/LicenseCard';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
@@ -117,38 +118,43 @@ function BasicInfoTab() {
   if (isLoading) return <div className="text-sm text-slate-400">加载中…</div>;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4 max-w-lg">
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">机构名称</label>
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-        />
+    <div className="space-y-6 max-w-lg">
+      <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">机构名称</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">机构标识 (slug)</label>
+          <input
+            type="text"
+            value={org?.slug ?? ''}
+            disabled
+            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-500"
+          />
+          <p className="text-xs text-slate-400 mt-1">机构标识创建后不可修改</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-slate-700 mb-1">创建时间</label>
+          <p className="text-sm text-slate-600">{org?.createdAt ? new Date(org.createdAt).toLocaleDateString('zh-CN') : '—'}</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => updateOrg.mutate({ name })}
+          disabled={updateOrg.isPending || name === org?.name}
+          className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
+          {updateOrg.isPending ? '保存中…' : '保存'}
+        </button>
       </div>
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">机构标识 (slug)</label>
-        <input
-          type="text"
-          value={org?.slug ?? ''}
-          disabled
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-500"
-        />
-        <p className="text-xs text-slate-400 mt-1">机构标识创建后不可修改</p>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">创建时间</label>
-        <p className="text-sm text-slate-600">{org?.createdAt ? new Date(org.createdAt).toLocaleDateString('zh-CN') : '—'}</p>
-      </div>
-      <button
-        type="button"
-        onClick={() => updateOrg.mutate({ name })}
-        disabled={updateOrg.isPending || name === org?.name}
-        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-      >
-        {updateOrg.isPending ? '保存中…' : '保存'}
-      </button>
+
+      {/* License info & activation */}
+      <LicenseCard />
     </div>
   );
 }

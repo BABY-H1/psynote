@@ -1,30 +1,26 @@
 import type { FastifyInstance } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { eq, and, count } from 'drizzle-orm';
 import { db } from '../../config/database.js';
-import { organizations } from '../../db/schema.js';
+import { organizations, orgMembers } from '../../db/schema.js';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { NotFoundError } from '../../lib/errors.js';
-import { planToTier, TIER_FEATURES, TIER_LABELS, type Feature, type OrgTier } from '@psynote/shared';
+import {
+  planToTier,
+  TIER_FEATURES,
+  TIER_LABELS,
+  type Feature,
+  type OrgTier,
+  type LicenseInfo,
+} from '@psynote/shared';
 
 /**
- * Phase 7c — Subscription info (read-only skeleton).
+ * Phase 7c — Subscription + license info (read-only).
  *
- * The full "subscriptions / billing" feature is intentionally deferred —
- * psynote has no payment integration yet, and the plan says to keep Phase 7
- * from being over-engineered. What this endpoint DOES ship:
- *
- *   GET /api/orgs/:orgId/subscription
- *
- * Returns the current org's effective tier + feature set + human-readable
- * label, derived from `organizations.plan` via `planToTier`. No new DB table,
- * no writes, no billing webhooks. The payload shape is stable enough that a
- * future Phase 7c.2 (real billing) can enrich it (add `currentPeriodEnd`,
- * `renewsAt`, etc.) without breaking clients.
- *
- * When we DO need a real subscriptions table, this file is the hook point:
- * add a `SELECT * FROM org_subscriptions WHERE org_id = ?` alongside the
- * existing `organizations.plan` read and merge.
+ * GET /api/orgs/:orgId/subscription
+ *   Returns tier, features, and license status including seat usage.
+ *   The `license` block is populated from `request.org.license` which is
+ *   resolved by `orgContextGuard` via RSA-signed license key verification.
  */
 
 export interface SubscriptionInfo {
@@ -33,6 +29,7 @@ export interface SubscriptionInfo {
   plan: string;
   label: string;
   features: Feature[];
+  license: LicenseInfo & { seatsUsed: number };
 }
 
 export async function subscriptionRoutes(app: FastifyInstance) {
@@ -48,12 +45,27 @@ export async function subscriptionRoutes(app: FastifyInstance) {
       .limit(1);
     if (!org) throw new NotFoundError('Organization', orgId);
 
-    const tier = planToTier(org.plan);
+    // Count active seats
+    const [seatResult] = await db
+      .select({ value: count() })
+      .from(orgMembers)
+      .where(and(
+        eq(orgMembers.orgId, orgId),
+        eq(orgMembers.status, 'active'),
+      ));
+
+    const tier = request.org!.tier;
+    const license = request.org!.license;
+
     return {
       tier,
       plan: org.plan,
       label: TIER_LABELS[tier],
       features: Array.from(TIER_FEATURES[tier]),
+      license: {
+        ...license,
+        seatsUsed: seatResult.value,
+      },
     };
   });
 }

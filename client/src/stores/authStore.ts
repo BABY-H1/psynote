@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User, OrgRole, OrgTier } from '@psynote/shared';
+import type { User, OrgRole, OrgTier, LicenseInfo } from '@psynote/shared';
 import { api } from '../api/client';
 
 interface AuthState {
@@ -11,10 +11,12 @@ interface AuthState {
   currentRole: OrgRole | null;
   /** Phase 7a — SaaS tier of the current org (solo|team|enterprise|platform) */
   currentOrgTier: OrgTier | null;
+  /** License info for the current org */
+  licenseInfo: LicenseInfo | null;
   isSystemAdmin: boolean;
   _hydrated: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string, isSystemAdmin?: boolean) => void;
-  setOrg: (orgId: string, role: OrgRole, tier?: OrgTier) => void;
+  setOrg: (orgId: string, role: OrgRole, tier?: OrgTier, license?: LicenseInfo) => void;
   updateTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
 }
@@ -28,6 +30,7 @@ export const useAuthStore = create<AuthState>()(
       currentOrgId: null,
       currentRole: null,
       currentOrgTier: null,
+      licenseInfo: null,
       isSystemAdmin: false,
       _hydrated: false,
 
@@ -41,12 +44,18 @@ export const useAuthStore = create<AuthState>()(
           currentOrgId: null,
           currentRole: null,
           currentOrgTier: null,
+          licenseInfo: null,
           isSystemAdmin,
         });
       },
 
-      setOrg: (orgId, role, tier) => {
-        set({ currentOrgId: orgId, currentRole: role, currentOrgTier: tier ?? null });
+      setOrg: (orgId, role, tier, license) => {
+        set({
+          currentOrgId: orgId,
+          currentRole: role,
+          currentOrgTier: tier ?? null,
+          licenseInfo: license ?? null,
+        });
       },
 
       updateTokens: (accessToken, refreshToken) => {
@@ -63,6 +72,7 @@ export const useAuthStore = create<AuthState>()(
           currentOrgId: null,
           currentRole: null,
           currentOrgTier: null,
+          licenseInfo: null,
           isSystemAdmin: false,
         });
       },
@@ -76,6 +86,7 @@ export const useAuthStore = create<AuthState>()(
         currentOrgId: state.currentOrgId,
         currentRole: state.currentRole,
         currentOrgTier: state.currentOrgTier,
+        licenseInfo: state.licenseInfo,
         isSystemAdmin: state.isSystemAdmin,
       }),
       onRehydrateStorage: () => (state) => {

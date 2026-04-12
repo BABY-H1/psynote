@@ -5,8 +5,9 @@ import { queryClient } from '../config/database.js';
 import { orgMembers, organizations } from '../db/schema.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { env } from '../config/env.js';
-import type { OrgRole, OrgTier } from '@psynote/shared';
+import type { OrgRole, OrgTier, LicenseInfo } from '@psynote/shared';
 import { planToTier } from '@psynote/shared';
+import { verifyLicense } from '../lib/license/verify.js';
 
 export interface OrgContext {
   orgId: string;
@@ -17,6 +18,56 @@ export interface OrgContext {
   superviseeUserIds: string[];
   /** Phase 7a — mapped from organizations.plan at the start of each request */
   tier: OrgTier;
+  /** License verification result — used for seat limits & expiry display */
+  license: LicenseInfo;
+}
+
+/** No license present — use DB plan as fallback */
+const NO_LICENSE: LicenseInfo = { status: 'none', maxSeats: null, expiresAt: null };
+
+/**
+ * Resolve effective tier from license key (if present) or fall back to DB plan.
+ * License takes precedence when valid; on expiry we degrade to solo.
+ */
+async function resolveTier(
+  orgId: string,
+  licenseKey: string | null | undefined,
+  dbPlan: string | null | undefined,
+): Promise<{ tier: OrgTier; license: LicenseInfo }> {
+  if (!licenseKey) {
+    return { tier: planToTier(dbPlan), license: NO_LICENSE };
+  }
+
+  const result = await verifyLicense(licenseKey, orgId);
+
+  if (result.valid && result.payload) {
+    return {
+      tier: result.payload.tier,
+      license: {
+        status: 'active',
+        maxSeats: result.payload.maxSeats,
+        expiresAt: result.payload.expiresAt,
+      },
+    };
+  }
+
+  if (result.status === 'expired' && result.payload) {
+    // Expired license → degrade to solo, but still expose expiry info
+    return {
+      tier: 'solo',
+      license: {
+        status: 'expired',
+        maxSeats: result.payload.maxSeats,
+        expiresAt: result.payload.expiresAt,
+      },
+    };
+  }
+
+  // Invalid signature / malformed → fall back to DB plan
+  return {
+    tier: planToTier(dbPlan),
+    license: { status: 'invalid', maxSeats: null, expiresAt: null },
+  };
 }
 
 declare module 'fastify' {
@@ -44,10 +95,11 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
   // Still load the org row so we know its tier (system admins see the real tier).
   if (request.user?.isSystemAdmin) {
     const [orgRow] = await db
-      .select({ plan: organizations.plan })
+      .select({ plan: organizations.plan, licenseKey: organizations.licenseKey })
       .from(organizations)
       .where(eq(organizations.id, orgId))
       .limit(1);
+    const { tier, license } = await resolveTier(orgId, orgRow?.licenseKey, orgRow?.plan);
     request.org = {
       orgId,
       role: 'org_admin',
@@ -55,7 +107,8 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
       supervisorId: null,
       fullPracticeAccess: true,
       superviseeUserIds: [],
-      tier: planToTier(orgRow?.plan),
+      tier,
+      license,
     };
     await queryClient`SELECT set_config('app.current_org_id', ${orgId}, true)`;
     await queryClient`SELECT set_config('app.current_user_id', ${userId}, true)`;
@@ -77,10 +130,11 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
   if (!member && env.NODE_ENV === 'development') {
     const devRole = (request.headers['x-dev-role'] as string) || 'counselor';
     const [orgRow] = await db
-      .select({ plan: organizations.plan })
+      .select({ plan: organizations.plan, licenseKey: organizations.licenseKey })
       .from(organizations)
       .where(eq(organizations.id, orgId))
       .limit(1);
+    const { tier, license } = await resolveTier(orgId, orgRow?.licenseKey, orgRow?.plan);
     request.org = {
       orgId,
       role: devRole as OrgRole,
@@ -88,7 +142,8 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
       supervisorId: null,
       fullPracticeAccess: devRole === 'org_admin',
       superviseeUserIds: [],
-      tier: planToTier(orgRow?.plan),
+      tier,
+      license,
     };
     await queryClient`SELECT set_config('app.current_org_id', ${orgId}, true)`;
     await queryClient`SELECT set_config('app.current_user_id', ${userId}, true)`;
@@ -118,13 +173,13 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     superviseeUserIds = supervisees.map((s) => s.userId);
   }
 
-  // Load the org's plan → tier. Piggybacks on the membership query shape; this
-  // is a single extra row lookup that's cheap and fully cacheable by Postgres.
+  // Load the org's plan + license key → resolve effective tier.
   const [orgRow] = await db
-    .select({ plan: organizations.plan })
+    .select({ plan: organizations.plan, licenseKey: organizations.licenseKey })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
+  const { tier, license } = await resolveTier(orgId, orgRow?.licenseKey, orgRow?.plan);
 
   request.org = {
     orgId,
@@ -133,7 +188,8 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     supervisorId: member.supervisorId ?? null,
     fullPracticeAccess: member.fullPracticeAccess ?? (member.role === 'org_admin'),
     superviseeUserIds,
-    tier: planToTier(orgRow?.plan),
+    tier,
+    license,
   };
 
   // Set PostgreSQL session variables for RLS

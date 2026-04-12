@@ -10,6 +10,7 @@ export const organizations = pgTable('organizations', {
   name: text('name').notNull(),
   slug: text('slug').notNull().unique(),
   plan: text('plan').notNull().default('free'),
+  licenseKey: text('license_key'),
   settings: jsonb('settings').notNull().default({}),
   triageConfig: jsonb('triage_config').notNull().default({}),
   dataRetentionPolicy: jsonb('data_retention_policy').default({}),

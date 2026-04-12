@@ -6,6 +6,7 @@ import { createNotification } from '../notification/notification.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { requireSeat } from '../../middleware/require-seat.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError, NotFoundError } from '../../lib/errors.js';
 import { DEFAULT_TRIAGE_CONFIG } from '@psynote/shared';
@@ -142,9 +143,9 @@ export async function orgRoutes(app: FastifyInstance) {
     }));
   });
 
-  /** Invite a member to organization (org_admin only) */
+  /** Invite a member to organization (org_admin only, seat-limited) */
   app.post('/:orgId/members/invite', {
-    preHandler: [orgContextGuard, requireRole('org_admin')],
+    preHandler: [orgContextGuard, requireRole('org_admin'), requireSeat()],
   }, async (request, reply) => {
     const { orgId } = request.params as { orgId: string };
     const { email, role, name } = request.body as {
