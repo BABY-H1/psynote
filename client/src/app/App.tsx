@@ -39,7 +39,19 @@ import { NoteTemplateLibrary } from '../features/knowledge/pages/NoteTemplateLib
 import { AgreementLibrary } from '../features/knowledge/pages/AgreementLibrary';
 import { PublicEnrollment } from '../features/groups/pages/PublicEnrollment';
 import { PublicCheckin } from '../features/groups/pages/PublicCheckin';
-import { AdminDashboard } from '../features/admin/pages/AdminDashboard';
+import { AdminLayout } from '../features/admin/AdminLayout';
+import { AdminHome } from '../features/admin/pages/AdminHome';
+import { TenantList } from '../features/admin/pages/TenantList';
+import { TenantWizard } from '../features/admin/pages/TenantWizard';
+import { TenantDetail } from '../features/admin/pages/TenantDetail';
+import { AdminLibrary } from '../features/admin/pages/AdminLibrary';
+import { AdminLibraryScales } from '../features/admin/pages/AdminLibraryScales';
+import { AdminLibraryCourses } from '../features/admin/pages/AdminLibraryCourses';
+import { AdminLibrarySchemes } from '../features/admin/pages/AdminLibrarySchemes';
+import { AdminLibraryTemplates } from '../features/admin/pages/AdminLibraryTemplates';
+import { AdminLibraryGoals } from '../features/admin/pages/AdminLibraryGoals';
+import { UserManagement } from '../features/admin/pages/UserManagement';
+import { SystemConfig } from '../features/admin/pages/SystemConfig';
 import { PublicCourseEnrollment } from '../features/courses/pages/PublicCourseEnrollment';
 // Phase 2 — dev-only delivery components gallery
 import { DeliveryComponentsGallery } from '../features/dev/DeliveryComponentsGallery';
@@ -79,7 +91,22 @@ function AppRoutes() {
       ) : isSystemAdmin && !currentOrgId ? (
         /* System admin without org → admin dashboard */
         <>
-          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin" element={<AdminLayout />}>
+            <Route index element={<Navigate to="/admin/dashboard" replace />} />
+            <Route path="dashboard" element={<AdminHome />} />
+            <Route path="tenants" element={<TenantList />} />
+            <Route path="tenants/new" element={<TenantWizard />} />
+            <Route path="tenants/:orgId" element={<TenantDetail />} />
+            <Route path="library" element={<AdminLibrary />}>
+              <Route path="scales" element={<AdminLibraryScales />} />
+              <Route path="courses" element={<AdminLibraryCourses />} />
+              <Route path="schemes" element={<AdminLibrarySchemes />} />
+              <Route path="templates" element={<AdminLibraryTemplates />} />
+              <Route path="goals" element={<AdminLibraryGoals />} />
+            </Route>
+            <Route path="users" element={<UserManagement />} />
+            <Route path="settings" element={<SystemConfig />} />
+          </Route>
           <Route path="/select-org" element={<OrgSelector />} />
           <Route path="*" element={<Navigate to="/admin" replace />} />
         </>
@@ -145,7 +172,22 @@ function AppRoutes() {
           <Route path="settings/reminders" element={<ReminderSettings />} />
           <Route path="availability" element={<AvailabilitySettings />} />
           {isSystemAdmin && (
-            <Route path="admin" element={<AdminDashboard />} />
+            <Route path="admin" element={<AdminLayout />}>
+              <Route index element={<Navigate to="/admin/dashboard" replace />} />
+              <Route path="dashboard" element={<AdminHome />} />
+              <Route path="tenants" element={<TenantList />} />
+              <Route path="tenants/new" element={<TenantWizard />} />
+              <Route path="tenants/:orgId" element={<TenantDetail />} />
+              <Route path="library" element={<AdminLibrary />}>
+                <Route path="scales" element={<AdminLibraryScales />} />
+                <Route path="courses" element={<AdminLibraryCourses />} />
+                <Route path="schemes" element={<AdminLibrarySchemes />} />
+                <Route path="templates" element={<AdminLibraryTemplates />} />
+                <Route path="goals" element={<AdminLibraryGoals />} />
+              </Route>
+              <Route path="users" element={<UserManagement />} />
+              <Route path="settings" element={<SystemConfig />} />
+            </Route>
           )}
           {/* Phase 2 — Dev-only component gallery, available in any non-prod env */}
           {import.meta.env.DEV && (

@@ -25,6 +25,7 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash'),
   avatarUrl: text('avatar_url'),
   isSystemAdmin: boolean('is_system_admin').notNull().default(false),
+  lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -82,6 +83,7 @@ export const scales = pgTable('scales', {
   instructions: text('instructions'),
   scoringMode: text('scoring_mode').notNull().default('sum'),
   isPublic: boolean('is_public').notNull().default(false),
+  allowedOrgIds: jsonb('allowed_org_ids').default([]),
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -343,6 +345,7 @@ export const sessionNotes = pgTable('session_notes', {
   status: text('status').notNull().default('draft'), // draft | finalized | submitted_for_review | reviewed
   supervisorAnnotation: text('supervisor_annotation'),
   submittedForReviewAt: timestamp('submitted_for_review_at', { withTimezone: true }),
+  allowedOrgIds: jsonb('allowed_org_ids').default([]),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -389,6 +392,7 @@ export const treatmentGoalLibrary = pgTable('treatment_goal_library', {
   objectivesTemplate: jsonb('objectives_template').notNull().default([]), // suggested measurable objectives
   interventionSuggestions: jsonb('intervention_suggestions').notNull().default([]), // suggested interventions
   visibility: text('visibility').notNull().default('personal'), // personal | organization | public
+  allowedOrgIds: jsonb('allowed_org_ids').default([]),
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -540,6 +544,7 @@ export const groupSchemes = pgTable('group_schemes', {
   screeningNotes: text('screening_notes'), // screening criteria description
   // Meta
   visibility: text('visibility').notNull().default('personal'), // personal | organization | public
+  allowedOrgIds: jsonb('allowed_org_ids').default([]),
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -647,6 +652,7 @@ export const courses = pgTable('courses', {
   requirementsConfig: jsonb('requirements_config').default({}), // Structured AI generation requirements
   blueprintData: jsonb('blueprint_data').default({}), // AI-generated blueprint before chapters
   tags: jsonb('tags').default([]), // String array for filtering
+  allowedOrgIds: jsonb('allowed_org_ids').default([]),
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -1009,3 +1015,16 @@ export const clientAccessGrants = pgTable('client_access_grants', {
 }, (t) => [
   uniqueIndex('uq_client_access_grants_org_client_counselor').on(t.orgId, t.clientId, t.grantedToCounselorId),
 ]);
+
+// ─── System Configuration ────────────────────────────────────────
+
+export const systemConfig = pgTable('system_config', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  category: text('category').notNull(),
+  key: text('key').notNull(),
+  value: jsonb('value').notNull(),
+  description: text('description'),
+  requiresRestart: boolean('requires_restart').notNull().default(false),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedBy: uuid('updated_by').references(() => users.id),
+});

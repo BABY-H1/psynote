@@ -25,15 +25,21 @@ interface GenerateOptions {
  * OpenAI-compatible API client.
  * Works with any provider that implements the OpenAI chat completions API.
  */
+interface AIClientConfig {
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+}
+
 export class AIClient {
   private apiKey: string;
   private baseUrl: string;
   private defaultModel: string;
 
-  constructor() {
-    this.apiKey = env.AI_API_KEY || '';
-    this.baseUrl = env.AI_BASE_URL.replace(/\/+$/, '');
-    this.defaultModel = env.AI_MODEL;
+  constructor(config?: AIClientConfig) {
+    this.apiKey = config?.apiKey || env.AI_API_KEY || '';
+    this.baseUrl = (config?.baseUrl || env.AI_BASE_URL).replace(/\/+$/, '');
+    this.defaultModel = config?.model || env.AI_MODEL;
   }
 
   get isConfigured(): boolean {
@@ -182,5 +188,38 @@ export class AIClient {
   }
 }
 
-// Singleton instance
+// Singleton instance (platform default from env)
 export const aiClient = new AIClient();
+
+/**
+ * Get an AI client for a specific org. If the org has custom AI config in
+ * settings.aiConfig, uses that; otherwise falls back to the platform default.
+ */
+export async function getAIClient(orgId?: string): Promise<AIClient> {
+  if (!orgId) return aiClient;
+
+  try {
+    const { db } = await import('../../../config/database.js');
+    const { organizations } = await import('../../../db/schema.js');
+    const { eq } = await import('drizzle-orm');
+
+    const [org] = await db
+      .select({ settings: organizations.settings })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+
+    const aiConfig = (org?.settings as any)?.aiConfig;
+    if (aiConfig?.apiKey && !aiConfig.apiKey.startsWith('****')) {
+      return new AIClient({
+        apiKey: aiConfig.apiKey,
+        baseUrl: aiConfig.baseUrl || env.AI_BASE_URL,
+        model: aiConfig.model || env.AI_MODEL,
+      });
+    }
+  } catch {
+    // fallback to default
+  }
+
+  return aiClient;
+}

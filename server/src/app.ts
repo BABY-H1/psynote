@@ -38,6 +38,10 @@ import { reminderSettingsRoutes, publicAppointmentRoutes } from './modules/notif
 import { clientPortalRoutes } from './modules/client-portal/client.routes.js';
 import { publicEnrollRoutes } from './modules/group/public-enroll.routes.js';
 import { adminRoutes } from './modules/admin/admin.routes.js';
+import { adminLicenseRoutes } from './modules/admin/admin-license.routes.js';
+import { adminTenantRoutes } from './modules/admin/admin-tenant.routes.js';
+import { adminDashboardRoutes } from './modules/admin/admin-dashboard.routes.js';
+import { adminLibraryRoutes } from './modules/admin/admin-library.routes.js';
 import { clientAssignmentRoutes } from './modules/counseling/client-assignment.routes.js';
 import { clientAccessGrantRoutes } from './modules/counseling/client-access-grant.routes.js';
 import { uploadRoutes } from './modules/upload/upload.routes.js';
@@ -68,6 +72,7 @@ import {
 import { publicReferralRoutes } from './modules/referral/public-referral.routes.js';
 // Phase 9ε — Org-internal collaboration page (派单 / 授权 / 督导 / 转介接收 / 审计)
 import { collaborationRoutes } from './modules/collaboration/collaboration.routes.js';
+import { initConfigService, getBootValue } from './lib/config-service.js';
 
 const app = Fastify({
   logger: {
@@ -78,10 +83,15 @@ const app = Fastify({
   },
 });
 
+// Load system config from DB before plugin registration
+await initConfigService();
+const rateLimitMax = getBootValue('limits', 'rateLimitMax', 100);
+const fileUploadMaxMB = getBootValue('limits', 'fileUploadMaxMB', 200);
+
 // Plugins
 await app.register(cors, { origin: env.CLIENT_URL, credentials: true });
-await app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
-await app.register(fastifyMultipart, { limits: { fileSize: 200 * 1024 * 1024 } }); // 200MB max
+await app.register(rateLimit, { max: rateLimitMax, timeWindow: '1 minute' });
+await app.register(fastifyMultipart, { limits: { fileSize: fileUploadMaxMB * 1024 * 1024 } });
 await app.register(fastifyStatic, { root: join(process.cwd(), 'uploads'), prefix: '/uploads/', decorateReply: false });
 
 // Error handler
@@ -179,6 +189,10 @@ await app.register(clientPortalRoutes, { prefix: '/api/orgs/:orgId/client' });
 
 // System admin
 await app.register(adminRoutes, { prefix: '/api/admin' });
+await app.register(adminLicenseRoutes, { prefix: '/api/admin/licenses' });
+await app.register(adminTenantRoutes, { prefix: '/api/admin/tenants' });
+await app.register(adminDashboardRoutes, { prefix: '/api/admin/dashboard' });
+await app.register(adminLibraryRoutes, { prefix: '/api/admin/library' });
 
 // Client assignment & access grants
 await app.register(clientAssignmentRoutes, { prefix: '/api/orgs/:orgId/client-assignments' });

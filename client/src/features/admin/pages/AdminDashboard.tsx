@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { useAuthStore } from '../../../stores/authStore';
 import { api } from '../../../api/client';
-import { Building2, Users, UserCheck, ChevronRight, Shield, Search, Settings } from 'lucide-react';
+import { Building2, Users, UserCheck, ChevronRight, Shield, Search, Settings, Key, Plus } from 'lucide-react';
 import { UserManagement } from './UserManagement';
 import { SystemConfig } from './SystemConfig';
+import { LicenseManagement } from './LicenseManagement';
 
-type AdminTab = 'orgs' | 'users' | 'config';
+type AdminTab = 'orgs' | 'users' | 'config' | 'licenses';
 
 interface PlatformStats {
   organizations: number;
@@ -66,6 +67,9 @@ export function AdminDashboard() {
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [editingPlan, setEditingPlan] = useState<string | null>(null);
+  const [showCreateOrg, setShowCreateOrg] = useState(false);
+  const [createOrgForm, setCreateOrgForm] = useState({ name: '', slug: '', adminEmail: '' });
+  const [createOrgError, setCreateOrgError] = useState('');
 
   useEffect(() => {
     loadData();
@@ -110,6 +114,27 @@ export function AdminDashboard() {
     }
   }
 
+  async function createOrg() {
+    setCreateOrgError('');
+    const { name, slug } = createOrgForm;
+    if (!name.trim() || !slug.trim()) {
+      setCreateOrgError('名称和标识都不能为空');
+      return;
+    }
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      setCreateOrgError('标识只能包含小写字母、数字和连字符');
+      return;
+    }
+    try {
+      await api.post('/orgs', { name: name.trim(), slug: slug.trim() });
+      setShowCreateOrg(false);
+      setCreateOrgForm({ name: '', slug: '', adminEmail: '' });
+      await loadData();
+    } catch (err: any) {
+      setCreateOrgError(err?.message || '创建失败');
+    }
+  }
+
   const filteredOrgs = orgs.filter(
     (o) =>
       o.name.toLowerCase().includes(search.toLowerCase()) ||
@@ -143,6 +168,7 @@ export function AdminDashboard() {
           {([
             { key: 'orgs' as AdminTab, label: '机构管理', icon: Building2 },
             { key: 'users' as AdminTab, label: '用户管理', icon: Users },
+            { key: 'licenses' as AdminTab, label: '许可证管理', icon: Key },
             { key: 'config' as AdminTab, label: '系统配置', icon: Settings },
           ]).map(({ key, label, icon: Icon }) => (
             <button
@@ -176,6 +202,8 @@ export function AdminDashboard() {
           <UserManagement />
         ) : activeTab === 'config' ? (
           <SystemConfig />
+        ) : activeTab === 'licenses' ? (
+          <LicenseManagement />
         ) : (
         <div className="max-w-6xl mx-auto">
           {/* Stats Cards */}
@@ -208,15 +236,23 @@ export function AdminDashboard() {
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
                 <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
                   <h2 className="text-base font-semibold text-slate-900">机构列表</h2>
-                  <div className="relative">
-                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                    <input
-                      type="text"
-                      placeholder="搜索机构..."
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
-                      className="pl-9 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 w-48"
-                    />
+                  <div className="flex items-center gap-2">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="搜索机构..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-9 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 w-48"
+                      />
+                    </div>
+                    <button
+                      onClick={() => setShowCreateOrg(true)}
+                      className="flex items-center gap-1 text-xs bg-blue-500 text-white px-3 py-1.5 rounded-lg hover:bg-blue-600 transition"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> 新建机构
+                    </button>
                   </div>
                 </div>
                 <div className="divide-y divide-slate-100">
@@ -350,6 +386,65 @@ export function AdminDashboard() {
             )}
           </div>
         </div>
+        )}
+
+        {/* Create Org Modal */}
+        {showCreateOrg && (
+          <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setShowCreateOrg(false)}>
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-md mx-4" onClick={(e) => e.stopPropagation()}>
+              <div className="px-6 py-4 border-b border-slate-100">
+                <h3 className="text-base font-semibold text-slate-900">新建机构</h3>
+              </div>
+              <div className="px-6 py-4 space-y-4">
+                <div>
+                  <label className="block text-sm text-slate-600 mb-1">机构名称</label>
+                  <input
+                    type="text"
+                    placeholder="如：心理健康中心"
+                    value={createOrgForm.name}
+                    onChange={(e) => {
+                      const name = e.target.value;
+                      setCreateOrgForm((prev) => ({
+                        ...prev,
+                        name,
+                        // Auto-generate slug from name (pinyin would be ideal, fallback to simple transform)
+                        slug: prev.slug || '',
+                      }));
+                    }}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-slate-600 mb-1">机构标识 (slug)</label>
+                  <input
+                    type="text"
+                    placeholder="如：mental-health-center"
+                    value={createOrgForm.slug}
+                    onChange={(e) => setCreateOrgForm((prev) => ({ ...prev, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') }))}
+                    className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200 font-mono"
+                  />
+                  <p className="text-xs text-slate-400 mt-1">只能包含小写字母、数字和连字符，全局唯一</p>
+                </div>
+                {createOrgError && (
+                  <p className="text-sm text-red-500">{createOrgError}</p>
+                )}
+              </div>
+              <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2">
+                <button
+                  onClick={() => { setShowCreateOrg(false); setCreateOrgError(''); }}
+                  className="text-sm text-slate-500 hover:text-slate-700 px-4 py-2"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={createOrg}
+                  className="text-sm bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                >
+                  创建
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </main>
     </div>

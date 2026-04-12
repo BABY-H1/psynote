@@ -145,7 +145,10 @@ export function UserManagement() {
 
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-lg font-semibold text-slate-900">用户管理</h2>
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">账号管理</h2>
+          <p className="text-sm text-slate-500 mt-0.5">管理平台账号：创建系统管理员、重置密码、跨机构禁用用户</p>
+        </div>
         <button
           onClick={() => setShowCreate(true)}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition"

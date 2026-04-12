@@ -6,10 +6,11 @@ import { env } from '../../config/env.js';
 import { db } from '../../config/database.js';
 import { users } from '../../db/schema.js';
 import { ValidationError } from '../../lib/errors.js';
+import { getBootValue } from '../../lib/config-service.js';
 
 const JWT_SECRET = env.JWT_SECRET || 'psynote-dev-secret-change-in-production';
-const ACCESS_TOKEN_EXPIRY = '7d';
-const REFRESH_TOKEN_EXPIRY = '30d';
+const ACCESS_TOKEN_EXPIRY = getBootValue('security', 'accessTokenExpiry', '7d');
+const REFRESH_TOKEN_EXPIRY = getBootValue('security', 'refreshTokenExpiry', '30d');
 
 function signTokens(user: { id: string; email: string | null; isSystemAdmin?: boolean | null }) {
   const accessToken = jwt.sign(
@@ -95,6 +96,12 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const tokens = signTokens(user);
+
+    // Update last login timestamp (fire-and-forget)
+    db.update(users)
+      .set({ lastLoginAt: new Date() })
+      .where(eq(users.id, user.id))
+      .catch(() => {/* ignore */});
 
     return reply.send({
       ...tokens,

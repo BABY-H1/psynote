@@ -101,6 +101,25 @@ export function planToTier(plan: string | null | undefined): OrgTier {
   }
 }
 
+/**
+ * Reverse map an OrgTier back to the raw `organizations.plan` DB value.
+ * Used when the admin wizard issues a license and needs to sync the plan column.
+ */
+export function tierToPlan(tier: OrgTier): string {
+  switch (tier) {
+    case 'solo':
+      return 'free';
+    case 'team':
+      return 'pro';
+    case 'enterprise':
+      return 'enterprise';
+    case 'platform':
+      return 'platform';
+    default:
+      return 'free';
+  }
+}
+
 // ---------------------------------------------------------------------------
 // License info — shared between server responses and client state
 // ---------------------------------------------------------------------------

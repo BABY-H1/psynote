@@ -5,6 +5,7 @@ import { requireSystemAdmin } from '../../middleware/system-admin.js';
 import { db } from '../../config/database.js';
 import { organizations, orgMembers, users } from '../../db/schema.js';
 import { eq, count, ilike, or, desc } from 'drizzle-orm';
+import { getAllConfig, getRestartRequired, getConfig, setConfig } from '../../lib/config-service.js';
 
 export async function adminRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
@@ -209,32 +210,70 @@ export async function adminRoutes(app: FastifyInstance) {
 
   // ─── System Config ──────────────────────────────────────────────
 
-  /** Get system config (stored in a simple key-value approach via env/db) */
+  /** Get system config (editable values from DB + read-only env info) */
   app.get('/config', async () => {
-    // Return current runtime configuration
     const { env } = await import('../../config/env.js');
+    const config = getAllConfig();
+    const restartRequired = getRestartRequired();
+
     return {
-      platform: {
-        name: 'Psynote',
-        version: '1.0.0',
+      ...config,
+      _meta: {
+        restartRequired,
+        lastUpdated: null,
       },
-      security: {
-        accessTokenExpiry: '7d',
-        refreshTokenExpiry: '30d',
-        minPasswordLength: 6,
-      },
-      defaults: {
-        orgPlan: 'free',
-        maxMembersPerOrg: 100,
-      },
-      email: {
-        configured: !!(env as any).SMTP_HOST,
-        host: (env as any).SMTP_HOST || '未配置',
-      },
-      ai: {
-        configured: !!env.AI_API_KEY,
-        model: env.AI_MODEL || '未配置',
-        baseUrl: env.AI_BASE_URL || '未配置',
+    };
+  });
+
+  /** Patch system config (partial updates by category) */
+  app.patch('/config', async (request) => {
+    const body = request.body as Record<string, Record<string, unknown>>;
+    const userId = request.user!.id;
+    const errors: string[] = [];
+
+    // Validators per category.key
+    const durationRe = /^\d+[mhd]$/;
+    const validators: Record<string, (v: unknown) => boolean> = {
+      'security.accessTokenExpiry': (v) => typeof v === 'string' && durationRe.test(v),
+      'security.refreshTokenExpiry': (v) => typeof v === 'string' && durationRe.test(v),
+      'security.minPasswordLength': (v) => Number.isInteger(v) && (v as number) >= 4 && (v as number) <= 32,
+      'defaults.orgPlan': (v) => typeof v === 'string' && ['free', 'pro', 'enterprise'].includes(v),
+      'defaults.maxMembersPerOrg': (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 10000,
+      'limits.rateLimitMax': (v) => Number.isInteger(v) && (v as number) >= 10 && (v as number) <= 10000,
+      'limits.fileUploadMaxMB': (v) => Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 2048,
+      'platform.name': (v) => typeof v === 'string' && v.length >= 1 && v.length <= 100,
+      'platform.version': (v) => typeof v === 'string' && v.length >= 1 && v.length <= 50,
+    };
+
+    for (const [category, entries] of Object.entries(body)) {
+      if (typeof entries !== 'object' || entries === null) continue;
+      // Skip read-only / meta categories
+      if (['email', 'ai', '_meta'].includes(category)) continue;
+
+      for (const [key, value] of Object.entries(entries)) {
+        const validatorKey = `${category}.${key}`;
+        const validator = validators[validatorKey];
+        if (validator && !validator(value)) {
+          errors.push(`Invalid value for ${validatorKey}: ${JSON.stringify(value)}`);
+          continue;
+        }
+        await setConfig(category, key, value, userId);
+      }
+    }
+
+    if (errors.length > 0) {
+      throw new Error(errors.join('; '));
+    }
+
+    // Return updated full config
+    const config = getAllConfig();
+    const restartRequired = getRestartRequired();
+
+    return {
+      ...config,
+      _meta: {
+        restartRequired,
+        lastUpdated: new Date().toISOString(),
       },
     };
   });
