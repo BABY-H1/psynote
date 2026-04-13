@@ -65,16 +65,20 @@ export const TIER_FEATURES: Record<OrgTier, ReadonlySet<Feature>> = {
 
 // ─── OrgType (组织类型) ──────────────────────────────────────────
 
-export type OrgType = 'counseling' | 'enterprise' | 'school' | 'hospital';
+export type OrgType = 'solo' | 'counseling' | 'enterprise' | 'school' | 'hospital';
 
 export type OrgTypeFeature = 'eap'; // 企业 orgType 自带
 
 /**
  * 组织类型自带功能。
- * enterprise 自动获得 EAP 能力（HR Dashboard、员工管理、危机预警等），
- * 不受 tier 限制。school 和 hospital 暂为占位。
+ *   solo        — 个体咨询师，简化界面
+ *   counseling  — 专业机构，完整管理功能
+ *   enterprise  — 企业，自动获得 EAP 能力
+ *   school      — 学校（占位）
+ *   hospital    — 医疗机构（占位）
  */
 export const ORG_TYPE_FEATURES: Record<OrgType, ReadonlySet<OrgTypeFeature>> = {
+  solo:       new Set(),
   counseling: new Set(),
   enterprise: new Set(['eap']),
   school:     new Set(),
@@ -176,6 +180,7 @@ export const TIER_LABELS: Record<OrgTier, string> = {
 };
 
 export const ORG_TYPE_LABELS: Record<OrgType, string> = {
+  solo:       '个体咨询师',
   counseling: '专业机构',
   enterprise: '企业',
   school:     '学校',

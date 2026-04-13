@@ -8,7 +8,7 @@ import { TIER_LABELS, TIER_FEATURES, hasFeature, type OrgTier } from '@psynote/s
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type OrgType = 'counseling' | 'enterprise';
+type OrgType = 'solo' | 'counseling' | 'enterprise';
 
 interface WizardState {
   orgType: OrgType;
@@ -41,21 +41,37 @@ const STEPS = [
 /* ------------------------------------------------------------------ */
 
 const ORG_TYPE_CONFIG = {
+  solo: {
+    label: '个体咨询师',
+    description: '独立执业的心理咨询师，1 人使用',
+    icon: UserPlus,
+    color: 'border-green-500 bg-green-50',
+    iconBg: 'bg-green-100',
+    iconColor: 'text-green-600',
+    nameLabel: '执业名称',
+    namePlaceholder: '如：张老师心理工作室',
+    slugLabel: '标识 (slug)',
+    adminLabel: '咨询师账号',
+  },
   counseling: {
     label: '专业机构',
-    description: '心理咨询中心、治疗机构、EAP 服务商等专业心理服务机构',
+    description: '心理咨询中心、治疗机构、EAP 服务商等多人团队',
     icon: Stethoscope,
     color: 'border-blue-500 bg-blue-50',
+    iconBg: 'bg-blue-100',
+    iconColor: 'text-blue-600',
     nameLabel: '机构名称',
     namePlaceholder: '如：阳光心理健康中心',
     slugLabel: '机构标识 (slug)',
     adminLabel: '机构管理员',
   },
   enterprise: {
-    label: '企业版',
+    label: '企业',
     description: '国企、央企、民企等需要 EAP 员工心理援助服务的企业或工会',
     icon: Briefcase,
     color: 'border-amber-500 bg-amber-50',
+    iconBg: 'bg-amber-100',
+    iconColor: 'text-amber-600',
     nameLabel: '企业名称',
     namePlaceholder: '如：中石化工会心理关爱中心',
     slugLabel: '企业标识 (slug)',
@@ -74,7 +90,7 @@ export function TenantWizard() {
   const [error, setError] = useState('');
 
   const [state, setState] = useState<WizardState>({
-    orgType: 'counseling',
+    orgType: 'solo',
     org: { name: '', slug: '' },
     subscription: { tier: 'starter' as OrgTier, maxSeats: 1, months: 12 },
     admin: { mode: 'new', userId: '', email: '', name: '', password: '' },
@@ -120,7 +136,7 @@ export function TenantWizard() {
   }
 
   function selectOrgType(type: OrgType) {
-    const defaultTier: OrgTier = type === 'enterprise' ? 'growth' : 'starter';
+    const defaultTier: OrgTier = type === 'solo' ? 'starter' : type === 'enterprise' ? 'growth' : 'growth';
     setState((s) => ({
       ...s,
       orgType: type,
@@ -215,8 +231,8 @@ export function TenantWizard() {
             <h2 className="text-base font-semibold text-slate-900 mb-2">选择组织类型</h2>
             <p className="text-sm text-slate-500 mb-4">决定租户的管理界面和功能范围</p>
 
-            <div className="grid grid-cols-2 gap-4">
-              {(['counseling', 'enterprise'] as OrgType[]).map((type) => {
+            <div className="grid grid-cols-3 gap-4">
+              {(['solo', 'counseling', 'enterprise'] as OrgType[]).map((type) => {
                 const c = ORG_TYPE_CONFIG[type];
                 const Icon = c.icon;
                 const selected = state.orgType === type;
@@ -229,10 +245,8 @@ export function TenantWizard() {
                     }`}
                   >
                     <div className="flex items-center gap-3 mb-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                        type === 'counseling' ? 'bg-blue-100' : 'bg-amber-100'
-                      }`}>
-                        <Icon className={`w-5 h-5 ${type === 'counseling' ? 'text-blue-600' : 'text-amber-600'}`} />
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${c.iconBg}`}>
+                        <Icon className={`w-5 h-5 ${c.iconColor}`} />
                       </div>
                       <div className="text-base font-semibold text-slate-900">{c.label}</div>
                     </div>
