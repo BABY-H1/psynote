@@ -15,6 +15,7 @@ interface TenantRow {
   plan: string;
   createdAt: string;
   memberCount: number;
+  orgType?: string;
   isEnterprise?: boolean;
   partnershipCount?: number;
   license: {
@@ -197,15 +198,28 @@ export function TenantList() {
                   >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-brand-100 rounded-lg flex items-center justify-center text-brand-600 font-bold text-sm shrink-0">
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
+                          t.isEnterprise
+                            ? 'bg-amber-100 text-amber-600'
+                            : 'bg-brand-100 text-brand-600'
+                        }`}>
                           {t.name.charAt(0)}
                         </div>
-                        <span className="text-sm font-medium text-slate-900">{t.name}</span>
-                        {t.isEnterprise && (
-                          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 ml-1">
-                            企业版{t.partnershipCount ? ` · ${t.partnershipCount} 合作` : ''}
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-slate-900">{t.name}</span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full ${
+                            t.isEnterprise
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-blue-50 text-blue-600'
+                          }`}>
+                            {t.isEnterprise ? '企业' : '机构'}
                           </span>
-                        )}
+                          {t.isEnterprise && t.partnershipCount ? (
+                            <span className="text-xs text-slate-400">
+                              {t.partnershipCount} 个合作机构
+                            </span>
+                          ) : null}
+                        </div>
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-500 font-mono">{t.slug}</td>

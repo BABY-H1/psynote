@@ -38,6 +38,7 @@ export async function adminTenantRoutes(app: FastifyInstance) {
         slug: organizations.slug,
         plan: organizations.plan,
         licenseKey: organizations.licenseKey,
+        settings: organizations.settings,
         createdAt: organizations.createdAt,
         memberCount: count(orgMembers.id),
       })
@@ -52,9 +53,10 @@ export async function adminTenantRoutes(app: FastifyInstance) {
           ? await verifyLicense(org.licenseKey, org.id)
           : { valid: false, status: 'none' as const, payload: null };
 
-        // Check if this org has EAP partnerships (enterprise org)
-        const tier = licenseResult.payload?.tier ?? planToTier(org.plan);
-        const isEnterprise = hasFeature(tier, 'eap');
+        // Check org type from settings (set during wizard creation)
+        const settings = (org.settings as Record<string, any>) || {};
+        const orgType = settings.orgType || 'counseling';
+        const isEnterprise = orgType === 'enterprise';
         let partnershipCount = 0;
         if (isEnterprise) {
           const partnerships = await db
@@ -69,8 +71,10 @@ export async function adminTenantRoutes(app: FastifyInstance) {
           name: org.name,
           slug: org.slug,
           plan: org.plan,
+          settings: org.settings,
           createdAt: org.createdAt,
           memberCount: Number(org.memberCount),
+          orgType,
           isEnterprise,
           partnershipCount,
           license: {
