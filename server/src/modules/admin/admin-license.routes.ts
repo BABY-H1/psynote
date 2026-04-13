@@ -17,7 +17,7 @@ import { ValidationError, NotFoundError } from '../../lib/errors.js';
 import { verifyLicense } from '../../lib/license/verify.js';
 import { signLicense, signLicenseWithExpiry } from '../../lib/license/sign.js';
 
-const VALID_TIERS = ['solo', 'team', 'enterprise', 'platform'] as const;
+const VALID_TIERS = ['starter', 'growth', 'flagship'] as const;
 
 export async function adminLicenseRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);

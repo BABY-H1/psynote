@@ -33,11 +33,7 @@ export async function dataScopeGuard(request: FastifyRequest, _reply: FastifyRep
   }
 
   // Enterprise org's org_admin: aggregate-only (same as hr_admin — no clinical data)
-  // Detection: org has 'eap' feature → it's an enterprise org
-  const { hasFeature } = await import('@psynote/shared');
-  const isEnterpriseOrg = hasFeature(org.tier, 'eap');
-
-  if (org.role === 'org_admin' && isEnterpriseOrg) {
+  if (org.role === 'org_admin' && org.orgType === 'enterprise') {
     request.dataScope = { type: 'aggregate_only' };
     return;
   }

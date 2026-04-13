@@ -11,9 +11,6 @@
 import { eq, and } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { eapUsageEvents, eapEmployeeProfiles, organizations } from '../../db/schema.js';
-import { hasFeature, planToTier, type OrgTier } from '@psynote/shared';
-import { verifyLicense } from '../../lib/license/verify.js';
-
 interface EmitEventParams {
   orgId: string;
   eventType: string;
@@ -22,36 +19,30 @@ interface EmitEventParams {
   metadata?: Record<string, unknown>;
 }
 
-// Cache org tier checks to avoid repeated license verification
-const tierCache = new Map<string, { tier: OrgTier; expiresAt: number }>();
+// Cache orgType checks
+const orgTypeCache = new Map<string, { orgType: string; expiresAt: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 async function isEnterpriseOrg(orgId: string): Promise<boolean> {
-  // Check cache
-  const cached = tierCache.get(orgId);
+  const cached = orgTypeCache.get(orgId);
   if (cached && cached.expiresAt > Date.now()) {
-    return hasFeature(cached.tier, 'eap');
+    return cached.orgType === 'enterprise';
   }
 
   try {
     const [org] = await db
-      .select({ plan: organizations.plan, licenseKey: organizations.licenseKey })
+      .select({ settings: organizations.settings })
       .from(organizations)
       .where(eq(organizations.id, orgId))
       .limit(1);
 
     if (!org) return false;
 
-    let tier: OrgTier;
-    if (org.licenseKey) {
-      const result = await verifyLicense(org.licenseKey, orgId);
-      tier = result.valid && result.payload ? result.payload.tier : planToTier(org.plan);
-    } else {
-      tier = planToTier(org.plan);
-    }
+    const settings = (org.settings || {}) as Record<string, any>;
+    const orgType = settings.orgType || 'counseling';
 
-    tierCache.set(orgId, { tier, expiresAt: Date.now() + CACHE_TTL });
-    return hasFeature(tier, 'eap');
+    orgTypeCache.set(orgId, { orgType, expiresAt: Date.now() + CACHE_TTL });
+    return orgType === 'enterprise';
   } catch {
     return false;
   }

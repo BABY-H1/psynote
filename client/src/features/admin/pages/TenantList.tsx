@@ -31,6 +31,10 @@ interface TenantRow {
 /* ------------------------------------------------------------------ */
 
 const TIER_COLORS: Record<string, string> = {
+  starter: 'bg-slate-100 text-slate-600',
+  growth: 'bg-blue-100 text-blue-700',
+  flagship: 'bg-purple-100 text-purple-700',
+  // Legacy tier names for backward compat
   solo: 'bg-slate-100 text-slate-600',
   team: 'bg-blue-100 text-blue-700',
   enterprise: 'bg-purple-100 text-purple-700',

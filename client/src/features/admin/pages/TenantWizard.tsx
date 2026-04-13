@@ -20,15 +20,12 @@ interface WizardState {
 }
 
 const TIER_DEFAULTS: Record<OrgTier, number> = {
-  solo: 1,
-  team: 10,
-  enterprise: 50,
-  platform: 200,
+  starter: 1,
+  growth: 10,
+  flagship: 50,
 };
 
-/** Enterprise orgs only see enterprise/platform tiers */
-const ENTERPRISE_TIERS: OrgTier[] = ['enterprise', 'platform'];
-const COUNSELING_TIERS: OrgTier[] = ['solo', 'team', 'enterprise', 'platform'];
+const ALL_TIERS: OrgTier[] = ['starter', 'growth', 'flagship'];
 
 const STEPS = [
   { key: 'type', label: '组织类型', icon: Building2 },
@@ -79,7 +76,7 @@ export function TenantWizard() {
   const [state, setState] = useState<WizardState>({
     orgType: 'counseling',
     org: { name: '', slug: '' },
-    subscription: { tier: 'team', maxSeats: 10, months: 12 },
+    subscription: { tier: 'starter' as OrgTier, maxSeats: 1, months: 12 },
     admin: { mode: 'new', userId: '', email: '', name: '', password: '' },
     settings: {},
     providerOrgId: '',
@@ -87,7 +84,7 @@ export function TenantWizard() {
 
   const config = ORG_TYPE_CONFIG[state.orgType];
   const isEnterprise = state.orgType === 'enterprise';
-  const availableTiers = isEnterprise ? ENTERPRISE_TIERS : COUNSELING_TIERS;
+  const availableTiers = ALL_TIERS;
 
   // Load available orgs for provider selection (enterprise only)
   const [availableOrgs, setAvailableOrgs] = useState<{ id: string; name: string; slug: string }[]>([]);
@@ -123,7 +120,7 @@ export function TenantWizard() {
   }
 
   function selectOrgType(type: OrgType) {
-    const defaultTier = type === 'enterprise' ? 'enterprise' : 'team';
+    const defaultTier: OrgTier = type === 'enterprise' ? 'growth' : 'starter';
     setState((s) => ({
       ...s,
       orgType: type,

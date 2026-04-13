@@ -22,8 +22,8 @@ import { verifyLicense } from '../../lib/license/verify.js';
 import { signLicense } from '../../lib/license/sign.js';
 import { DEFAULT_TRIAGE_CONFIG, hasFeature, planToTier } from '@psynote/shared';
 
-const VALID_TIERS = ['solo', 'team', 'enterprise', 'platform'] as const;
-const VALID_ROLES = ['org_admin', 'counselor', 'admin_staff', 'client'] as const;
+const VALID_TIERS = ['starter', 'growth', 'flagship'] as const;
+const VALID_ROLES = ['org_admin', 'counselor', 'admin_staff', 'client', 'hr_admin'] as const;
 
 export async function adminTenantRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
@@ -236,8 +236,9 @@ export async function adminTenantRoutes(app: FastifyInstance) {
       status: 'active',
     });
 
-    // 5. If enterprise tier + providerOrgId → create EAP partnership
-    if (body.providerOrgId && hasFeature(planToTier(plan), 'eap')) {
+    // 5. If enterprise orgType + providerOrgId → create EAP partnership
+    const createdOrgType = (body.settings as any)?.orgType;
+    if (body.providerOrgId && createdOrgType === 'enterprise') {
       const [providerOrg] = await db
         .select({ id: organizations.id })
         .from(organizations)

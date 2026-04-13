@@ -27,7 +27,7 @@ import { ValidationError, NotFoundError, ForbiddenError } from '../../lib/errors
 export async function eapAssignmentRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
-  app.addHook('preHandler', requireFeature('eap'));
+  app.addHook('preHandler', requireFeature('partnership'));
   app.addHook('preHandler', requireRole('org_admin'));
 
   // ─── List Assignments ────────────────────────────────────────────

@@ -15,7 +15,7 @@ import { db } from '../../config/database.js';
 import { eapUsageEvents, eapEmployeeProfiles } from '../../db/schema.js';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
-import { requireFeature } from '../../middleware/feature-flag.js';
+import { requireOrgType } from '../../middleware/feature-flag.js';
 import { requireRole } from '../../middleware/rbac.js';
 
 // k-anonymity threshold: departments with fewer than K members get rolled into "其他"
@@ -24,7 +24,7 @@ const K_ANONYMITY = 5;
 export async function eapAnalyticsRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
-  app.addHook('preHandler', requireFeature('eap'));
+  app.addHook('preHandler', requireOrgType('enterprise'));
   app.addHook('preHandler', requireRole('org_admin', 'hr_admin'));
 
   // ─── Overview KPIs ───────────────────────────────────────────────

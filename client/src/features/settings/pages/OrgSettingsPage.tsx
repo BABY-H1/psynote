@@ -31,7 +31,7 @@ const TABS: { key: SettingsTab; label: string; Icon: React.ComponentType<{ class
   { key: 'basic', label: '基本信息', Icon: Building2 },
   { key: 'members', label: '成员管理', Icon: Users, adminOnly: true },
   { key: 'services', label: '公开服务', Icon: Globe, adminOnly: true },
-  { key: 'eap', label: 'EAP 合作', Icon: Handshake, adminOnly: true, requiresFeature: 'eap' },
+  { key: 'eap', label: 'EAP 合作', Icon: Handshake, adminOnly: true, requiresFeature: 'partnership' },
   { key: 'branding', label: '品牌定制', Icon: Palette, adminOnly: true, requiresFeature: 'branding' },
   { key: 'certifications', label: '合规证书', Icon: ShieldCheck, adminOnly: true },
   { key: 'triage', label: '分诊规则', Icon: AlertTriangle, adminOnly: true },

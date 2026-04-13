@@ -23,14 +23,14 @@ import {
 } from '../../db/schema.js';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
-import { requireFeature } from '../../middleware/feature-flag.js';
+import { requireOrgType } from '../../middleware/feature-flag.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError, NotFoundError } from '../../lib/errors.js';
 
 export async function eapEmployeeRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
-  app.addHook('preHandler', requireFeature('eap'));
+  app.addHook('preHandler', requireOrgType('enterprise'));
   app.addHook('preHandler', requireRole('org_admin', 'hr_admin'));
 
   // ─── List Employees ──────────────────────────────────────────────

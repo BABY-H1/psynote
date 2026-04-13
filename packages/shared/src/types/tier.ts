@@ -1,128 +1,165 @@
 /**
- * Phase 7a — SaaS tier & feature flag taxonomy.
+ * SaaS tier & feature flag taxonomy — v2 (套餐体系重构)
  *
- * psynote orgs map their `organizations.plan` column (`free` / `pro` /
- * `enterprise`) onto a richer logical `OrgTier` space that decides which
- * feature set is available. The mapping is intentionally deterministic and
- * static — we do NOT store a separate feature table in the DB. This keeps
- * Phase 7 minimal while still giving the product a clean axis of differentiation.
+ * 两个正交维度：
+ *   1. 功能等级 (OrgTier) — 控制可用功能范围
+ *      starter   入门版  个体执业，1 席位
+ *      growth    成长版  团队/工作室，按人数收费
+ *      flagship  旗舰版  机构级，对外合作
  *
- * Four tiers:
- *   solo       — individual counselor / free plan. Core features only.
- *   team       — small practice / paid "team" plan. + supervisor + branding.
- *   enterprise — large org / paid "enterprise" plan. + EAP + audit log + SSO.
- *   platform   — multi-tenant reseller / internal admin. + public API.
+ *   2. 组织类型 (OrgType) — 控制界面和场景特有能力
+ *      counseling  专业机构
+ *      enterprise  企业（工会/HR 管理）
+ *      school      学校（占位）
+ *      hospital    医疗机构（占位）
  *
- * Features are opaque string IDs grouped by what they gate:
- *   core       — base psynote functionality (always on, listed for explicitness)
- *   supervisor — supervisor / supervisee relationships + oversight
- *   branding   — custom logo, theme color, report header/footer (Phase 7b)
- *   eap        — employer / EAP partnership workflows
- *   audit_log  — queryable audit_logs page (the table already exists; this
- *                gates who can READ it via the UI)
- *   sso        — SAML / OIDC single sign-on
- *   api        — public REST API access for third-party integrations
+ * 最终功能集 = TIER_FEATURES[tier] ∪ ORG_TYPE_FEATURES[orgType]
  */
 
-export type OrgTier = 'solo' | 'team' | 'enterprise' | 'platform';
+// ─── Tier (功能等级) ─────────────────────────────────────────────
+
+export type OrgTier = 'starter' | 'growth' | 'flagship';
 
 export type Feature =
-  | 'core'
-  | 'supervisor'
-  | 'branding'
-  | 'eap'
-  | 'audit_log'
-  | 'sso'
-  | 'api';
+  | 'core'            // 基础全部功能（测评、咨询、团辅、课程、Portal 等）
+  | 'audit_log'       // 审计日志查看界面
+  | 'referral_export' // 转介 — 仅导出 PDF
+  | 'referral_full'   // 转介 — 完整平台模式（跨机构数据传输）
+  | 'supervisor'      // 督导关系 + 笔记审阅
+  | 'branding'        // 品牌定制（Logo、主题色、报告页眉页脚）
+  | 'partnership'     // 跨组织合作（建立合作关系、咨询师指派）
+  | 'sso'             // SAML/OIDC 单点登录
+  | 'api';            // 公开 REST API
 
 /**
- * Static tier → feature set mapping. A feature is available iff it appears in
- * the Set for the current tier. Upgrades are always additive — tier N's set
- * is always a subset of tier N+1's.
+ * Static tier → feature set mapping.
+ * 入门版 → 成长版：团队化（督导、品牌、完整转介）
+ * 成长版 → 旗舰版：对外扩张（跨组织合作、SSO、API）
  */
 export const TIER_FEATURES: Record<OrgTier, ReadonlySet<Feature>> = {
-  solo: new Set<Feature>(['core']),
-  team: new Set<Feature>(['core', 'supervisor', 'branding']),
-  enterprise: new Set<Feature>([
+  starter: new Set<Feature>([
     'core',
-    'supervisor',
-    'branding',
-    'eap',
     'audit_log',
-    'sso',
+    'referral_export',
   ]),
-  platform: new Set<Feature>([
+  growth: new Set<Feature>([
     'core',
+    'audit_log',
+    'referral_export',
+    'referral_full',
     'supervisor',
     'branding',
-    'eap',
+  ]),
+  flagship: new Set<Feature>([
+    'core',
     'audit_log',
+    'referral_export',
+    'referral_full',
+    'supervisor',
+    'branding',
+    'partnership',
     'sso',
     'api',
   ]),
 };
 
+// ─── OrgType (组织类型) ──────────────────────────────────────────
+
+export type OrgType = 'counseling' | 'enterprise' | 'school' | 'hospital';
+
+export type OrgTypeFeature = 'eap'; // 企业 orgType 自带
+
 /**
- * Check whether a given tier includes a given feature. Pure, cheap, safe to
- * call in a render loop.
+ * 组织类型自带功能。
+ * enterprise 自动获得 EAP 能力（HR Dashboard、员工管理、危机预警等），
+ * 不受 tier 限制。school 和 hospital 暂为占位。
+ */
+export const ORG_TYPE_FEATURES: Record<OrgType, ReadonlySet<OrgTypeFeature>> = {
+  counseling: new Set(),
+  enterprise: new Set(['eap']),
+  school:     new Set(),
+  hospital:   new Set(),
+};
+
+// ─── Feature checking ────────────────────────────────────────────
+
+/**
+ * Check whether a given tier includes a given feature.
+ * Optionally also checks orgType-specific features.
  *
  * ```ts
- * hasFeature('team', 'branding')     // true
- * hasFeature('solo', 'branding')     // false
- * hasFeature('enterprise', 'api')    // false
- * hasFeature('platform', 'api')      // true
+ * hasFeature('starter', 'core')                      // true
+ * hasFeature('starter', 'supervisor')                 // false
+ * hasFeature('growth', 'supervisor')                  // true
+ * hasFeature('starter', 'eap')                        // false
+ * hasFeature('starter', 'eap', 'enterprise')          // true (orgType自带)
+ * hasFeature('flagship', 'partnership')               // true
  * ```
  */
-export function hasFeature(tier: OrgTier, feature: Feature): boolean {
-  // Defensive fallback: if a stale/unknown tier slips in (e.g. raw DB plan
-  // string like 'pro' instead of the mapped OrgTier, or a legacy value from
-  // localStorage), treat it as 'solo' rather than crashing the whole shell.
-  const set = TIER_FEATURES[tier] ?? TIER_FEATURES.solo;
-  return set.has(feature);
+export function hasFeature(
+  tier: OrgTier,
+  feature: Feature | OrgTypeFeature,
+  orgType?: OrgType,
+): boolean {
+  const tierSet = TIER_FEATURES[tier] ?? TIER_FEATURES.starter;
+  if (tierSet.has(feature as Feature)) return true;
+
+  if (orgType) {
+    const typeSet = ORG_TYPE_FEATURES[orgType] ?? ORG_TYPE_FEATURES.counseling;
+    if (typeSet.has(feature as OrgTypeFeature)) return true;
+  }
+
+  return false;
 }
 
 /**
- * Map the raw `organizations.plan` DB value (which uses the old SaaS terminology
- * 'free' / 'pro' / 'enterprise') to an `OrgTier`. Unknown values default to 'solo'.
- * See `docs/refactor-terminology.md` section 8 for the table.
+ * Check if an orgType has a specific orgType-level feature.
+ */
+export function hasOrgTypeFeature(orgType: OrgType, feature: OrgTypeFeature): boolean {
+  const set = ORG_TYPE_FEATURES[orgType] ?? ORG_TYPE_FEATURES.counseling;
+  return set.has(feature);
+}
+
+// ─── Plan ↔ Tier mapping ────────────────────────────────────────
+
+/**
+ * Map the raw `organizations.plan` DB value to an `OrgTier`.
+ * Handles legacy values: 'enterprise' → 'growth', 'platform' → 'flagship'.
  */
 export function planToTier(plan: string | null | undefined): OrgTier {
   switch (plan) {
     case 'free':
-      return 'solo';
+      return 'starter';
     case 'pro':
-      return 'team';
-    case 'enterprise':
-      return 'enterprise';
-    case 'platform':
-      return 'platform';
+      return 'growth';
+    case 'enterprise':    // legacy — old enterprise plan maps to growth
+      return 'growth';
+    case 'premium':
+      return 'flagship';
+    case 'platform':      // legacy — old platform maps to flagship
+      return 'flagship';
     default:
-      return 'solo';
+      return 'starter';
   }
 }
 
 /**
- * Reverse map an OrgTier back to the raw `organizations.plan` DB value.
- * Used when the admin wizard issues a license and needs to sync the plan column.
+ * Reverse map an OrgTier to the DB `organizations.plan` value.
  */
 export function tierToPlan(tier: OrgTier): string {
   switch (tier) {
-    case 'solo':
+    case 'starter':
       return 'free';
-    case 'team':
+    case 'growth':
       return 'pro';
-    case 'enterprise':
-      return 'enterprise';
-    case 'platform':
-      return 'platform';
+    case 'flagship':
+      return 'premium';
     default:
       return 'free';
   }
 }
 
-// ---------------------------------------------------------------------------
-// License info — shared between server responses and client state
-// ---------------------------------------------------------------------------
+// ─── Display labels ──────────────────────────────────────────────
 
 export type LicenseStatus = 'active' | 'expired' | 'invalid' | 'none';
 
@@ -132,12 +169,15 @@ export interface LicenseInfo {
   expiresAt: string | null;
 }
 
-/**
- * Human-readable tier labels for UI display.
- */
 export const TIER_LABELS: Record<OrgTier, string> = {
-  solo: '个人版',
-  team: '团队版',
-  enterprise: '企业版',
-  platform: '平台版',
+  starter:  '入门版',
+  growth:   '成长版',
+  flagship: '旗舰版',
+};
+
+export const ORG_TYPE_LABELS: Record<OrgType, string> = {
+  counseling: '专业机构',
+  enterprise: '企业',
+  school:     '学校',
+  hospital:   '医疗机构',
 };

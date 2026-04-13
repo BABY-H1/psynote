@@ -5,7 +5,7 @@ import { queryClient } from '../config/database.js';
 import { orgMembers, organizations } from '../db/schema.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
 import { env } from '../config/env.js';
-import type { OrgRole, OrgTier, LicenseInfo } from '@psynote/shared';
+import type { OrgRole, OrgTier, OrgType, LicenseInfo } from '@psynote/shared';
 import { planToTier } from '@psynote/shared';
 import { verifyLicense } from '../lib/license/verify.js';
 
@@ -16,8 +16,10 @@ export interface OrgContext {
   supervisorId: string | null;
   fullPracticeAccess: boolean;
   superviseeUserIds: string[];
-  /** Phase 7a — mapped from organizations.plan at the start of each request */
+  /** Mapped from organizations.plan at the start of each request */
   tier: OrgTier;
+  /** Organization type from settings.orgType — determines UI and scene-specific capabilities */
+  orgType: OrgType;
   /** License verification result — used for seat limits & expiry display */
   license: LicenseInfo;
 }
@@ -95,11 +97,12 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
   // Still load the org row so we know its tier (system admins see the real tier).
   if (request.user?.isSystemAdmin) {
     const [orgRow] = await db
-      .select({ plan: organizations.plan, licenseKey: organizations.licenseKey })
+      .select({ plan: organizations.plan, licenseKey: organizations.licenseKey, settings: organizations.settings })
       .from(organizations)
       .where(eq(organizations.id, orgId))
       .limit(1);
     const { tier, license } = await resolveTier(orgId, orgRow?.licenseKey, orgRow?.plan);
+    const orgSettings = (orgRow?.settings || {}) as Record<string, any>;
     request.org = {
       orgId,
       role: 'org_admin',
@@ -108,6 +111,7 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
       fullPracticeAccess: true,
       superviseeUserIds: [],
       tier,
+      orgType: (orgSettings.orgType || 'counseling') as OrgType,
       license,
     };
     await queryClient`SELECT set_config('app.current_org_id', ${orgId}, true)`;
@@ -130,11 +134,12 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
   if (!member && env.NODE_ENV === 'development') {
     const devRole = (request.headers['x-dev-role'] as string) || 'counselor';
     const [orgRow] = await db
-      .select({ plan: organizations.plan, licenseKey: organizations.licenseKey })
+      .select({ plan: organizations.plan, licenseKey: organizations.licenseKey, settings: organizations.settings })
       .from(organizations)
       .where(eq(organizations.id, orgId))
       .limit(1);
     const { tier, license } = await resolveTier(orgId, orgRow?.licenseKey, orgRow?.plan);
+    const devOrgSettings = (orgRow?.settings || {}) as Record<string, any>;
     request.org = {
       orgId,
       role: devRole as OrgRole,
@@ -143,6 +148,7 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
       fullPracticeAccess: devRole === 'org_admin',
       superviseeUserIds: [],
       tier,
+      orgType: (devOrgSettings.orgType || 'counseling') as OrgType,
       license,
     };
     await queryClient`SELECT set_config('app.current_org_id', ${orgId}, true)`;
@@ -174,13 +180,14 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     superviseeUserIds = supervisees.map((s) => s.userId);
   }
 
-  // Load the org's plan + license key → resolve effective tier.
+  // Load the org's plan + license key + settings → resolve effective tier + orgType.
   const [orgRow] = await db
-    .select({ plan: organizations.plan, licenseKey: organizations.licenseKey })
+    .select({ plan: organizations.plan, licenseKey: organizations.licenseKey, settings: organizations.settings })
     .from(organizations)
     .where(eq(organizations.id, orgId))
     .limit(1);
   const { tier, license } = await resolveTier(orgId, orgRow?.licenseKey, orgRow?.plan);
+  const memberOrgSettings = (orgRow?.settings || {}) as Record<string, any>;
 
   request.org = {
     orgId,
@@ -190,6 +197,7 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     fullPracticeAccess: member.fullPracticeAccess ?? (member.role === 'org_admin'),
     superviseeUserIds,
     tier,
+    orgType: (memberOrgSettings.orgType || 'counseling') as OrgType,
     license,
   };
 
