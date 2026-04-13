@@ -4,8 +4,8 @@ import { db } from '../config/database.js';
 import { clientAssignments, clientAccessGrants } from '../db/schema.js';
 
 export interface DataScope {
-  /** 'all' = unrestricted, 'assigned' = only listed clients, 'basic_only' = admin_staff (names/schedule), 'none' = client portal self-only */
-  type: 'all' | 'assigned' | 'basic_only' | 'none';
+  /** 'all' = unrestricted, 'assigned' = only listed clients, 'basic_only' = admin_staff (names/schedule), 'aggregate_only' = HR/enterprise admin (only eap_usage_events aggregates), 'none' = client portal self-only */
+  type: 'all' | 'assigned' | 'basic_only' | 'aggregate_only' | 'none';
   /** Populated for 'assigned' type — union of own clients, granted clients, and supervisees' clients */
   allowedClientIds?: string[];
 }
@@ -26,7 +26,23 @@ export async function dataScopeGuard(request: FastifyRequest, _reply: FastifyRep
 
   const userId = request.user!.id;
 
-  // system_admin, org_admin, or counselor with full practice access → see everything
+  // hr_admin → aggregate-only (can only see eap_usage_events aggregates, no clinical data)
+  if (org.role === 'hr_admin') {
+    request.dataScope = { type: 'aggregate_only' };
+    return;
+  }
+
+  // Enterprise org's org_admin: aggregate-only (same as hr_admin — no clinical data)
+  // Detection: org has 'eap' feature → it's an enterprise org
+  const { hasFeature } = await import('@psynote/shared');
+  const isEnterpriseOrg = hasFeature(org.tier, 'eap');
+
+  if (org.role === 'org_admin' && isEnterpriseOrg) {
+    request.dataScope = { type: 'aggregate_only' };
+    return;
+  }
+
+  // system_admin, org_admin (non-enterprise), or counselor with full practice access → see everything
   if (
     request.user?.isSystemAdmin
     || org.role === 'org_admin'

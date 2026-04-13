@@ -72,6 +72,13 @@ import {
 import { publicReferralRoutes } from './modules/referral/public-referral.routes.js';
 // Phase 9ε — Org-internal collaboration page (派单 / 授权 / 督导 / 转介接收 / 审计)
 import { collaborationRoutes } from './modules/collaboration/collaboration.routes.js';
+// EAP Enterprise — 国央企版 partnership & assignment
+import { eapPartnershipRoutes } from './modules/eap/eap-partnership.routes.js';
+import { eapAssignmentRoutes } from './modules/eap/eap-assignment.routes.js';
+import { eapEmployeeRoutes } from './modules/eap/eap-employee.routes.js';
+import { eapPublicRoutes } from './modules/eap/eap-public.routes.js';
+import { eapCrisisRoutes } from './modules/eap/eap-crisis.routes.js';
+import { eapAnalyticsRoutes } from './modules/eap/eap-analytics.routes.js';
 import { initConfigService, getBootValue } from './lib/config-service.js';
 
 const app = Fastify({
@@ -208,6 +215,14 @@ await app.register(publicReferralRoutes, { prefix: '/api/public/referrals' });
 
 // Phase 9ε — Org-internal collaboration
 await app.register(collaborationRoutes, { prefix: '/api/orgs/:orgId/collaboration' });
+
+// EAP Enterprise — partnerships, assignments, employees
+await app.register(eapPartnershipRoutes, { prefix: '/api/orgs/:orgId/eap/partnerships' });
+await app.register(eapAssignmentRoutes, { prefix: '/api/orgs/:orgId/eap/assignments' });
+await app.register(eapEmployeeRoutes, { prefix: '/api/orgs/:orgId/eap/employees' });
+await app.register(eapCrisisRoutes, { prefix: '/api/orgs/:orgId/eap/crisis' });
+await app.register(eapAnalyticsRoutes, { prefix: '/api/orgs/:orgId/eap/analytics' });
+await app.register(eapPublicRoutes, { prefix: '/api/public/eap' });
 
 // Start
 try {

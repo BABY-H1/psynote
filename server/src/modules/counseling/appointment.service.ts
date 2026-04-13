@@ -83,6 +83,15 @@ export async function createAppointment(input: {
     });
   }
 
+  // EAP: emit session_booked event
+  import('../../modules/eap/eap-event-emitter.js').then(({ emitEapEvent }) => {
+    void emitEapEvent({
+      orgId: input.orgId,
+      eventType: 'session_booked',
+      userId: input.clientId,
+    });
+  }).catch(() => {});
+
   return appointment;
 }
 

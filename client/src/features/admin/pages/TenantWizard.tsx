@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../api/client';
 import { ArrowLeft, ArrowRight, Check, Building2, CreditCard, UserPlus, Settings, CheckCircle2 } from 'lucide-react';
-import { TIER_LABELS, TIER_FEATURES, type OrgTier } from '@psynote/shared';
+import { TIER_LABELS, TIER_FEATURES, hasFeature, type OrgTier } from '@psynote/shared';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -13,6 +13,7 @@ interface WizardState {
   subscription: { tier: OrgTier; maxSeats: number; months: number };
   admin: { mode: 'new' | 'existing'; userId: string; email: string; name: string; password: string };
   settings: Record<string, unknown>;
+  providerOrgId: string; // EAP: optional binding to a counseling org
 }
 
 const TIER_DEFAULTS: Record<OrgTier, number> = {
@@ -45,7 +46,23 @@ export function TenantWizard() {
     subscription: { tier: 'team', maxSeats: 10, months: 12 },
     admin: { mode: 'new', userId: '', email: '', name: '', password: '' },
     settings: {},
+    providerOrgId: '',
   });
+
+  // Load available orgs for provider selection (enterprise tier only)
+  const [availableOrgs, setAvailableOrgs] = useState<{ id: string; name: string; slug: string }[]>([]);
+  const isEnterpriseTier = hasFeature(state.subscription.tier, 'eap');
+
+  useEffect(() => {
+    if (isEnterpriseTier) {
+      api.get<any[]>('/admin/tenants').then((orgs) => {
+        // Filter to non-enterprise orgs as potential providers
+        setAvailableOrgs(orgs.filter((o: any) => !o.isEnterprise).map((o: any) => ({
+          id: o.id, name: o.name, slug: o.slug,
+        })));
+      }).catch(() => {});
+    }
+  }, [isEnterpriseTier]);
 
   function updateOrg(patch: Partial<WizardState['org']>) {
     setState((s) => ({ ...s, org: { ...s.org, ...patch } }));
@@ -94,6 +111,7 @@ export function TenantWizard() {
           ? { email: state.admin.email, name: state.admin.name, password: state.admin.password }
           : { userId: state.admin.userId },
         settings: state.settings,
+        ...(state.providerOrgId ? { providerOrgId: state.providerOrgId } : {}),
       };
       const result = await api.post<{ orgId: string }>('/admin/tenants', payload);
       navigate(`/admin/tenants/${result.orgId}`);
@@ -299,12 +317,35 @@ export function TenantWizard() {
         {step === 3 && (
           <div className="space-y-4">
             <h2 className="text-base font-semibold text-slate-900 mb-4">初始配置</h2>
-            <p className="text-sm text-slate-500">
-              可选配置。创建后也可以在租户详情中随时修改。
-            </p>
-            <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-500">
-              当前版本使用默认配置。后续可在此步骤添加自定义分诊规则、功能开关等。
-            </div>
+
+            {isEnterpriseTier && (
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  绑定合作机构（可选）
+                </label>
+                <p className="text-xs text-slate-500 mb-2">
+                  如果该企业需要外部心理服务机构提供服务，可以在此绑定。绑定后机构管理员可以指派咨询师到该企业。
+                </p>
+                <select
+                  value={state.providerOrgId}
+                  onChange={(e) => setState((s) => ({ ...s, providerOrgId: e.target.value }))}
+                  className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-200"
+                >
+                  <option value="">不绑定（企业自有咨询师）</option>
+                  {availableOrgs.map((org) => (
+                    <option key={org.id} value={org.id}>
+                      {org.name} ({org.slug})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {!isEnterpriseTier && (
+              <div className="bg-slate-50 rounded-lg p-4 text-sm text-slate-500">
+                当前版本使用默认配置。后续可在此步骤添加自定义分诊规则、功能开关等。
+              </div>
+            )}
           </div>
         )}
 
@@ -321,6 +362,16 @@ export function TenantWizard() {
                 label="管理员"
                 value={state.admin.mode === 'new' ? `${state.admin.name} (${state.admin.email})` : `用户 ${state.admin.userId}`}
               />
+              {isEnterpriseTier && (
+                <SummaryRow
+                  label="合作机构"
+                  value={
+                    state.providerOrgId
+                      ? availableOrgs.find((o) => o.id === state.providerOrgId)?.name || state.providerOrgId
+                      : '不绑定（自有咨询师）'
+                  }
+                />
+              )}
             </div>
             {error && (
               <div className="bg-red-50 text-red-600 rounded-lg p-3 text-sm">{error}</div>

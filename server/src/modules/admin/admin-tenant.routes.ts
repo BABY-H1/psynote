@@ -13,14 +13,14 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { eq, count } from 'drizzle-orm';
 import { db } from '../../config/database.js';
-import { organizations, orgMembers, users } from '../../db/schema.js';
+import { organizations, orgMembers, users, eapPartnerships } from '../../db/schema.js';
 import { authGuard } from '../../middleware/auth.js';
 import { requireSystemAdmin } from '../../middleware/system-admin.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError, NotFoundError } from '../../lib/errors.js';
 import { verifyLicense } from '../../lib/license/verify.js';
 import { signLicense } from '../../lib/license/sign.js';
-import { DEFAULT_TRIAGE_CONFIG } from '@psynote/shared';
+import { DEFAULT_TRIAGE_CONFIG, hasFeature, planToTier } from '@psynote/shared';
 
 const VALID_TIERS = ['solo', 'team', 'enterprise', 'platform'] as const;
 const VALID_ROLES = ['org_admin', 'counselor', 'admin_staff', 'client'] as const;
@@ -52,6 +52,18 @@ export async function adminTenantRoutes(app: FastifyInstance) {
           ? await verifyLicense(org.licenseKey, org.id)
           : { valid: false, status: 'none' as const, payload: null };
 
+        // Check if this org has EAP partnerships (enterprise org)
+        const tier = licenseResult.payload?.tier ?? planToTier(org.plan);
+        const isEnterprise = hasFeature(tier, 'eap');
+        let partnershipCount = 0;
+        if (isEnterprise) {
+          const partnerships = await db
+            .select({ id: eapPartnerships.id })
+            .from(eapPartnerships)
+            .where(eq(eapPartnerships.enterpriseOrgId, org.id));
+          partnershipCount = partnerships.length;
+        }
+
         return {
           id: org.id,
           name: org.name,
@@ -59,6 +71,8 @@ export async function adminTenantRoutes(app: FastifyInstance) {
           plan: org.plan,
           createdAt: org.createdAt,
           memberCount: Number(org.memberCount),
+          isEnterprise,
+          partnershipCount,
           license: {
             status: licenseResult.status,
             tier: licenseResult.payload?.tier ?? null,
@@ -116,6 +130,7 @@ export async function adminTenantRoutes(app: FastifyInstance) {
       subscription: { tier: string; maxSeats: number; months: number };
       admin: { userId?: string; email?: string; name?: string; password?: string };
       settings?: Record<string, unknown>;
+      providerOrgId?: string; // EAP: optional binding to a counseling org
     };
 
     // Validate org
@@ -216,6 +231,24 @@ export async function adminTenantRoutes(app: FastifyInstance) {
       role: 'org_admin',
       status: 'active',
     });
+
+    // 5. If enterprise tier + providerOrgId → create EAP partnership
+    if (body.providerOrgId && hasFeature(planToTier(plan), 'eap')) {
+      const [providerOrg] = await db
+        .select({ id: organizations.id })
+        .from(organizations)
+        .where(eq(organizations.id, body.providerOrgId))
+        .limit(1);
+
+      if (providerOrg) {
+        await db.insert(eapPartnerships).values({
+          enterpriseOrgId: org.id,
+          providerOrgId: body.providerOrgId,
+          status: 'active',
+          createdBy: request.user!.id,
+        });
+      }
+    }
 
     await logAudit(request, 'tenant.created', 'organization', org.id);
 

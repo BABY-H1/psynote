@@ -199,6 +199,8 @@ export async function enrollInCourse(input: {
     courseId: input.courseId,
     userId: input.userId,
     careEpisodeId: input.careEpisodeId || null,
+    enrollmentSource: 'self_enroll',
+    approvalStatus: 'pending',
   }).returning();
 
   if (input.careEpisodeId) {
@@ -211,6 +213,22 @@ export async function enrollInCourse(input: {
       createdBy: input.userId,
     });
   }
+
+  // EAP: emit course_enrolled event
+  import('../../modules/eap/eap-event-emitter.js').then(async ({ emitEapEvent }) => {
+    const [course] = await db
+      .select({ orgId: courses.orgId })
+      .from(courses)
+      .where(eq(courses.id, input.courseId))
+      .limit(1);
+    if (course?.orgId) {
+      void emitEapEvent({
+        orgId: course.orgId,
+        eventType: 'course_enrolled',
+        userId: input.userId,
+      });
+    }
+  }).catch(() => {});
 
   return enrollment;
 }

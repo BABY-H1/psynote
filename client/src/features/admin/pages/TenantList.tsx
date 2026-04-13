@@ -15,6 +15,8 @@ interface TenantRow {
   plan: string;
   createdAt: string;
   memberCount: number;
+  isEnterprise?: boolean;
+  partnershipCount?: number;
   license: {
     status: LicenseStatus;
     tier: OrgTier | null;
@@ -199,6 +201,11 @@ export function TenantList() {
                           {t.name.charAt(0)}
                         </div>
                         <span className="text-sm font-medium text-slate-900">{t.name}</span>
+                        {t.isEnterprise && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 ml-1">
+                            企业版{t.partnershipCount ? ` · ${t.partnershipCount} 合作` : ''}
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-slate-500 font-mono">{t.slug}</td>

@@ -39,6 +39,7 @@ export const orgMembers = pgTable('org_members', {
   validUntil: timestamp('valid_until', { withTimezone: true }),
   supervisorId: uuid('supervisor_id'),
   fullPracticeAccess: boolean('full_practice_access').notNull().default(false),
+  sourcePartnershipId: uuid('source_partnership_id'), // EAP: tracks counselors assigned via partnership
   // Phase 10 — counselor profile fields
   certifications: jsonb('certifications').default([]),
   specialties: text('specialties').array().default([]),
@@ -1014,6 +1015,89 @@ export const clientAccessGrants = pgTable('client_access_grants', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   uniqueIndex('uq_client_access_grants_org_client_counselor').on(t.orgId, t.clientId, t.grantedToCounselorId),
+]);
+
+// ─── EAP Enterprise ─────────────────────────────────────────────
+
+export const eapPartnerships = pgTable('eap_partnerships', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  enterpriseOrgId: uuid('enterprise_org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  providerOrgId: uuid('provider_org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  status: text('status').notNull().default('active'), // active | suspended | expired
+  contractStart: timestamp('contract_start', { withTimezone: true }),
+  contractEnd: timestamp('contract_end', { withTimezone: true }),
+  seatAllocation: integer('seat_allocation'),
+  serviceScope: jsonb('service_scope').notNull().default({}),
+  notes: text('notes'),
+  createdBy: uuid('created_by').references(() => users.id),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_eap_partnerships_enterprise_provider').on(t.enterpriseOrgId, t.providerOrgId),
+  index('idx_eap_partnerships_enterprise').on(t.enterpriseOrgId, t.status),
+  index('idx_eap_partnerships_provider').on(t.providerOrgId, t.status),
+]);
+
+export const eapCounselorAssignments = pgTable('eap_counselor_assignments', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  partnershipId: uuid('partnership_id').notNull().references(() => eapPartnerships.id, { onDelete: 'cascade' }),
+  counselorUserId: uuid('counselor_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  enterpriseOrgId: uuid('enterprise_org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  providerOrgId: uuid('provider_org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  status: text('status').notNull().default('active'), // active | removed
+  assignedAt: timestamp('assigned_at', { withTimezone: true }).notNull().defaultNow(),
+  assignedBy: uuid('assigned_by').references(() => users.id),
+  removedAt: timestamp('removed_at', { withTimezone: true }),
+}, (t) => [
+  uniqueIndex('uq_eap_assignments_enterprise_counselor').on(t.enterpriseOrgId, t.counselorUserId),
+  index('idx_eap_assignments_counselor').on(t.counselorUserId, t.status),
+  index('idx_eap_assignments_enterprise').on(t.enterpriseOrgId, t.status),
+]);
+
+export const eapEmployeeProfiles = pgTable('eap_employee_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  employeeId: text('employee_id'),
+  department: text('department'),
+  entryMethod: text('entry_method').default('link'), // qr_code | link | sso | hr_import
+  isAnonymous: boolean('is_anonymous').notNull().default(false),
+  registeredAt: timestamp('registered_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_eap_employees_org_user').on(t.orgId, t.userId),
+  index('idx_eap_employees_org_dept').on(t.orgId, t.department),
+]);
+
+export const eapUsageEvents = pgTable('eap_usage_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  enterpriseOrgId: uuid('enterprise_org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  eventType: text('event_type').notNull(), // assessment_completed | course_enrolled | group_enrolled | group_participated | session_booked | session_completed | crisis_flagged
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  department: text('department'),
+  riskLevel: text('risk_level'), // level_1 | level_2 | level_3 | level_4
+  providerOrgId: uuid('provider_org_id').references(() => organizations.id, { onDelete: 'set null' }),
+  metadata: jsonb('metadata').default({}),
+  eventDate: date('event_date').notNull().defaultNow(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_eap_events_org_type_date').on(t.enterpriseOrgId, t.eventType, t.eventDate),
+  index('idx_eap_events_org_dept_date').on(t.enterpriseOrgId, t.department, t.eventDate),
+]);
+
+export const eapCrisisAlerts = pgTable('eap_crisis_alerts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  enterpriseOrgId: uuid('enterprise_org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  employeeUserId: uuid('employee_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  counselorUserId: uuid('counselor_user_id').notNull().references(() => users.id),
+  crisisType: text('crisis_type').notNull(), // self_harm | harm_others | abuse
+  description: text('description'),
+  notifiedContacts: jsonb('notified_contacts').default([]),
+  status: text('status').notNull().default('open'), // open | handling | resolved
+  resolutionNotes: text('resolution_notes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_eap_crisis_org').on(t.enterpriseOrgId, t.status),
 ]);
 
 // ─── System Configuration ────────────────────────────────────────

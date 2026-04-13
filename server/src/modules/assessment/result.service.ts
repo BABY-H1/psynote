@@ -397,6 +397,16 @@ export async function submitResult(input: {
     generatedBy: input.createdBy || 'system',
   }).catch(() => { /* report generation failure is non-blocking */ });
 
+  // EAP: emit assessment_completed event (fire-and-forget, no-op for non-enterprise orgs)
+  import('../../modules/eap/eap-event-emitter.js').then(({ emitEapEvent }) => {
+    void emitEapEvent({
+      orgId,
+      eventType: 'assessment_completed',
+      userId: input.userId || undefined,
+      riskLevel: highestRiskLevel || undefined,
+    });
+  }).catch(() => {});
+
   return result;
 }
 

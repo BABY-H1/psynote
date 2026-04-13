@@ -103,6 +103,15 @@ export async function createSessionNote(input: {
     });
   }
 
+  // EAP: emit session_completed event
+  import('../../modules/eap/eap-event-emitter.js').then(({ emitEapEvent }) => {
+    void emitEapEvent({
+      orgId: input.orgId,
+      eventType: 'session_completed',
+      userId: input.clientId,
+    });
+  }).catch(() => {});
+
   return note;
 }
 

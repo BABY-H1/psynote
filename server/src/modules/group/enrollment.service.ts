@@ -122,6 +122,17 @@ export async function enroll(input: {
     });
   }
 
+  // EAP: emit group_enrolled event
+  if (instance?.orgId) {
+    import('../../modules/eap/eap-event-emitter.js').then(({ emitEapEvent }) => {
+      void emitEapEvent({
+        orgId: instance.orgId,
+        eventType: 'group_enrolled',
+        userId: input.userId,
+      });
+    }).catch(() => {});
+  }
+
   return enrollment;
 }
 
