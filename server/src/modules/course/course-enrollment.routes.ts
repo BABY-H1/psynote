@@ -6,6 +6,7 @@ import { logAudit } from '../../middleware/audit.js';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { courseEnrollments, courseInstances, users, courses } from '../../db/schema.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 
 /**
  * Authenticated enrollment management routes for course instances.
@@ -14,6 +15,7 @@ import { courseEnrollments, courseInstances, users, courses } from '../../db/sch
 export async function courseEnrollmentRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   // ─── List Enrollments ────────────────────────────────────────────
 

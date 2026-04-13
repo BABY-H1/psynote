@@ -4,11 +4,13 @@ import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 import * as templateService from './note-template.service.js';
 
 export async function noteTemplateRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   /** List all templates (built-in + custom) */
   app.get('/', async (request) => {

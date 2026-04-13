@@ -18,12 +18,7 @@
  *         directly inserted into `organizations.license_key`.
  */
 
-import { readFileSync } from 'node:fs';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { SignJWT, importPKCS8 } from 'jose';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { signLicense } from '../src/lib/license/sign.js';
 
 // ---------------------------------------------------------------------------
 // Parse CLI args
@@ -56,62 +51,23 @@ const maxSeats = Number(args.seats ?? '10');
 const months = Number(args.months ?? '12');
 
 // ---------------------------------------------------------------------------
-// Tier → default features (mirrors packages/shared/src/types/tier.ts)
-// ---------------------------------------------------------------------------
-const TIER_FEATURES: Record<string, string[]> = {
-  solo: ['core'],
-  team: ['core', 'supervisor', 'branding'],
-  enterprise: ['core', 'supervisor', 'branding', 'eap', 'audit_log', 'sso'],
-  platform: ['core', 'supervisor', 'branding', 'eap', 'audit_log', 'sso', 'api'],
-};
-
-// ---------------------------------------------------------------------------
 // Sign
 // ---------------------------------------------------------------------------
 async function main() {
-  const privKeyPath = resolve(__dirname, '../src/lib/license/keys/private.pem');
-  let privKeyPem: string;
-  try {
-    privKeyPem = readFileSync(privKeyPath, 'utf-8');
-  } catch {
-    console.error(`Cannot read private key at ${privKeyPath}`);
-    console.error('Run: npx tsx scripts/generate-license-keypair.ts first.');
-    process.exit(1);
-  }
-
-  const privateKey = await importPKCS8(privKeyPem, 'RS256');
-
-  const now = new Date();
-  const expiresAt = new Date(now);
-  expiresAt.setMonth(expiresAt.getMonth() + months);
-
-  const token = await new SignJWT({
-    sub: orgId,
-    tier,
-    maxSeats,
-    features: TIER_FEATURES[tier],
-    issuedAt: now.toISOString(),
-    expiresAt: expiresAt.toISOString(),
-  })
-    .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
-    .setIssuer('psynote-license-server')
-    .setSubject(orgId)
-    .setIssuedAt()
-    .setExpirationTime(expiresAt)
-    .sign(privateKey);
+  const result = await signLicense({ orgId, tier, maxSeats, months });
 
   console.log('');
   console.log('=== License Key ===');
   console.log('');
-  console.log(token);
+  console.log(result.token);
   console.log('');
   console.log('=== License Info ===');
   console.log(`  Org ID:     ${orgId}`);
-  console.log(`  Tier:       ${tier}`);
-  console.log(`  Max Seats:  ${maxSeats}`);
-  console.log(`  Features:   ${TIER_FEATURES[tier].join(', ')}`);
-  console.log(`  Issued:     ${now.toISOString()}`);
-  console.log(`  Expires:    ${expiresAt.toISOString()}`);
+  console.log(`  Tier:       ${result.tier}`);
+  console.log(`  Max Seats:  ${result.maxSeats}`);
+  console.log(`  Features:   ${result.features.join(', ')}`);
+  console.log(`  Issued:     ${result.issuedAt}`);
+  console.log(`  Expires:    ${result.expiresAt}`);
 }
 
 main().catch((err) => {

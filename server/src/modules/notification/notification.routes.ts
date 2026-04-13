@@ -1,11 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 import * as notificationService from './notification.service.js';
 
 export async function notificationRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   /** List my notifications */
   app.get('/', async (request) => {

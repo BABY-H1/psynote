@@ -13,10 +13,12 @@ import {
   orgMembers, clientAssignments, sessionNotes, consentRecords,
   groupInstances, courseInstances, assessmentResults, serviceIntakes,
 } from '../../db/schema.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 
 export async function dashboardRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   app.get('/dashboard/stats', {
     preHandler: [requireRole('org_admin')],

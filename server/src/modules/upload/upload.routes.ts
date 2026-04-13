@@ -1,11 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 import { saveUploadedFile } from '../../lib/file-upload.js';
 
 export async function uploadRoutes(app: FastifyInstance) {
   app.addHook('onRequest', authGuard);
   app.addHook('onRequest', orgContextGuard);
+  app.addHook('onRequest', rejectClient);
 
   // POST /api/orgs/:orgId/upload — upload a file
   app.post('/', async (request, reply) => {

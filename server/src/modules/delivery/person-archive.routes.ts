@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 import { listPeople, getPersonArchive } from './person-archive.service.js';
 
 /**
@@ -24,6 +25,7 @@ import { listPeople, getPersonArchive } from './person-archive.service.js';
 export async function personArchiveRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   app.get('/people', async (request) => {
     const orgId = request.org!.orgId;

@@ -13,10 +13,12 @@ import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as service from './content-block.service.js';
 import type { ParentType } from './content-block.service.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 
 export async function contentBlockRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   // ─── List ────────────────────────────────────────────────────────
 

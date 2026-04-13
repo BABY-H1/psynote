@@ -4,11 +4,13 @@ import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 import * as goalService from './goal-library.service.js';
 
 export async function goalLibraryRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   app.get('/', async (request) => {
     const query = request.query as { problemArea?: string; category?: string; visibility?: string };

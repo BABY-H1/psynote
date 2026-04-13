@@ -20,16 +20,19 @@ import { eq, and, isNull, desc, sql, or, gte, lte, like, inArray } from 'drizzle
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { requireFeature } from '../../middleware/feature-flag.js';
 import { db } from '../../config/database.js';
 import {
   users, orgMembers, sessionNotes, clientAssignments,
   auditLogs, phiAccessLogs,
 } from '../../db/schema.js';
 import { ValidationError } from '../../lib/errors.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 
 export async function collaborationRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   // ─── Tab A: Unassigned clients ──────────────────────────────────
 
@@ -101,7 +104,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
    *     (or org_admin sees all)
    */
   app.get('/pending-notes', {
-    preHandler: [requireRole('org_admin', 'counselor')],
+    preHandler: [requireFeature('supervisor'), requireRole('org_admin', 'counselor')],
   }, async (request) => {
     const orgId = request.org!.orgId;
     const userId = request.user!.id;
@@ -142,7 +145,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
    * supervisor annotation (reject).
    */
   app.post('/pending-notes/:noteId/review', {
-    preHandler: [requireRole('org_admin', 'counselor')],
+    preHandler: [requireFeature('supervisor'), requireRole('org_admin', 'counselor')],
   }, async (request) => {
     const { noteId } = request.params as { noteId: string };
     const body = request.body as { decision?: 'approve' | 'reject'; annotation?: string };
@@ -173,7 +176,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
    * Returns audit_logs rows scoped to this org.
    */
   app.get('/audit', {
-    preHandler: [requireRole('org_admin')],
+    preHandler: [requireFeature('audit_log'), requireRole('org_admin')],
   }, async (request) => {
     const orgId = request.org!.orgId;
     const q = request.query as {
@@ -207,7 +210,7 @@ export async function collaborationRoutes(app: FastifyInstance) {
    * PHI access log query — who looked at whose chart.
    */
   app.get('/phi-access', {
-    preHandler: [requireRole('org_admin')],
+    preHandler: [requireFeature('audit_log'), requireRole('org_admin')],
   }, async (request) => {
     const orgId = request.org!.orgId;
     const q = request.query as {

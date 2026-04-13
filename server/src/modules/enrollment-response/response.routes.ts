@@ -17,11 +17,13 @@ import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as service from './response.service.js';
 import type { EnrollmentType } from './response.service.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 
 /** Counselor-facing response routes. */
 export async function enrollmentResponseRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   /**
    * GET /api/orgs/:orgId/enrollment-responses?enrollmentId=...&enrollmentType=course

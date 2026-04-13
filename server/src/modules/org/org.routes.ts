@@ -6,10 +6,12 @@ import { createNotification } from '../notification/notification.service.js';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { requireSystemAdmin } from '../../middleware/system-admin.js';
 import { requireSeat } from '../../middleware/require-seat.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 import { logAudit } from '../../middleware/audit.js';
-import { ValidationError, NotFoundError } from '../../lib/errors.js';
-import { DEFAULT_TRIAGE_CONFIG } from '@psynote/shared';
+import { ValidationError, NotFoundError, ForbiddenError } from '../../lib/errors.js';
+import { DEFAULT_TRIAGE_CONFIG, hasFeature } from '@psynote/shared';
 
 export async function orgRoutes(app: FastifyInstance) {
   // All org routes require authentication
@@ -36,8 +38,8 @@ export async function orgRoutes(app: FastifyInstance) {
     }));
   });
 
-  /** Create a new organization */
-  app.post('/', async (request, reply) => {
+  /** Create a new organization (system admin only) */
+  app.post('/', { preHandler: [requireSystemAdmin] }, async (request, reply) => {
     const { name, slug } = request.body as { name: string; slug: string };
     const userId = request.user!.id;
 
@@ -76,8 +78,8 @@ export async function orgRoutes(app: FastifyInstance) {
     return reply.status(201).send(org);
   });
 
-  /** Get organization details (requires membership) */
-  app.get('/:orgId', { preHandler: [orgContextGuard] }, async (request) => {
+  /** Get organization details (staff only) */
+  app.get('/:orgId', { preHandler: [orgContextGuard, rejectClient] }, async (request) => {
     const { orgId } = request.params as { orgId: string };
 
     const [org] = await db
@@ -109,9 +111,9 @@ export async function orgRoutes(app: FastifyInstance) {
     return org;
   });
 
-  /** List members of organization */
+  /** List members of organization (org_admin only) */
   app.get('/:orgId/members', {
-    preHandler: [orgContextGuard],
+    preHandler: [orgContextGuard, requireRole('org_admin')],
   }, async (request) => {
     const { orgId } = request.params as { orgId: string };
 
@@ -227,7 +229,13 @@ export async function orgRoutes(app: FastifyInstance) {
     if (body.role) updates.role = body.role;
     if (body.status) updates.status = body.status;
     if (body.permissions) updates.permissions = body.permissions;
-    if (body.supervisorId !== undefined) updates.supervisorId = body.supervisorId;
+    if (body.supervisorId !== undefined) {
+      // Setting supervisor requires the 'supervisor' feature
+      if (!hasFeature(request.org!.tier, 'supervisor')) {
+        throw new ForbiddenError('督导功能需要团队版或更高版本');
+      }
+      updates.supervisorId = body.supervisorId;
+    }
     if (body.certifications !== undefined) updates.certifications = body.certifications;
     if (body.specialties !== undefined) updates.specialties = body.specialties;
     if (body.maxCaseload !== undefined) updates.maxCaseload = body.maxCaseload;
@@ -265,9 +273,9 @@ export async function orgRoutes(app: FastifyInstance) {
     return { success: true };
   });
 
-  /** Get triage configuration */
+  /** Get triage configuration (staff only) */
   app.get('/:orgId/triage-config', {
-    preHandler: [orgContextGuard],
+    preHandler: [orgContextGuard, requireRole('org_admin', 'counselor')],
   }, async (request) => {
     const { orgId } = request.params as { orgId: string };
 

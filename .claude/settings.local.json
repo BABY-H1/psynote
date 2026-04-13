@@ -215,7 +215,21 @@
       "Bash(node -e \"process.stdin.on\\('data',d=>{const r=JSON.parse\\(d\\);console.log\\(Array.isArray\\(r\\)?'Count: '+r.length:JSON.stringify\\(r\\).slice\\(0,200\\)\\)}\\)\")",
       "Bash(node -e \"process.stdin.on\\('data',d=>{try{const r=JSON.parse\\(d\\);console.log\\(typeof r==='object'?'OK, keys: '+Object.keys\\(r\\).join\\(','\\):r\\)}catch\\(e\\){console.log\\(d.toString\\(\\).slice\\(0,200\\)\\)}}\\)\")",
       "Bash(node -e \"const p=require\\('postgres'\\);const s=p\\('postgresql://postgres:psynote123@localhost:5432/psynote'\\);s\\\\`SELECT u.email, u.name FROM org_members om JOIN users u ON u.id=om.user_id WHERE om.role='counselor' AND om.status='active' LIMIT 3\\\\`.then\\(r=>{r.forEach\\(x=>console.log\\(x.email,x.name\\)\\);s.end\\(\\)}\\)\")",
-      "Bash(node -e \"const p=require\\('postgres'\\);const b=require\\('bcryptjs'\\);\\(async\\(\\)=>{const s=p\\('postgresql://postgres:psynote123@localhost:5432/psynote'\\);const h=await b.hash\\('admin123',10\\);const r=await s\\\\`UPDATE users SET password_hash=\\\\${h} WHERE email='counselor@demo.psynote.cn'\\\\`;console.log\\('Updated:',r.count\\);await s.end\\(\\)}\\)\\(\\)\")"
+      "Bash(node -e \"const p=require\\('postgres'\\);const b=require\\('bcryptjs'\\);\\(async\\(\\)=>{const s=p\\('postgresql://postgres:psynote123@localhost:5432/psynote'\\);const h=await b.hash\\('admin123',10\\);const r=await s\\\\`UPDATE users SET password_hash=\\\\${h} WHERE email='counselor@demo.psynote.cn'\\\\`;console.log\\('Updated:',r.count\\);await s.end\\(\\)}\\)\\(\\)\")",
+      "Bash(find \"D:/Desktop/psynote/server\" -name \"*.ts\" -exec grep -l \"http\\\\|fetch\\\\|axios\\\\|request\" {} \\\\;)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(json.dumps\\({k:d.get\\(k\\) for k in ['main','types','exports']}, indent=2\\)\\)\")",
+      "Bash(pkill -f \"tsx src/app.ts\")",
+      "Bash(psql \"postgresql://postgres:psynote123@localhost:5432/psynote\" -c \"SELECT category, key, value FROM system_config ORDER BY category, key;\")",
+      "Bash(tasklist /FI \"WINDOWTITLE eq *psynote*\" /FO TABLE)",
+      "Bash(tasklist /FI \"IMAGENAME eq node.exe\" /FO CSV)",
+      "Bash(powershell -Command \"Get-Process node -ErrorAction SilentlyContinue | Select-Object Id, Path | Format-Table -AutoSize\")",
+      "Bash(powershell -Command \"Get-NetTCPConnection -LocalPort 4000 -ErrorAction SilentlyContinue | Select-Object OwningProcess\")",
+      "Bash(powershell -Command \"Stop-Process -Id 13248 -Force\")",
+      "Bash(powershell -Command \"Stop-Process -Id 13100 -Force\")",
+      "Bash(PGPASSWORD=psynote123 psql -h localhost -U postgres -d psynote -c \"SELECT id, email, name, is_system_admin FROM users WHERE is_system_admin = true OR email LIKE '%admin%' LIMIT 10;\")",
+      "Bash(node --input-type=module -e ':*)",
+      "Bash(ls server/.env*)",
+      "Bash(ls .env*)"
     ]
   }
 }

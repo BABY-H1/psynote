@@ -4,6 +4,7 @@ import { db } from '../../config/database.js';
 import { organizations, orgMembers } from '../../db/schema.js';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 import { NotFoundError } from '../../lib/errors.js';
 import {
   planToTier,
@@ -35,6 +36,7 @@ export interface SubscriptionInfo {
 export async function subscriptionRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   app.get('/subscription', async (request): Promise<SubscriptionInfo> => {
     const orgId = request.org!.orgId;

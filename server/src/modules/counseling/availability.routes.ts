@@ -4,11 +4,13 @@ import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 import * as availabilityService from './availability.service.js';
 
 export async function availabilityRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   /** List availability slots for a counselor */
   app.get('/', async (request) => {

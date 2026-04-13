@@ -6,6 +6,7 @@ import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { requireFeature } from '../../middleware/feature-flag.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 import { NotFoundError, ValidationError } from '../../lib/errors.js';
 
 /**
@@ -44,6 +45,7 @@ export interface BrandingSettings {
 export async function brandingRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   /** Read current branding (any member). Returns an empty object if none set. */
   app.get('/branding', async (request) => {

@@ -7,6 +7,7 @@ import { ValidationError } from '../../lib/errors.js';
 import { listServiceInstances, type ServiceKindInput } from './delivery.service.js';
 // Phase 9β — unified launch verb
 import { launch, type LaunchActionType, type LaunchPayload } from './launch.service.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 
 /**
  * Phase 5b — Cross-module service aggregation route.
@@ -30,6 +31,7 @@ import { launch, type LaunchActionType, type LaunchPayload } from './launch.serv
 export async function deliveryRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   app.get('/services', async (request) => {
     const orgId = request.org!.orgId;

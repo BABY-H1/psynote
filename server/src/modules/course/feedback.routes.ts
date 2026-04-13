@@ -5,11 +5,13 @@ import { requireRole } from '../../middleware/rbac.js';
 import { eq, and } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { courseEnrollments } from '../../db/schema.js';
+import { rejectClient } from '../../middleware/reject-client.js';
 import * as feedbackService from './feedback.service.js';
 
 export async function feedbackRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
+  app.addHook('preHandler', rejectClient);
 
   // ─── Feedback Forms CRUD ───────────────────────────────────────
 
