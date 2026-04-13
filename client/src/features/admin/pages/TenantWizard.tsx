@@ -1,14 +1,14 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../api/client';
-import { ArrowLeft, ArrowRight, Check, Building2, CreditCard, UserPlus, Settings, CheckCircle2, Briefcase, Stethoscope } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, Building2, CreditCard, UserPlus, Settings, CheckCircle2, Briefcase, Stethoscope, GraduationCap, Hospital } from 'lucide-react';
 import { TIER_LABELS, TIER_FEATURES, hasFeature, type OrgTier } from '@psynote/shared';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
 
-type OrgType = 'solo' | 'counseling' | 'enterprise';
+type OrgType = 'solo' | 'counseling' | 'enterprise' | 'school' | 'hospital';
 
 interface WizardState {
   orgType: OrgType;
@@ -77,6 +77,30 @@ const ORG_TYPE_CONFIG = {
     slugLabel: '企业标识 (slug)',
     adminLabel: '企业管理员（HR/工会）',
   },
+  school: {
+    label: '学校',
+    description: '中小学、高校心理健康中心、学生心理辅导站',
+    icon: GraduationCap,
+    color: 'border-teal-500 bg-teal-50',
+    iconBg: 'bg-teal-100',
+    iconColor: 'text-teal-600',
+    nameLabel: '学校名称',
+    namePlaceholder: '如：清华大学心理健康中心',
+    slugLabel: '学校标识 (slug)',
+    adminLabel: '学校管理员',
+  },
+  hospital: {
+    label: '医疗机构',
+    description: '精神卫生中心、综合医院心理科、康复机构',
+    icon: Hospital,
+    color: 'border-rose-500 bg-rose-50',
+    iconBg: 'bg-rose-100',
+    iconColor: 'text-rose-600',
+    nameLabel: '机构名称',
+    namePlaceholder: '如：北京安定医院心理科',
+    slugLabel: '机构标识 (slug)',
+    adminLabel: '机构管理员',
+  },
 };
 
 /* ------------------------------------------------------------------ */
@@ -100,6 +124,9 @@ export function TenantWizard() {
 
   const config = ORG_TYPE_CONFIG[state.orgType];
   const isEnterprise = state.orgType === 'enterprise';
+  // Derive theme from orgType for step indicator / buttons
+  const themeColor = isEnterprise ? 'amber' : state.orgType === 'solo' ? 'green'
+    : state.orgType === 'school' ? 'teal' : state.orgType === 'hospital' ? 'rose' : 'blue';
   const availableTiers = ALL_TIERS;
 
   // Load available orgs for provider selection (enterprise only)
@@ -136,7 +163,7 @@ export function TenantWizard() {
   }
 
   function selectOrgType(type: OrgType) {
-    const defaultTier: OrgTier = type === 'solo' ? 'starter' : type === 'enterprise' ? 'growth' : 'growth';
+    const defaultTier: OrgTier = type === 'solo' ? 'starter' : 'growth';
     setState((s) => ({
       ...s,
       orgType: type,
@@ -232,7 +259,7 @@ export function TenantWizard() {
             <p className="text-sm text-slate-500 mb-4">决定租户的管理界面和功能范围</p>
 
             <div className="grid grid-cols-3 gap-4">
-              {(['solo', 'counseling', 'enterprise'] as OrgType[]).map((type) => {
+              {(['solo', 'counseling', 'enterprise', 'school', 'hospital'] as OrgType[]).map((type) => {
                 const c = ORG_TYPE_CONFIG[type];
                 const Icon = c.icon;
                 const selected = state.orgType === type;
