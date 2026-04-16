@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { User, OrgRole, OrgTier, LicenseInfo } from '@psynote/shared';
+import type { User, OrgRole, OrgTier, OrgType, LicenseInfo } from '@psynote/shared';
 import { api } from '../api/client';
 
 interface AuthState {
@@ -9,14 +9,16 @@ interface AuthState {
   refreshToken: string | null;
   currentOrgId: string | null;
   currentRole: OrgRole | null;
-  /** Phase 7a — SaaS tier of the current org (solo|team|enterprise|platform) */
+  /** SaaS tier of the current org (starter|growth|flagship) */
   currentOrgTier: OrgTier | null;
+  /** Organization type (solo|counseling|enterprise|school|hospital) */
+  currentOrgType: OrgType | null;
   /** License info for the current org */
   licenseInfo: LicenseInfo | null;
   isSystemAdmin: boolean;
   _hydrated: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string, isSystemAdmin?: boolean) => void;
-  setOrg: (orgId: string, role: OrgRole, tier?: OrgTier, license?: LicenseInfo) => void;
+  setOrg: (orgId: string, role: OrgRole, tier?: OrgTier, license?: LicenseInfo, orgType?: OrgType) => void;
   updateTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
 }
@@ -30,6 +32,7 @@ export const useAuthStore = create<AuthState>()(
       currentOrgId: null,
       currentRole: null,
       currentOrgTier: null,
+      currentOrgType: null,
       licenseInfo: null,
       isSystemAdmin: false,
       _hydrated: false,
@@ -44,16 +47,18 @@ export const useAuthStore = create<AuthState>()(
           currentOrgId: null,
           currentRole: null,
           currentOrgTier: null,
+          currentOrgType: null,
           licenseInfo: null,
           isSystemAdmin,
         });
       },
 
-      setOrg: (orgId, role, tier, license) => {
+      setOrg: (orgId, role, tier, license, orgType) => {
         set({
           currentOrgId: orgId,
           currentRole: role,
           currentOrgTier: tier ?? null,
+          currentOrgType: (orgType as OrgType) ?? null,
           licenseInfo: license ?? null,
         });
       },
@@ -72,6 +77,7 @@ export const useAuthStore = create<AuthState>()(
           currentOrgId: null,
           currentRole: null,
           currentOrgTier: null,
+          currentOrgType: null,
           licenseInfo: null,
           isSystemAdmin: false,
         });
@@ -86,6 +92,7 @@ export const useAuthStore = create<AuthState>()(
         currentOrgId: state.currentOrgId,
         currentRole: state.currentRole,
         currentOrgTier: state.currentOrgTier,
+        currentOrgType: state.currentOrgType,
         licenseInfo: state.licenseInfo,
         isSystemAdmin: state.isSystemAdmin,
       }),

@@ -67,7 +67,7 @@ export const TIER_FEATURES: Record<OrgTier, ReadonlySet<Feature>> = {
 
 export type OrgType = 'solo' | 'counseling' | 'enterprise' | 'school' | 'hospital';
 
-export type OrgTypeFeature = 'eap'; // 企业 orgType 自带
+export type OrgTypeFeature = 'eap' | 'school'; // orgType 自带功能
 
 /**
  * 组织类型自带功能。
@@ -81,7 +81,7 @@ export const ORG_TYPE_FEATURES: Record<OrgType, ReadonlySet<OrgTypeFeature>> = {
   solo:       new Set(),
   counseling: new Set(),
   enterprise: new Set(['eap']),
-  school:     new Set(),
+  school:     new Set(['school']),
   hospital:   new Set(),
 };
 

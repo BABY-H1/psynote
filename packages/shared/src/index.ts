@@ -9,5 +9,6 @@ export * from './types/compliance';
 export * from './types/report';
 export * from './types/service-instance';
 export * from './types/tier';
+export * from './types/terminology';
 export * from './types/content-block';
 export * from './schemas/triage-config';

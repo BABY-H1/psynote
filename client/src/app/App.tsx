@@ -66,6 +66,7 @@ import { useOrgBranding } from '../api/useOrgBranding';
 import { OrgCollaboration } from '../features/collaboration/OrgCollaboration';
 import { AuditLogViewer } from '../features/collaboration/AuditLogViewer';
 import { OrgSettingsPage } from '../features/settings/pages/OrgSettingsPage';
+import { SchoolDashboard } from '../features/dashboard/pages/SchoolDashboard';
 // EAP Enterprise — HR Dashboard
 import { HRDashboardShell } from '../features/eap-dashboard/HRDashboardShell';
 import { HRDashboardHome } from '../features/eap-dashboard/pages/HRDashboardHome';
@@ -229,15 +230,15 @@ function OrgSelector() {
       try {
         // Phase 7a — org list now includes `plan` so we can seed the tier
         // into the auth store alongside the role.
-        const orgs = await api.get<{ id: string; name: string; myRole: string; plan?: string }[]>('/orgs');
+        const orgs = await api.get<{ id: string; name: string; myRole: string; plan?: string; settings?: { orgType?: string } }[]>('/orgs');
         if (cancelled) return;
         if (orgs.length === 0) {
           setError('您尚未加入任何机构');
           return;
         }
         const { planToTier } = await import('@psynote/shared');
-        // setOrg triggers re-render → AppRoutes sees currentOrgId → routes to correct view
-        setOrg(orgs[0].id, orgs[0].myRole as any, planToTier(orgs[0].plan));
+        const orgType = (orgs[0].settings?.orgType || 'counseling') as any;
+        setOrg(orgs[0].id, orgs[0].myRole as any, planToTier(orgs[0].plan), undefined, orgType);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : '加载机构失败');
       }
@@ -285,15 +286,35 @@ const allNavItems: NavItem[] = [
 ];
 
 const adminStaffPaths = new Set(['/', '/settings']);
-/** Roles that can see the collaboration center */
 const collabRoles = new Set(['org_admin', 'counselor']);
-/** Roles that can see org settings */
 const settingsRoles = new Set(['org_admin']);
 
-function getNavItems(role: string | null): NavItem[] {
-  let items = allNavItems;
+/** Settings label by orgType */
+const SETTINGS_LABELS: Record<string, string> = {
+  solo: '个人设置',
+  counseling: '机构设置',
+  enterprise: '企业设置',
+  school: '学校设置',
+  hospital: '机构设置',
+};
+
+function getNavItems(role: string | null, orgType?: string | null): NavItem[] {
+  let items = allNavItems.map((item) => {
+    // Relabel settings based on orgType
+    if (item.to === '/settings' && orgType) {
+      return { ...item, label: SETTINGS_LABELS[orgType] || item.label };
+    }
+    return item;
+  });
+
   if (role === 'admin_staff') {
     items = items.filter((item) => adminStaffPaths.has(item.to));
+  } else if (orgType === 'solo') {
+    // Solo: no collaboration, counselor can see settings (manages own settings)
+    items = items.filter((item) => {
+      if (item.to === '/collaboration') return false;
+      return true;
+    });
   } else {
     items = items.filter((item) => {
       if (item.to === '/collaboration') return collabRoles.has(role ?? '');
@@ -305,8 +326,8 @@ function getNavItems(role: string | null): NavItem[] {
 }
 
 function AppShell() {
-  const { user, currentRole, currentOrgId, currentOrgTier, setOrg, isSystemAdmin, logout } = useAuthStore();
-  const navItems = getNavItems(currentRole);
+  const { user, currentRole, currentOrgId, currentOrgTier, currentOrgType, setOrg, isSystemAdmin, logout } = useAuthStore();
+  const navItems = getNavItems(currentRole, currentOrgType);
 
   // Phase 7a bootstrap — if the persisted auth state predates Phase 7, it may
   // be missing `currentOrgTier`. On first mount after login, pull it from
@@ -452,9 +473,14 @@ function NotificationBadge() {
   );
 }
 
-/** Render different home pages based on org role */
+/** Render different home pages based on org role and orgType */
 function RoleBasedHome() {
   const role = useAuthStore((s) => s.currentRole);
+  const orgType = useAuthStore((s) => s.currentOrgType);
+  // Solo: always personal workstation, no org metrics
+  if (orgType === 'solo') return <DashboardHome />;
+  // School: school-specific dashboard
+  if (orgType === 'school' && role === 'org_admin') return <SchoolDashboard />;
   if (role === 'org_admin') return <OrgAdminDashboard />;
   return <DashboardHome />;
 }

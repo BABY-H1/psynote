@@ -407,6 +407,19 @@ export async function submitResult(input: {
     });
   }).catch(() => {});
 
+  // Auto-triage: generate AI recommendations + dispatch risk notifications (fire-and-forget)
+  if (highestRiskLevel) {
+    import('./triage-automation.service.js').then(({ autoTriageAndNotify }) => {
+      void autoTriageAndNotify({
+        orgId,
+        resultId: result.id,
+        riskLevel: highestRiskLevel,
+        userId: input.userId || null,
+        dimensionScores,
+      });
+    }).catch(() => {});
+  }
+
   return result;
 }
 

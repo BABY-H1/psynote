@@ -77,6 +77,9 @@ import { eapPartnershipRoutes } from './modules/eap/eap-partnership.routes.js';
 import { eapAssignmentRoutes } from './modules/eap/eap-assignment.routes.js';
 import { eapEmployeeRoutes } from './modules/eap/eap-employee.routes.js';
 import { eapPublicRoutes } from './modules/eap/eap-public.routes.js';
+// School — 学校版班级管理 + 学生管理
+import { schoolClassRoutes } from './modules/school/school-class.routes.js';
+import { schoolStudentRoutes } from './modules/school/school-student.routes.js';
 import { eapCrisisRoutes } from './modules/eap/eap-crisis.routes.js';
 import { eapAnalyticsRoutes } from './modules/eap/eap-analytics.routes.js';
 import { initConfigService, getBootValue } from './lib/config-service.js';
@@ -223,6 +226,10 @@ await app.register(eapEmployeeRoutes, { prefix: '/api/orgs/:orgId/eap/employees'
 await app.register(eapCrisisRoutes, { prefix: '/api/orgs/:orgId/eap/crisis' });
 await app.register(eapAnalyticsRoutes, { prefix: '/api/orgs/:orgId/eap/analytics' });
 await app.register(eapPublicRoutes, { prefix: '/api/public/eap' });
+
+// School — class & student management
+await app.register(schoolClassRoutes, { prefix: '/api/orgs/:orgId/school/classes' });
+await app.register(schoolStudentRoutes, { prefix: '/api/orgs/:orgId/school/students' });
 
 // Start
 try {

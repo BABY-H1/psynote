@@ -1100,6 +1100,38 @@ export const eapCrisisAlerts = pgTable('eap_crisis_alerts', {
   index('idx_eap_crisis_org').on(t.enterpriseOrgId, t.status),
 ]);
 
+// ─── School ─────────────────────────────────────────────────────
+
+export const schoolClasses = pgTable('school_classes', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  grade: text('grade').notNull(),
+  className: text('class_name').notNull(),
+  homeroomTeacherId: uuid('homeroom_teacher_id').references(() => users.id, { onDelete: 'set null' }),
+  studentCount: integer('student_count').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_school_classes_org_grade_class').on(t.orgId, t.grade, t.className),
+  index('idx_school_classes_org').on(t.orgId),
+]);
+
+export const schoolStudentProfiles = pgTable('school_student_profiles', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  studentId: text('student_id'),
+  grade: text('grade'),
+  className: text('class_name'),
+  parentName: text('parent_name'),
+  parentPhone: text('parent_phone'),
+  parentEmail: text('parent_email'),
+  entryMethod: text('entry_method').default('import'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_school_students_org_user').on(t.orgId, t.userId),
+  index('idx_school_students_org_grade').on(t.orgId, t.grade),
+]);
+
 // ─── System Configuration ────────────────────────────────────────
 
 export const systemConfig = pgTable('system_config', {

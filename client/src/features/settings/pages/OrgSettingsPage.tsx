@@ -12,8 +12,9 @@
  */
 import React, { useState } from 'react';
 import {
-  Building2, Users, Palette, ShieldCheck, AlertTriangle, Database, FileSearch, Globe, Plus, Trash2, Handshake,
+  Building2, Users, Palette, ShieldCheck, AlertTriangle, Database, FileSearch, Globe, Plus, Trash2, Handshake, GraduationCap,
 } from 'lucide-react';
+import { SchoolClassManagement } from './SchoolClassManagement';
 import { MemberManagement } from './MemberManagement';
 import { OrgBrandingSettings } from './OrgBrandingSettings';
 import { AuditLogViewer } from '../../collaboration/AuditLogViewer';
@@ -25,37 +26,61 @@ import { useOrgMembers, type OrgMember } from '../../../api/useOrg';
 import { useToast } from '../../../shared/components';
 import { useFeature } from '../../../shared/hooks/useFeature';
 
-type SettingsTab = 'basic' | 'members' | 'branding' | 'services' | 'eap' | 'certifications' | 'triage' | 'data-policy' | 'audit';
+type SettingsTab = 'basic' | 'members' | 'branding' | 'services' | 'eap' | 'classes' | 'certifications' | 'triage' | 'data-policy' | 'audit';
 
-const TABS: { key: SettingsTab; label: string; Icon: React.ComponentType<{ className?: string }>; adminOnly?: boolean; requiresFeature?: string }[] = [
+const TABS: { key: SettingsTab; label: string; Icon: React.ComponentType<{ className?: string }>; adminOnly?: boolean; requiresFeature?: string; hideForSolo?: boolean; onlyForOrgType?: string }[] = [
   { key: 'basic', label: '基本信息', Icon: Building2 },
-  { key: 'members', label: '成员管理', Icon: Users, adminOnly: true },
-  { key: 'services', label: '公开服务', Icon: Globe, adminOnly: true },
-  { key: 'eap', label: 'EAP 合作', Icon: Handshake, adminOnly: true, requiresFeature: 'partnership' },
-  { key: 'branding', label: '品牌定制', Icon: Palette, adminOnly: true, requiresFeature: 'branding' },
-  { key: 'certifications', label: '合规证书', Icon: ShieldCheck, adminOnly: true },
-  { key: 'triage', label: '分诊规则', Icon: AlertTriangle, adminOnly: true },
-  { key: 'data-policy', label: '数据策略', Icon: Database, adminOnly: true },
-  { key: 'audit', label: '审计日志', Icon: FileSearch, adminOnly: true, requiresFeature: 'audit_log' },
+  { key: 'members', label: '成员管理', Icon: Users, adminOnly: true, hideForSolo: true },
+  { key: 'classes', label: '班级管理', Icon: GraduationCap, adminOnly: true, onlyForOrgType: 'school' },
+  { key: 'services', label: '公开服务', Icon: Globe, adminOnly: true, hideForSolo: true },
+  { key: 'eap', label: 'EAP 合作', Icon: Handshake, adminOnly: true, requiresFeature: 'partnership', hideForSolo: true },
+  { key: 'branding', label: '品牌定制', Icon: Palette, adminOnly: true, requiresFeature: 'branding', hideForSolo: true },
+  { key: 'certifications', label: '合规证书', Icon: ShieldCheck, adminOnly: true, hideForSolo: true },
+  { key: 'triage', label: '分诊规则', Icon: AlertTriangle, adminOnly: true, hideForSolo: true },
+  { key: 'data-policy', label: '数据策略', Icon: Database, adminOnly: true, hideForSolo: true },
+  { key: 'audit', label: '审计日志', Icon: FileSearch, adminOnly: true, requiresFeature: 'audit_log', hideForSolo: true },
 ];
+
+const SETTINGS_TITLE: Record<string, string> = {
+  solo: '个人设置',
+  counseling: '机构设置',
+  enterprise: '企业设置',
+  school: '学校设置',
+  hospital: '机构设置',
+};
 
 export function OrgSettingsPage() {
   const [tab, setTab] = useState<SettingsTab>('basic');
-  const { currentRole } = useAuthStore();
+  const { currentRole, currentOrgType } = useAuthStore();
   const isAdmin = currentRole === 'org_admin';
+  const isSolo = currentOrgType === 'solo';
   const checkFeature = useFeature();
 
-  const visibleTabs = TABS.filter((t) => {
-    if (t.adminOnly && !isAdmin) return false;
-    if (t.requiresFeature && !checkFeature(t.requiresFeature as any)) return false;
-    return true;
-  });
+  const isSchool = currentOrgType === 'school';
+
+  const visibleTabs = TABS
+    .filter((t) => {
+      if (t.hideForSolo && isSolo) return false;
+      if (t.onlyForOrgType && t.onlyForOrgType !== currentOrgType) return false;
+      if (t.adminOnly && !isAdmin && !isSolo) return false;
+      if (t.requiresFeature && !checkFeature(t.requiresFeature as any)) return false;
+      return true;
+    })
+    .map((t) => {
+      // Relabel members tab for school
+      if (t.key === 'members' && isSchool) return { ...t, label: '教师管理' };
+      return t;
+    });
+
+  const pageTitle = SETTINGS_TITLE[currentOrgType || 'counseling'] || '机构设置';
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-900">机构设置</h1>
-        <p className="text-sm text-slate-500 mt-1">管理机构信息、成员、合规与策略</p>
+        <h1 className="text-2xl font-bold text-slate-900">{pageTitle}</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          {isSolo ? '管理个人信息和偏好设置' : '管理组织信息、成员、合规与策略'}
+        </p>
       </div>
 
       <div className="flex border-b border-slate-200 overflow-x-auto">
@@ -79,6 +104,7 @@ export function OrgSettingsPage() {
       <div>
         {tab === 'basic' && <BasicInfoTab />}
         {tab === 'members' && <MemberManagement />}
+        {tab === 'classes' && <SchoolClassManagement />}
         {tab === 'services' && <PublicServicesTab />}
         {tab === 'eap' && <EAPPartnershipTab />}
         {tab === 'branding' && <OrgBrandingSettings />}
