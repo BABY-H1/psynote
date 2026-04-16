@@ -100,56 +100,72 @@ export function OrgSettingsPage() {
 
   const pageTitle = SETTINGS_TITLE[currentOrgType || 'counseling'] || '机构设置';
 
+  // Active group determines which sub-tabs to show
+  const activeGroup = groupedTabs.find((g) => g.tabs.some((t) => t.key === tab)) || groupedTabs[0];
+
   return (
-    <div>
-      <div className="mb-6">
+    <div className="space-y-6">
+      <div>
         <h1 className="text-2xl font-bold text-slate-900">{pageTitle}</h1>
         <p className="text-sm text-slate-500 mt-1">
           {isSolo ? '管理个人信息和偏好设置' : '管理组织信息、成员、合规与策略'}
         </p>
       </div>
 
-      <div className="flex gap-6">
-        {/* Left sidebar navigation */}
-        <nav className="w-48 shrink-0 space-y-5">
-          {groupedTabs.map(({ group, label, tabs }) => (
-            <div key={group}>
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-3 mb-1">
-                {label}
-              </h3>
-              <div className="space-y-0.5">
-                {tabs.map(({ key, label: tabLabel, Icon }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setTab(key)}
-                    className={`w-full text-left px-3 py-2 text-sm rounded-lg flex items-center gap-2 transition ${
-                      tab === key
-                        ? 'bg-blue-50 text-blue-700 font-medium'
-                        : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
-                    }`}
-                  >
-                    <Icon className="w-4 h-4 shrink-0" />
-                    {tabLabel}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </nav>
+      {/* Top-level group tabs */}
+      <div className="flex border-b border-slate-200">
+        {groupedTabs.map(({ group, label }) => (
+          <button
+            key={group}
+            type="button"
+            onClick={() => {
+              // Switch to first tab in this group
+              const firstTab = groupedTabs.find((g) => g.group === group)?.tabs[0];
+              if (firstTab) setTab(firstTab.key);
+            }}
+            className={`px-4 py-2.5 text-sm font-medium border-b-2 -mb-px whitespace-nowrap transition ${
+              activeGroup?.group === group
+                ? 'border-blue-500 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
 
-        {/* Right content area */}
-        <div className="flex-1 min-w-0">
-          {tab === 'basic' && <BasicInfoTab />}
-          {tab === 'services' && <PublicServicesTab />}
-          {tab === 'branding' && <OrgBrandingSettings />}
-          {tab === 'members' && <MemberManagement />}
-          {tab === 'classes' && <SchoolClassManagement />}
-          {tab === 'partners' && <EAPPartnershipTab />}
-          {tab === 'subscription' && <SubscriptionTab />}
-          {tab === 'audit' && <AuditLogViewer />}
-          {tab === 'certifications' && <CertificationsTab />}
+      {/* Sub-tabs within active group (only if group has more than 1 tab) */}
+      {activeGroup && activeGroup.tabs.length > 1 && (
+        <div className="flex gap-1">
+          {activeGroup.tabs.map(({ key, label: tabLabel, Icon }) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setTab(key)}
+              className={`px-3 py-1.5 text-sm rounded-lg flex items-center gap-1.5 transition ${
+                tab === key
+                  ? 'bg-blue-50 text-blue-700 font-medium'
+                  : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'
+              }`}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {tabLabel}
+            </button>
+          ))}
         </div>
+      )}
+
+      {/* Content */}
+      <div>
+        {tab === 'basic' && <BasicInfoTab />}
+        {tab === 'services' && <PublicServicesTab />}
+        {tab === 'branding' && <OrgBrandingSettings />}
+        {tab === 'members' && <MemberManagement />}
+        {tab === 'classes' && <SchoolClassManagement />}
+        {tab === 'partners' && <EAPPartnershipTab />}
+        {tab === 'subscription' && <SubscriptionTab />}
+        {tab === 'audit' && <AuditLogViewer />}
+        {tab === 'certifications' && <CertificationsTab />}
       </div>
     </div>
   );
@@ -197,16 +213,6 @@ function BasicInfoTab() {
             onChange={(e) => setName(e.target.value)}
             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
           />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-slate-700 mb-1">机构标识 (slug)</label>
-          <input
-            type="text"
-            value={org?.slug ?? ''}
-            disabled
-            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-slate-50 text-slate-500"
-          />
-          <p className="text-xs text-slate-400 mt-1">机构标识创建后不可修改</p>
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">创建时间</label>
