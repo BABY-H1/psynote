@@ -12,7 +12,7 @@
  */
 import React, { useState } from 'react';
 import {
-  Building2, Users, Palette, ShieldCheck, AlertTriangle, Database, FileSearch, Globe, Plus, Trash2, Handshake, GraduationCap,
+  Building2, Users, Palette, ShieldCheck, FileSearch, Globe, Plus, Trash2, Handshake, GraduationCap, CreditCard,
 } from 'lucide-react';
 import { SchoolClassManagement } from './SchoolClassManagement';
 import { MemberManagement } from './MemberManagement';
@@ -26,19 +26,40 @@ import { useOrgMembers, type OrgMember } from '../../../api/useOrg';
 import { useToast } from '../../../shared/components';
 import { useFeature } from '../../../shared/hooks/useFeature';
 
-type SettingsTab = 'basic' | 'members' | 'branding' | 'services' | 'eap' | 'classes' | 'certifications' | 'triage' | 'data-policy' | 'audit';
+type SettingsTab = 'basic' | 'services' | 'branding' | 'members' | 'classes' | 'partners' | 'subscription' | 'audit' | 'certifications';
 
-const TABS: { key: SettingsTab; label: string; Icon: React.ComponentType<{ className?: string }>; adminOnly?: boolean; requiresFeature?: string; hideForSolo?: boolean; onlyForOrgType?: string }[] = [
-  { key: 'basic', label: '基本信息', Icon: Building2 },
-  { key: 'members', label: '成员管理', Icon: Users, adminOnly: true, hideForSolo: true },
-  { key: 'classes', label: '班级管理', Icon: GraduationCap, adminOnly: true, onlyForOrgType: 'school' },
-  { key: 'services', label: '公开服务', Icon: Globe, adminOnly: true, hideForSolo: true },
-  { key: 'eap', label: 'EAP 合作', Icon: Handshake, adminOnly: true, requiresFeature: 'partnership', hideForSolo: true },
-  { key: 'branding', label: '品牌定制', Icon: Palette, adminOnly: true, requiresFeature: 'branding', hideForSolo: true },
-  { key: 'certifications', label: '合规证书', Icon: ShieldCheck, adminOnly: true, hideForSolo: true },
-  { key: 'triage', label: '分诊规则', Icon: AlertTriangle, adminOnly: true, hideForSolo: true },
-  { key: 'data-policy', label: '数据策略', Icon: Database, adminOnly: true, hideForSolo: true },
-  { key: 'audit', label: '审计日志', Icon: FileSearch, adminOnly: true, requiresFeature: 'audit_log', hideForSolo: true },
+interface TabDef {
+  key: SettingsTab;
+  label: string;
+  Icon: React.ComponentType<{ className?: string }>;
+  group: 'facade' | 'org' | 'business' | 'security';
+  adminOnly?: boolean;
+  requiresFeature?: string;
+  hideForSolo?: boolean;
+  onlyForOrgType?: string;
+}
+
+const GROUP_LABELS: Record<string, string> = {
+  facade: '门面信息',
+  org: '组织管理',
+  business: '经营信息',
+  security: '安全与合规',
+};
+
+const TABS: TabDef[] = [
+  // 门面信息
+  { key: 'basic', label: '基本信息', Icon: Building2, group: 'facade' },
+  { key: 'services', label: '公开服务', Icon: Globe, group: 'facade', adminOnly: true, hideForSolo: true },
+  { key: 'branding', label: '品牌定制', Icon: Palette, group: 'facade', adminOnly: true, requiresFeature: 'branding', hideForSolo: true },
+  // 组织管理
+  { key: 'members', label: '成员管理', Icon: Users, group: 'org', adminOnly: true, hideForSolo: true },
+  { key: 'classes', label: '班级管理', Icon: GraduationCap, group: 'org', adminOnly: true, onlyForOrgType: 'school' },
+  { key: 'partners', label: '合作机构', Icon: Handshake, group: 'org', adminOnly: true, requiresFeature: 'partnership', hideForSolo: true },
+  // 经营信息
+  { key: 'subscription', label: '订阅管理', Icon: CreditCard, group: 'business' },
+  // 安全与合规
+  { key: 'audit', label: '审计日志', Icon: FileSearch, group: 'security', adminOnly: true, hideForSolo: true },
+  { key: 'certifications', label: '合规证书', Icon: ShieldCheck, group: 'security', adminOnly: true, hideForSolo: true },
 ];
 
 const SETTINGS_TITLE: Record<string, string> = {
@@ -67,10 +88,15 @@ export function OrgSettingsPage() {
       return true;
     })
     .map((t) => {
-      // Relabel members tab for school
       if (t.key === 'members' && isSchool) return { ...t, label: '教师管理' };
       return t;
     });
+
+  // Group visible tabs
+  const groups = ['facade', 'org', 'business', 'security'] as const;
+  const groupedTabs = groups
+    .map((g) => ({ group: g, label: GROUP_LABELS[g], tabs: visibleTabs.filter((t) => t.group === g) }))
+    .filter((g) => g.tabs.length > 0);
 
   const pageTitle = SETTINGS_TITLE[currentOrgType || 'counseling'] || '机构设置';
 
@@ -84,34 +110,41 @@ export function OrgSettingsPage() {
       </div>
 
       <div className="flex border-b border-slate-200 overflow-x-auto">
-        {visibleTabs.map(({ key, label, Icon }) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setTab(key)}
-            className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-1.5 whitespace-nowrap ${
-              tab === key
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Icon className="w-4 h-4" />
-            {label}
-          </button>
+        {groupedTabs.map(({ group, label, tabs }, gi) => (
+          <React.Fragment key={group}>
+            {gi > 0 && <div className="w-px bg-slate-200 mx-1 my-1.5" />}
+            <span className="text-[10px] text-slate-400 uppercase tracking-wider px-2 py-2.5 self-center whitespace-nowrap select-none">
+              {label}
+            </span>
+            {tabs.map(({ key, label: tabLabel, Icon }) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => setTab(key)}
+                className={`px-3 py-2.5 text-sm font-medium border-b-2 -mb-px flex items-center gap-1.5 whitespace-nowrap ${
+                  tab === key
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-700'
+                }`}
+              >
+                <Icon className="w-4 h-4" />
+                {tabLabel}
+              </button>
+            ))}
+          </React.Fragment>
         ))}
       </div>
 
       <div>
         {tab === 'basic' && <BasicInfoTab />}
+        {tab === 'services' && <PublicServicesTab />}
+        {tab === 'branding' && <OrgBrandingSettings />}
         {tab === 'members' && <MemberManagement />}
         {tab === 'classes' && <SchoolClassManagement />}
-        {tab === 'services' && <PublicServicesTab />}
-        {tab === 'eap' && <EAPPartnershipTab />}
-        {tab === 'branding' && <OrgBrandingSettings />}
-        {tab === 'certifications' && <CertificationsTab />}
-        {tab === 'triage' && <TriageConfigTab />}
-        {tab === 'data-policy' && <DataPolicyTab />}
+        {tab === 'partners' && <EAPPartnershipTab />}
+        {tab === 'subscription' && <SubscriptionTab />}
         {tab === 'audit' && <AuditLogViewer />}
+        {tab === 'certifications' && <CertificationsTab />}
       </div>
     </div>
   );
@@ -184,7 +217,35 @@ function BasicInfoTab() {
         </button>
       </div>
 
-      {/* License info & activation */}
+    </div>
+  );
+}
+
+// ─── Subscription Tab (经营信息) ────────────────────────────────────
+
+function SubscriptionTab() {
+  const { currentOrgTier, currentOrgType } = useAuthStore();
+
+  const tierLabel: Record<string, string> = { starter: '入门版', growth: '成长版', flagship: '旗舰版' };
+  const typeLabel: Record<string, string> = { solo: '个体咨询师', counseling: '专业机构', enterprise: '企业', school: '学校', hospital: '医疗机构' };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-slate-50 rounded-lg p-4">
+          <span className="text-sm text-slate-500">当前套餐</span>
+          <p className="text-lg font-bold text-slate-900 mt-1">
+            {tierLabel[currentOrgTier || 'starter'] || '入门版'}
+          </p>
+        </div>
+        <div className="bg-slate-50 rounded-lg p-4">
+          <span className="text-sm text-slate-500">组织类型</span>
+          <p className="text-lg font-bold text-slate-900 mt-1">
+            {typeLabel[currentOrgType || 'counseling'] || '专业机构'}
+          </p>
+        </div>
+      </div>
+
       <LicenseCard />
     </div>
   );
@@ -296,134 +357,6 @@ function CertificationsTab() {
           </div>
         );
       })}
-    </div>
-  );
-}
-
-// ─── Triage Config Tab ──────────────────────────────────────────────
-
-function TriageConfigTab() {
-  const orgId = useAuthStore((s) => s.currentOrgId);
-  const { data: config, isLoading } = useQuery({
-    queryKey: ['triage-config', orgId],
-    queryFn: () => api.get<any>(`/orgs/${orgId}/triage-config`),
-    enabled: !!orgId,
-  });
-  const { toast } = useToast();
-  const [editConfig, setEditConfig] = useState<string>('');
-  const [initialized, setInitialized] = useState(false);
-
-  React.useEffect(() => {
-    if (config && !initialized) {
-      setEditConfig(JSON.stringify(config, null, 2));
-      setInitialized(true);
-    }
-  }, [config, initialized]);
-
-  const updateConfig = useMutation({
-    mutationFn: (data: unknown) => api.put(`/orgs/${orgId}/triage-config`, data),
-    onSuccess: () => toast('分诊规则已保存', 'success'),
-    onError: () => toast('保存失败，请检查 JSON 格式', 'error'),
-  });
-
-  if (isLoading) return <div className="text-sm text-slate-400">加载中…</div>;
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4 max-w-2xl">
-      <p className="text-sm text-slate-500">
-        配置风险等级分诊规则。修改后保存即可生效。
-      </p>
-      <textarea
-        value={editConfig}
-        onChange={(e) => setEditConfig(e.target.value)}
-        rows={16}
-        className="w-full font-mono text-xs border border-slate-200 rounded-lg px-3 py-2"
-      />
-      <button
-        type="button"
-        onClick={() => {
-          try {
-            const parsed = JSON.parse(editConfig);
-            updateConfig.mutate(parsed);
-          } catch {
-            toast('JSON 格式错误', 'error');
-          }
-        }}
-        disabled={updateConfig.isPending}
-        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-      >
-        {updateConfig.isPending ? '保存中…' : '保存'}
-      </button>
-    </div>
-  );
-}
-
-// ─── Data Policy Tab ────────────────────────────────────────────────
-
-function DataPolicyTab() {
-  const orgId = useAuthStore((s) => s.currentOrgId);
-  const { data: org, isLoading } = useQuery({
-    queryKey: ['org-detail', orgId],
-    queryFn: () => api.get<{ dataRetentionPolicy: any }>(`/orgs/${orgId}`),
-    enabled: !!orgId,
-  });
-  const { toast } = useToast();
-  const [policy, setPolicy] = useState({ archiveAfterDays: 90, retainAfterDays: 365 });
-  const [initialized, setInitialized] = useState(false);
-
-  React.useEffect(() => {
-    if (org?.dataRetentionPolicy && !initialized) {
-      setPolicy({
-        archiveAfterDays: org.dataRetentionPolicy.archiveAfterDays ?? 90,
-        retainAfterDays: org.dataRetentionPolicy.retainAfterDays ?? 365,
-      });
-      setInitialized(true);
-    }
-  }, [org, initialized]);
-
-  const updatePolicy = useMutation({
-    mutationFn: () => api.patch(`/orgs/${orgId}`, { settings: { dataRetentionPolicy: policy } }),
-    onSuccess: () => toast('数据策略已保存', 'success'),
-  });
-
-  if (isLoading) return <div className="text-sm text-slate-400">加载中…</div>;
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-xl p-6 space-y-4 max-w-lg">
-      <p className="text-sm text-slate-500">
-        配置数据保留策略。目前仅为配置项，不会自动执行删除操作。
-      </p>
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">结案后归档天数</label>
-        <input
-          type="number"
-          value={policy.archiveAfterDays}
-          onChange={(e) => setPolicy({ ...policy, archiveAfterDays: Number(e.target.value) })}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-slate-700 mb-1">归档后保留天数</label>
-        <input
-          type="number"
-          value={policy.retainAfterDays}
-          onChange={(e) => setPolicy({ ...policy, retainAfterDays: Number(e.target.value) })}
-          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm"
-        />
-      </div>
-      <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-        <p className="text-xs text-amber-700">
-          注意：此策略目前仅为配置参考，系统不会自动删除或归档数据。未来版本将支持自动执行。
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={() => updatePolicy.mutate()}
-        disabled={updatePolicy.isPending}
-        className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
-      >
-        {updatePolicy.isPending ? '保存中…' : '保存'}
-      </button>
     </div>
   );
 }
