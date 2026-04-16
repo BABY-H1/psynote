@@ -108,7 +108,8 @@ export async function seedDemoAuth(role: 'counselor' | 'client' | 'org_admin' = 
       const store = useAuthStore.getState();
       store.setAuth(user, accessToken, refreshToken, !!isSystemAdmin);
       if (org) {
-        store.setOrg(org.id, org.myRole ?? demo.role, planToTier(org.plan));
+        const orgType = org.settings?.orgType || 'counseling';
+        store.setOrg(org.id, org.myRole ?? demo.role, planToTier(org.plan), undefined, orgType);
       } else {
         store.setOrg(demo.orgId, demo.role, planToTier(null));
       }

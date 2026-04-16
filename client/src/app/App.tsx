@@ -237,7 +237,9 @@ function OrgSelector() {
           return;
         }
         const { planToTier } = await import('@psynote/shared');
-        const orgType = (orgs[0].settings?.orgType || 'counseling') as any;
+        const orgSettings = (orgs[0] as any).settings;
+        const orgType = orgSettings?.orgType || 'counseling';
+        console.log('[OrgSelector] orgType:', orgType, 'settings:', orgSettings);
         setOrg(orgs[0].id, orgs[0].myRole as any, planToTier(orgs[0].plan), undefined, orgType);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : '加载机构失败');
@@ -350,6 +352,19 @@ function AppShell() {
         });
     }
   }, [currentOrgId, currentRole, currentOrgTier, setOrg]);
+
+  // Hydrate orgType if missing (e.g. persisted state from before orgType was added)
+  React.useEffect(() => {
+    if (currentOrgId && currentRole && !currentOrgType) {
+      api
+        .get<{ settings?: { orgType?: string } }>(`/orgs/${currentOrgId}`)
+        .then((res) => {
+          const orgType = res.settings?.orgType || 'counseling';
+          setOrg(currentOrgId, currentRole, currentOrgTier ?? undefined, undefined, orgType as any);
+        })
+        .catch(() => {});
+    }
+  }, [currentOrgId, currentRole, currentOrgType, currentOrgTier, setOrg]);
 
   // Phase 7b — if the org has branding tier + a logo set, swap the "Psynote"
   // wordmark in the sidebar header for the org's custom logo. Otherwise this
