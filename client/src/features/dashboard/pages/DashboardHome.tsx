@@ -35,16 +35,6 @@ export function DashboardHome() {
 
   return (
     <div className="space-y-8">
-      {/* Welcome header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">
-          你好，{user?.name || '用户'}
-        </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          欢迎回到 Psynote 工作台，以下是今天的概览
-        </p>
-      </div>
-
       {/* ─── 看板 · 未来 ─── */}
       <SectionDivider label="看板 · 未来" />
       <DashboardCountGrid />

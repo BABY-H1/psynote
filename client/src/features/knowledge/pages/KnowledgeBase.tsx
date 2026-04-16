@@ -24,12 +24,7 @@ export function KnowledgeBase() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">知识库</h1>
-        <p className="text-sm text-slate-500 mt-1">测评量表、治疗目标、合规协议、方案与记录模板等专业资源</p>
-      </div>
-
+    <div className="space-y-4">
       {/* Sub tabs — pill style */}
       <div className="flex gap-1 bg-slate-100 rounded-xl p-1">
         {displayTabs.map((tab) => (

@@ -455,9 +455,7 @@ function AppShell() {
 
       {/* Main content */}
       <main className="flex-1 p-6 overflow-y-auto">
-        <div className="max-w-5xl mx-auto">
-          <Outlet />
-        </div>
+        <Outlet />
       </main>
     </div>
   );

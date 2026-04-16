@@ -104,14 +104,7 @@ export function OrgSettingsPage() {
   const activeGroup = groupedTabs.find((g) => g.tabs.some((t) => t.key === tab)) || groupedTabs[0];
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">{pageTitle}</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          {isSolo ? '管理个人信息和偏好设置' : '管理组织信息、成员、合规与策略'}
-        </p>
-      </div>
-
+    <div className="space-y-4">
       {/* Top-level group tabs */}
       <div className="flex border-b border-slate-200">
         {groupedTabs.map(({ group, label }) => (

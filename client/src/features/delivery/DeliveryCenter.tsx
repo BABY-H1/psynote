@@ -84,15 +84,7 @@ export function DeliveryCenter() {
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">交付中心</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          所有交付服务的统一入口。按类型筛选，进入对应的工作区。
-        </p>
-      </div>
-
+    <div className="space-y-4">
       {/* Type filter tabs */}
       <div className="flex flex-wrap items-center gap-1 bg-slate-100 rounded-xl p-1">
         {TYPE_TABS.map((t) => {

@@ -42,12 +42,7 @@ export function OrgCollaboration() {
   const [tab, setTab] = useState<TabKey>('assignment');
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">协作中心</h1>
-        <p className="text-sm text-slate-500 mt-1">派单 / 授权 / 督导 / 转介 一处管理</p>
-      </div>
-
+    <div className="space-y-4">
       <div className="flex border-b border-slate-200">
         {TABS.map(({ key, label, Icon }) => (
           <button

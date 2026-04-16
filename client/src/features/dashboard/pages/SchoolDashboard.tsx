@@ -34,9 +34,6 @@ export function SchoolDashboard() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-slate-900 mb-1">学校心理工作台</h1>
-      <p className="text-sm text-slate-500 mb-6">学生心理健康概览</p>
-
       <div className="grid grid-cols-4 gap-4 mb-8">
         {tiles.map(({ label, value, icon: Icon, color }) => (
           <div key={label} className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
