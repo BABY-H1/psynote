@@ -64,11 +64,7 @@ export function MemberManagement() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">成员管理</h1>
-          <p className="text-sm text-slate-500 mt-1">管理机构内的咨询师和来访者</p>
-        </div>
+      <div className="flex items-center justify-end">
         <button
           onClick={() => setShowInvite(!showInvite)}
           className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 flex items-center gap-2"

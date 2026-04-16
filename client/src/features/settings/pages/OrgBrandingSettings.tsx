@@ -75,16 +75,6 @@ function BrandingForm() {
 
   return (
     <div className="max-w-2xl space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-xl font-bold text-slate-900">品牌定制</h1>
-        <p className="text-sm text-slate-500 mt-1">
-          自定义机构 logo、主题色和测评报告页眉页脚。当前订阅：
-          <span className="ml-1 px-2 py-0.5 rounded-full bg-brand-50 text-brand-700 text-xs font-medium">
-            {TIER_LABELS[tier]}
-          </span>
-        </p>
-      </div>
 
       <form onSubmit={handleSubmit} className="space-y-5">
         {/* Logo URL */}
