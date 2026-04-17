@@ -15,6 +15,7 @@ import {
   Building2, Users, Palette, ShieldCheck, FileSearch, Globe, Plus, Trash2, Handshake, GraduationCap, CreditCard,
 } from 'lucide-react';
 import { SchoolClassManagement } from './SchoolClassManagement';
+import { SchoolStudentList } from './SchoolStudentList';
 import { MemberManagement } from './MemberManagement';
 import { OrgBrandingSettings } from './OrgBrandingSettings';
 import { SubscriptionTab } from './SubscriptionTab';
@@ -26,7 +27,7 @@ import { useOrgMembers, type OrgMember } from '../../../api/useOrg';
 import { useToast } from '../../../shared/components';
 import { useFeature } from '../../../shared/hooks/useFeature';
 
-type SettingsTab = 'basic' | 'services' | 'branding' | 'members' | 'classes' | 'partners' | 'subscription' | 'audit' | 'certifications';
+type SettingsTab = 'basic' | 'services' | 'branding' | 'members' | 'classes' | 'students' | 'partners' | 'subscription' | 'audit' | 'certifications';
 
 interface TabDef {
   key: SettingsTab;
@@ -54,6 +55,7 @@ const TABS: TabDef[] = [
   // 组织管理
   { key: 'members', label: '成员管理', Icon: Users, group: 'org', adminOnly: true, hideForSolo: true },
   { key: 'classes', label: '班级管理', Icon: GraduationCap, group: 'org', adminOnly: true, onlyForOrgType: 'school' },
+  { key: 'students', label: '学生管理', Icon: GraduationCap, group: 'org', adminOnly: true, onlyForOrgType: 'school' },
   { key: 'partners', label: '合作机构', Icon: Handshake, group: 'org', adminOnly: true, requiresFeature: 'partnership', hideForSolo: true },
   // 自动化规则 tab 已下线 — 规则改为在每个测评的「筛查规则」步骤里按测评级独立配置。
   // 若后续需要跨测评的机构通用规则,可再恢复此入口。
@@ -157,6 +159,7 @@ export function OrgSettingsPage() {
         {tab === 'branding' && <OrgBrandingSettings />}
         {tab === 'members' && <MemberManagement />}
         {tab === 'classes' && <SchoolClassManagement />}
+        {tab === 'students' && <SchoolStudentList />}
         {tab === 'partners' && <EAPPartnershipTab />}
         {tab === 'subscription' && <SubscriptionTab />}
         {tab === 'audit' && <AuditLogViewer />}
