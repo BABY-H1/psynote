@@ -80,7 +80,6 @@ import { crisisRoutes } from './modules/crisis/crisis-case.routes.js';
 // EAP Enterprise — 国央企版 partnership & assignment
 import { eapPartnershipRoutes } from './modules/eap/eap-partnership.routes.js';
 import { eapAssignmentRoutes } from './modules/eap/eap-assignment.routes.js';
-import { eapEmployeeRoutes } from './modules/eap/eap-employee.routes.js';
 import { eapPublicRoutes } from './modules/eap/eap-public.routes.js';
 // School — 学校版班级管理 + 学生管理
 import { schoolClassRoutes } from './modules/school/school-class.routes.js';
@@ -91,7 +90,6 @@ import { schoolAnalyticsRoutes } from './modules/school/school-analytics.routes.
 import { parentInvitationRoutes } from './modules/parent-binding/parent-binding.routes.js';
 import { publicParentBindingRoutes } from './modules/parent-binding/public-parent-binding.routes.js';
 import { portalChildrenRoutes } from './modules/parent-binding/portal-children.routes.js';
-import { eapCrisisRoutes } from './modules/eap/eap-crisis.routes.js';
 import { eapAnalyticsRoutes } from './modules/eap/eap-analytics.routes.js';
 import { initConfigService, getBootValue } from './lib/config-service.js';
 
@@ -234,11 +232,11 @@ await app.register(collaborationRoutes, { prefix: '/api/orgs/:orgId/collaboratio
 await app.register(workflowRoutes, { prefix: '/api/orgs/:orgId/workflow' });
 await app.register(crisisRoutes, { prefix: '/api/orgs/:orgId/crisis' });
 
-// EAP Enterprise — partnerships, assignments, employees
+// EAP Enterprise — partnerships + assignments + analytics + public registration.
+// Phase 14h: /eap/employees and /eap/crisis HTTP routes deleted (zero clients
+// after the HR shell removal); the underlying tables and analytics queries remain.
 await app.register(eapPartnershipRoutes, { prefix: '/api/orgs/:orgId/eap/partnerships' });
 await app.register(eapAssignmentRoutes, { prefix: '/api/orgs/:orgId/eap/assignments' });
-await app.register(eapEmployeeRoutes, { prefix: '/api/orgs/:orgId/eap/employees' });
-await app.register(eapCrisisRoutes, { prefix: '/api/orgs/:orgId/eap/crisis' });
 await app.register(eapAnalyticsRoutes, { prefix: '/api/orgs/:orgId/eap/analytics' });
 await app.register(eapPublicRoutes, { prefix: '/api/public/eap' });
 
