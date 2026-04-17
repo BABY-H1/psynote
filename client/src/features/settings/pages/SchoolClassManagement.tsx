@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
-import { Plus, Trash2, GraduationCap, X } from 'lucide-react';
+import { Plus, Trash2, GraduationCap, X, QrCode } from 'lucide-react';
+import { ParentInviteModal } from './ParentInviteModal';
 
 interface SchoolClass {
   id: string;
@@ -19,6 +20,7 @@ export function SchoolClassManagement() {
   const [showAdd, setShowAdd] = useState(false);
   const [newGrade, setNewGrade] = useState('');
   const [newClassName, setNewClassName] = useState('');
+  const [inviteForClass, setInviteForClass] = useState<SchoolClass | null>(null);
 
   useEffect(() => {
     loadClasses();
@@ -105,12 +107,23 @@ export function SchoolClassManagement() {
                     )}
                     <span className="text-xs text-slate-400">{cls.studentCount} 人</span>
                   </div>
-                  <button
-                    onClick={() => handleDelete(cls.id)}
-                    className="text-slate-400 hover:text-red-500 transition"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={() => setInviteForClass(cls)}
+                      className="text-slate-400 hover:text-teal-600 transition flex items-center gap-1 px-2 py-1 rounded text-xs"
+                      title="生成本班家长邀请码"
+                    >
+                      <QrCode className="w-4 h-4" />
+                      家长邀请
+                    </button>
+                    <button
+                      onClick={() => handleDelete(cls.id)}
+                      className="text-slate-400 hover:text-red-500 transition p-1"
+                      title="删除班级"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -167,6 +180,14 @@ export function SchoolClassManagement() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Phase 14 — Parent invite token modal */}
+      {inviteForClass && (
+        <ParentInviteModal
+          schoolClass={inviteForClass}
+          onClose={() => setInviteForClass(null)}
+        />
       )}
     </div>
   );

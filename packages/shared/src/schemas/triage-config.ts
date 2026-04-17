@@ -16,7 +16,10 @@ export const triageConfigSchema = z.object({
   levels: z.array(triageLevelSchema).min(1),
   aggregation: z.enum(['highest', 'weighted_average', 'custom_formula']).default('highest'),
   requireCounselorConfirm: z.boolean().default(true),
-  autoActions: z.record(z.array(z.string())).default({}),
+  // NOTE: `autoActions` (level → action names map) used to live here but was
+  // never read by any executor. Replaced by `workflow_rules` in Phase 12.
+  // Per-assessment rules authored in the assessment wizard are the source
+  // of truth now; this schema only defines display/aggregation.
 });
 
 /** Default four-level triage template (Chinese standard) */
@@ -57,8 +60,4 @@ export const DEFAULT_TRIAGE_CONFIG = {
   ],
   aggregation: 'highest' as const,
   requireCounselorConfirm: true,
-  autoActions: {
-    level_3: ['create_appointment_suggestion'],
-    level_4: ['create_appointment_suggestion', 'admin_alert', 'safety_notice_to_client'],
-  },
 } satisfies z.infer<typeof triageConfigSchema>;

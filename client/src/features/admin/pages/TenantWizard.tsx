@@ -2,13 +2,18 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../api/client';
 import { ArrowLeft, ArrowRight, Check, Building2, CreditCard, UserPlus, Settings, CheckCircle2, Briefcase, Stethoscope, GraduationCap, Hospital } from 'lucide-react';
-import { TIER_LABELS, TIER_FEATURES, hasFeature, type OrgTier } from '@psynote/shared';
+import {
+  TIER_LABELS,
+  TIER_FEATURES,
+  ORG_TYPE_DISPLAY,
+  type OrgTier,
+  type OrgType,
+  type OrgTypeTheme,
+} from '@psynote/shared';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
 /* ------------------------------------------------------------------ */
-
-type OrgType = 'solo' | 'counseling' | 'enterprise' | 'school' | 'hospital';
 
 interface WizardState {
   orgType: OrgType;
@@ -37,70 +42,25 @@ const STEPS = [
 ];
 
 /* ------------------------------------------------------------------ */
-/*  Org type config                                                    */
+/*  Org type display — icon + selected-card border mapping             */
+/*  (labels/themes come from shared ORG_TYPE_DISPLAY)                  */
 /* ------------------------------------------------------------------ */
 
-const ORG_TYPE_CONFIG = {
-  solo: {
-    label: '个体咨询师',
-    description: '独立执业的心理咨询师，1 人使用',
-    icon: UserPlus,
-    color: 'border-green-500 bg-green-50',
-    iconBg: 'bg-green-100',
-    iconColor: 'text-green-600',
-    nameLabel: '执业名称',
-    namePlaceholder: '如：张老师心理工作室',
-    slugLabel: '标识 (slug)',
-    adminLabel: '咨询师账号',
-  },
-  counseling: {
-    label: '专业机构',
-    description: '心理咨询中心、治疗机构、EAP 服务商等多人团队',
-    icon: Stethoscope,
-    color: 'border-blue-500 bg-blue-50',
-    iconBg: 'bg-blue-100',
-    iconColor: 'text-blue-600',
-    nameLabel: '机构名称',
-    namePlaceholder: '如：阳光心理健康中心',
-    slugLabel: '机构标识 (slug)',
-    adminLabel: '机构管理员',
-  },
-  enterprise: {
-    label: '企业',
-    description: '国企、央企、民企等需要 EAP 员工心理援助服务的企业或工会',
-    icon: Briefcase,
-    color: 'border-amber-500 bg-amber-50',
-    iconBg: 'bg-amber-100',
-    iconColor: 'text-amber-600',
-    nameLabel: '企业名称',
-    namePlaceholder: '如：中石化工会心理关爱中心',
-    slugLabel: '企业标识 (slug)',
-    adminLabel: '企业管理员（HR/工会）',
-  },
-  school: {
-    label: '学校',
-    description: '中小学、高校心理健康中心、学生心理辅导站',
-    icon: GraduationCap,
-    color: 'border-teal-500 bg-teal-50',
-    iconBg: 'bg-teal-100',
-    iconColor: 'text-teal-600',
-    nameLabel: '学校名称',
-    namePlaceholder: '如：清华大学心理健康中心',
-    slugLabel: '学校标识 (slug)',
-    adminLabel: '学校管理员',
-  },
-  hospital: {
-    label: '医疗机构',
-    description: '精神卫生中心、综合医院心理科、康复机构',
-    icon: Hospital,
-    color: 'border-rose-500 bg-rose-50',
-    iconBg: 'bg-rose-100',
-    iconColor: 'text-rose-600',
-    nameLabel: '机构名称',
-    namePlaceholder: '如：北京安定医院心理科',
-    slugLabel: '机构标识 (slug)',
-    adminLabel: '机构管理员',
-  },
+const ORG_TYPE_ICONS: Record<OrgType, typeof UserPlus> = {
+  solo: UserPlus,
+  counseling: Stethoscope,
+  enterprise: Briefcase,
+  school: GraduationCap,
+  hospital: Hospital,
+};
+
+/** Tailwind needs full class names at build time. We pin them here per theme. */
+const ORG_TYPE_CARD_SELECTED_CLASS: Record<OrgTypeTheme, string> = {
+  green: 'border-green-500 bg-green-50',
+  blue: 'border-blue-500 bg-blue-50',
+  amber: 'border-amber-500 bg-amber-50',
+  teal: 'border-teal-500 bg-teal-50',
+  rose: 'border-rose-500 bg-rose-50',
 };
 
 /* ------------------------------------------------------------------ */
@@ -122,11 +82,8 @@ export function TenantWizard() {
     providerOrgId: '',
   });
 
-  const config = ORG_TYPE_CONFIG[state.orgType];
+  const config = ORG_TYPE_DISPLAY[state.orgType];
   const isEnterprise = state.orgType === 'enterprise';
-  // Derive theme from orgType for step indicator / buttons
-  const themeColor = isEnterprise ? 'amber' : state.orgType === 'solo' ? 'green'
-    : state.orgType === 'school' ? 'teal' : state.orgType === 'hospital' ? 'rose' : 'blue';
   const availableTiers = ALL_TIERS;
 
   // Load available orgs for provider selection (enterprise only)
@@ -258,26 +215,26 @@ export function TenantWizard() {
             <h2 className="text-base font-semibold text-slate-900 mb-2">选择组织类型</h2>
             <p className="text-sm text-slate-500 mb-4">决定租户的管理界面和功能范围</p>
 
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
               {(['solo', 'counseling', 'enterprise', 'school', 'hospital'] as OrgType[]).map((type) => {
-                const c = ORG_TYPE_CONFIG[type];
-                const Icon = c.icon;
+                const c = ORG_TYPE_DISPLAY[type];
+                const Icon = ORG_TYPE_ICONS[type];
                 const selected = state.orgType === type;
                 return (
                   <button
                     key={type}
                     onClick={() => selectOrgType(type)}
-                    className={`text-left p-5 rounded-xl border-2 transition ${
-                      selected ? c.color : 'border-slate-200 hover:border-slate-300'
+                    className={`text-left p-4 rounded-xl border-2 transition ${
+                      selected ? ORG_TYPE_CARD_SELECTED_CLASS[c.theme] : 'border-slate-200 hover:border-slate-300'
                     }`}
                   >
                     <div className="flex items-center gap-3 mb-3">
-                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${c.iconBg}`}>
-                        <Icon className={`w-5 h-5 ${c.iconColor}`} />
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${c.iconBgClass}`}>
+                        <Icon className={`w-5 h-5 ${c.iconColorClass}`} />
                       </div>
-                      <div className="text-base font-semibold text-slate-900">{c.label}</div>
+                      <div className="text-sm font-semibold text-slate-900">{c.label}</div>
                     </div>
-                    <p className="text-sm text-slate-500">{c.description}</p>
+                    <p className="text-xs text-slate-500 leading-snug">{c.description}</p>
                   </button>
                 );
               })}

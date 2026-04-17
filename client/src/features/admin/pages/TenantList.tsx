@@ -1,8 +1,15 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../../../api/client';
-import { Building2, Search, Plus, ChevronRight, Edit2, Trash2, X } from 'lucide-react';
-import { TIER_LABELS, type OrgTier, type LicenseStatus } from '@psynote/shared';
+import { Search, Plus, ChevronRight, Edit2, Trash2, X } from 'lucide-react';
+import {
+  TIER_LABELS,
+  ORG_TYPE_DISPLAY,
+  getOrgTypeDisplay,
+  type OrgTier,
+  type OrgType,
+  type LicenseStatus,
+} from '@psynote/shared';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -34,12 +41,16 @@ const TIER_COLORS: Record<string, string> = {
   starter: 'bg-slate-100 text-slate-600',
   growth: 'bg-blue-100 text-blue-700',
   flagship: 'bg-purple-100 text-purple-700',
-  // Legacy tier names for backward compat
-  solo: 'bg-slate-100 text-slate-600',
-  team: 'bg-blue-100 text-blue-700',
-  enterprise: 'bg-purple-100 text-purple-700',
-  platform: 'bg-red-100 text-red-700',
 };
+
+const ORG_TYPE_FILTER_OPTIONS: { value: 'all' | OrgType; label: string }[] = [
+  { value: 'all', label: '全部类型' },
+  { value: 'solo', label: ORG_TYPE_DISPLAY.solo.label },
+  { value: 'counseling', label: ORG_TYPE_DISPLAY.counseling.label },
+  { value: 'enterprise', label: ORG_TYPE_DISPLAY.enterprise.label },
+  { value: 'school', label: ORG_TYPE_DISPLAY.school.label },
+  { value: 'hospital', label: ORG_TYPE_DISPLAY.hospital.label },
+];
 
 const LICENSE_STATUS: Record<LicenseStatus, { label: string; color: string }> = {
   active: { label: '有效', color: 'text-green-600' },
@@ -58,6 +69,7 @@ export function TenantList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [tierFilter, setTierFilter] = useState<string>('all');
+  const [orgTypeFilter, setOrgTypeFilter] = useState<'all' | OrgType>('all');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [editingTenant, setEditingTenant] = useState<TenantRow | null>(null);
   const [editForm, setEditForm] = useState({ name: '', slug: '' });
@@ -113,6 +125,7 @@ export function TenantList() {
       if (!t.name.toLowerCase().includes(q) && !t.slug.toLowerCase().includes(q)) return false;
     }
     if (tierFilter !== 'all' && t.license.tier !== tierFilter) return false;
+    if (orgTypeFilter !== 'all' && (t.orgType || 'counseling') !== orgTypeFilter) return false;
     if (statusFilter !== 'all' && t.license.status !== statusFilter) return false;
     return true;
   });
@@ -135,27 +148,35 @@ export function TenantList() {
       </div>
 
       {/* Filters */}
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="搜索机构名称或标识..."
+            placeholder="搜索名称或标识..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             className="w-full pl-9 pr-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500"
           />
         </div>
         <select
+          value={orgTypeFilter}
+          onChange={(e) => setOrgTypeFilter(e.target.value as 'all' | OrgType)}
+          className="text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+        >
+          {ORG_TYPE_FILTER_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <select
           value={tierFilter}
           onChange={(e) => setTierFilter(e.target.value)}
           className="text-sm border border-slate-200 rounded-lg px-3 py-2 text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
         >
           <option value="all">全部套餐</option>
-          <option value="solo">个人版</option>
-          <option value="team">团队版</option>
-          <option value="enterprise">企业版</option>
-          <option value="platform">平台版</option>
+          <option value="starter">入门版</option>
+          <option value="growth">成长版</option>
+          <option value="flagship">旗舰版</option>
         </select>
         <select
           value={statusFilter}
@@ -181,7 +202,7 @@ export function TenantList() {
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-100">
-                <th className="text-left px-5 py-3 text-xs font-medium text-slate-500">机构名称</th>
+                <th className="text-left px-5 py-3 text-xs font-medium text-slate-500">名称</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500">标识</th>
                 <th className="text-left px-4 py-3 text-xs font-medium text-slate-500">套餐</th>
                 <th className="text-center px-4 py-3 text-xs font-medium text-slate-500">成员数</th>
@@ -194,6 +215,7 @@ export function TenantList() {
               {filtered.map((t) => {
                 const tier = t.license.tier;
                 const status = LICENSE_STATUS[t.license.status];
+                const display = getOrgTypeDisplay(t.orgType);
                 return (
                   <tr
                     key={t.id}
@@ -202,21 +224,13 @@ export function TenantList() {
                   >
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${
-                          t.isEnterprise
-                            ? 'bg-amber-100 text-amber-600'
-                            : 'bg-brand-100 text-brand-600'
-                        }`}>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-sm shrink-0 ${display.iconBgClass} ${display.iconColorClass}`}>
                           {t.name.charAt(0)}
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-medium text-slate-900">{t.name}</span>
-                          <span className={`text-xs px-1.5 py-0.5 rounded-full ${
-                            t.isEnterprise
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-blue-50 text-blue-600'
-                          }`}>
-                            {t.isEnterprise ? '企业' : '机构'}
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full ${display.badgeClass}`}>
+                            {display.badge}
                           </span>
                           {t.isEnterprise && t.partnershipCount ? (
                             <span className="text-xs text-slate-400">
@@ -286,7 +300,9 @@ export function TenantList() {
             </div>
             <div className="px-6 py-4 space-y-4">
               <div>
-                <label className="block text-sm text-slate-600 mb-1">机构名称</label>
+                <label className="block text-sm text-slate-600 mb-1">
+                  {editingTenant ? getOrgTypeDisplay(editingTenant.orgType).nameLabel : '名称'}
+                </label>
                 <input
                   type="text"
                   value={editForm.name}
@@ -295,7 +311,9 @@ export function TenantList() {
                 />
               </div>
               <div>
-                <label className="block text-sm text-slate-600 mb-1">机构标识 (slug)</label>
+                <label className="block text-sm text-slate-600 mb-1">
+                  {editingTenant ? getOrgTypeDisplay(editingTenant.orgType).slugLabel : '标识 (slug)'}
+                </label>
                 <input
                   type="text"
                   value={editForm.slug}

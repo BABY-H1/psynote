@@ -1,8 +1,9 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User as UserIcon, FileCheck, Settings, LogOut, ChevronRight, Mail } from 'lucide-react';
+import { User as UserIcon, FileCheck, Settings, LogOut, ChevronRight, Mail, Users } from 'lucide-react';
 import { useAuthStore } from '@client/stores/authStore';
 import { useMyDocuments } from '@client/api/useConsent';
+import { useMyChildren } from '../api/useFamily';
 
 /**
  * Phase 8c — AccountTab: "我的" tab.
@@ -25,7 +26,9 @@ export function AccountTab() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { data: myDocs } = useMyDocuments();
+  const { data: children } = useMyChildren();
   const pendingCount = (myDocs ?? []).filter((d) => d.status === 'pending').length;
+  const childrenCount = (children ?? []).length;
 
   const handleLogout = () => {
     logout();
@@ -66,6 +69,14 @@ export function AccountTab() {
           label="协议与授权"
           badge={pendingCount > 0 ? String(pendingCount) : undefined}
           onClick={() => navigate('/portal/account/consents')}
+        />
+        <AccountRow
+          icon={<Users className="w-5 h-5 text-emerald-600" />}
+          iconBg="bg-emerald-50"
+          label="我的孩子"
+          badge={childrenCount > 0 ? String(childrenCount) : undefined}
+          hint={childrenCount === 0 ? '可绑定' : undefined}
+          onClick={() => navigate('/portal/account/children')}
         />
         <AccountRow
           icon={<Settings className="w-5 h-5 text-slate-500" />}

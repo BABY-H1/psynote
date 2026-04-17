@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useMyDocuments, useSignDocument } from '@client/api/useConsent';
 import { PageLoading, useToast } from '@client/shared/components';
 import { FileText, CheckCircle2, Clock, AlertTriangle } from 'lucide-react';
+import { useViewingContext } from '../stores/viewingContext';
 
 const consentTypeLabels: Record<string, string> = {
   treatment: '咨询知情同意',
@@ -12,7 +13,10 @@ const consentTypeLabels: Record<string, string> = {
 };
 
 export function ConsentCenter() {
-  const { data: docs, isLoading } = useMyDocuments();
+  // Phase 14 — guardian impersonation
+  const viewingAs = useViewingContext((s) => s.viewingAs);
+  const viewingAsName = useViewingContext((s) => s.viewingAsName);
+  const { data: docs, isLoading } = useMyDocuments({ as: viewingAs ?? undefined });
   const [signingDocId, setSigningDocId] = useState<string | null>(null);
 
   const pending = (docs || []).filter((d) => d.status === 'pending');
@@ -24,7 +28,11 @@ export function ConsentCenter() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-bold text-slate-900">用户协议</h1>
-        <p className="text-sm text-slate-500 mt-1">查看和签署您的服务协议</p>
+        <p className="text-sm text-slate-500 mt-1">
+          {viewingAs
+            ? `正在查看孩子「${viewingAsName || ''}」的协议（您的签署将作为家长代签留痕）`
+            : '查看和签署您的服务协议'}
+        </p>
       </div>
 
       {/* Pending */}
@@ -65,6 +73,7 @@ export function ConsentCenter() {
                 {signingDocId === doc.id && (
                   <SigningPanel
                     doc={doc}
+                    viewingAs={viewingAs}
                     onDone={() => setSigningDocId(null)}
                   />
                 )}
@@ -109,8 +118,8 @@ export function ConsentCenter() {
   );
 }
 
-function SigningPanel({ doc, onDone }: { doc: any; onDone: () => void }) {
-  const signDocument = useSignDocument();
+function SigningPanel({ doc, viewingAs, onDone }: { doc: any; viewingAs: string | null; onDone: () => void }) {
+  const signDocument = useSignDocument({ as: viewingAs ?? undefined });
   const { toast } = useToast();
   const [name, setName] = useState('');
   const [agreed, setAgreed] = useState(false);

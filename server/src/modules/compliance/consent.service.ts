@@ -59,6 +59,12 @@ export async function sendConsentToClient(input: {
   careEpisodeId?: string;
   templateId: string;
   createdBy: string;
+  /**
+   * Phase 13: 文书接收方.默认 'client'(发给来访者本人).
+   * 'guardian' 时 client_portal 不会展示给来访者,视为线下交付给家长.
+   */
+  recipientType?: 'client' | 'guardian';
+  recipientName?: string;
 }) {
   // Load template
   const [template] = await db
@@ -67,6 +73,8 @@ export async function sendConsentToClient(input: {
     .where(eq(consentTemplates.id, input.templateId))
     .limit(1);
   if (!template) throw new NotFoundError('ConsentTemplate', input.templateId);
+
+  const recipientType = input.recipientType || 'client';
 
   // Create document with content snapshot
   const [doc] = await db
@@ -80,7 +88,12 @@ export async function sendConsentToClient(input: {
       content: template.content,
       docType: 'consent',
       consentType: template.consentType,
-      status: 'pending',
+      recipientType,
+      recipientName: recipientType === 'guardian' ? input.recipientName || null : null,
+      // Guardian-recipient documents are marked as 'issued' instead of
+      // 'pending' — there's no client-portal signing flow for guardians;
+      // counselor delivers offline and the document is just 留痕.
+      status: recipientType === 'guardian' ? 'issued' : 'pending',
       createdBy: input.createdBy,
     })
     .returning();
@@ -117,24 +130,46 @@ export async function getDocumentById(docId: string) {
 // ─── Documents (client side) ────────────────────────────────────
 
 export async function getMyDocuments(orgId: string, clientId: string) {
+  // Phase 13: guardian-recipient documents are for the counselor to deliver
+  // offline to a parent — the client themselves should NOT see them. Filter
+  // them out here at the "my documents" boundary.
   return db
     .select()
     .from(clientDocuments)
-    .where(and(eq(clientDocuments.orgId, orgId), eq(clientDocuments.clientId, clientId)))
+    .where(and(
+      eq(clientDocuments.orgId, orgId),
+      eq(clientDocuments.clientId, clientId),
+      eq(clientDocuments.recipientType, 'client'),
+    ))
     .orderBy(desc(clientDocuments.createdAt));
 }
 
 export async function signDocument(
   docId: string,
   clientId: string,
-  signature: { name: string; ip?: string; userAgent?: string },
+  signature: {
+    name: string;
+    ip?: string;
+    userAgent?: string;
+    /**
+     * Phase 14: When set, the document is being signed by a guardian on behalf
+     * of the client. The user.id of the actual signer (guardian) is recorded on
+     * the consent_records row via `signerOnBehalfOf` for audit traceability.
+     */
+    signerOnBehalfOf?: string;
+  },
 ) {
   const doc = await getDocumentById(docId);
   if (doc.clientId !== clientId) throw new Error('Unauthorized');
   if (doc.status !== 'pending') throw new Error('Document already processed');
 
   const now = new Date();
-  const signatureData = { ...signature, timestamp: now.toISOString() };
+  const { signerOnBehalfOf, ...sigBase } = signature;
+  const signatureData: Record<string, unknown> = {
+    ...sigBase,
+    timestamp: now.toISOString(),
+  };
+  if (signerOnBehalfOf) signatureData.signerOnBehalfOf = signerOnBehalfOf;
 
   // Update document status
   const [signed] = await db
@@ -153,6 +188,7 @@ export async function signDocument(
       grantedAt: now,
       documentId: docId,
       status: 'active',
+      signerOnBehalfOf: signerOnBehalfOf ?? null,
     });
   }
 
@@ -162,10 +198,10 @@ export async function signDocument(
       careEpisodeId: doc.careEpisodeId,
       eventType: 'document',
       refId: docId,
-      title: '知情同意书已签署',
+      title: signerOnBehalfOf ? '知情同意书已签署 (家长代签)' : '知情同意书已签署',
       summary: doc.title,
-      metadata: { consentType: doc.consentType, signedAt: now.toISOString() },
-      createdBy: clientId,
+      metadata: { consentType: doc.consentType, signedAt: now.toISOString(), signerOnBehalfOf: signerOnBehalfOf || null },
+      createdBy: signerOnBehalfOf || clientId,
     });
   }
 

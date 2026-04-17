@@ -11,4 +11,7 @@ export * from './types/service-instance';
 export * from './types/tier';
 export * from './types/terminology';
 export * from './types/content-block';
+export * from './types/workflow';
+export * from './types/crisis';
+export * from './types/parent-binding';
 export * from './schemas/triage-config';

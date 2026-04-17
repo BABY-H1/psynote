@@ -1,9 +1,9 @@
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyRequest } from 'fastify';
 import { eq, and, desc, or, isNull } from 'drizzle-orm';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { logAudit } from '../../middleware/audit.js';
-import { ValidationError } from '../../lib/errors.js';
+import { ForbiddenError, ValidationError } from '../../lib/errors.js';
 import { db } from '../../config/database.js';
 import { sql, inArray } from 'drizzle-orm';
 import {
@@ -16,6 +16,48 @@ import {
 } from '../../db/schema.js';
 import * as appointmentService from '../counseling/appointment.service.js';
 import * as consentService from '../compliance/consent.service.js';
+import * as parentBindingService from '../parent-binding/parent-binding.service.js';
+
+/**
+ * Phase 14 — `?as=<userId>` support for guardian impersonation.
+ *
+ * If `?as=` is set:
+ *   - Verify the caller has an active client_relationships row with target.
+ *   - Return the target user id so the route uses the child's data.
+ *
+ * If absent (or equals caller's own id), return the caller's id (no-op).
+ *
+ * Routes that opt-in by calling this helper are the **white-listed** ones:
+ *   /dashboard, /appointments, /counselors,
+ *   /documents, /documents/:id, /documents/:id/sign,
+ *   /consents, /consents/:id/revoke
+ *
+ * Routes that should refuse `?as=` entirely (results, timeline, group/course
+ * memberships, referrals, appointment-requests) call `rejectAsParam(req)`
+ * instead.
+ */
+async function resolveTargetUserId(request: FastifyRequest): Promise<string> {
+  const callerId = request.user!.id;
+  const orgId = request.org!.orgId;
+  const asParam = (request.query as any)?.as as string | undefined;
+  if (!asParam || asParam === callerId) return callerId;
+
+  const ok = await parentBindingService.hasActiveRelationship({
+    orgId,
+    holderUserId: callerId,
+    relatedClientUserId: asParam,
+  });
+  if (!ok) throw new ForbiddenError('No active relationship with this user');
+  return asParam;
+}
+
+function rejectAsParam(request: FastifyRequest) {
+  const asParam = (request.query as any)?.as as string | undefined;
+  const callerId = request.user!.id;
+  if (asParam && asParam !== callerId) {
+    throw new ForbiddenError('该数据不可代查');
+  }
+}
 
 export async function clientPortalRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
@@ -23,8 +65,10 @@ export async function clientPortalRoutes(app: FastifyInstance) {
 
   /** Client dashboard - health overview */
   app.get('/dashboard', async (request) => {
-    const userId = request.user!.id;
+    const callerId = request.user!.id;
+    const userId = await resolveTargetUserId(request);
     const orgId = request.org!.orgId;
+    const isViewingAs = userId !== callerId;
 
     // Active care episode
     const [episode] = await db
@@ -38,8 +82,9 @@ export async function clientPortalRoutes(app: FastifyInstance) {
       .orderBy(desc(careEpisodes.updatedAt))
       .limit(1);
 
-    // Recent results
-    const recentResults = await db
+    // Recent results — Phase 14: NEVER expose to a guardian, only to the
+    // client themselves. When viewing-as a child, return [].
+    const recentResults = isViewingAs ? [] : await db
       .select()
       .from(assessmentResults)
       .where(and(
@@ -62,7 +107,9 @@ export async function clientPortalRoutes(app: FastifyInstance) {
       .orderBy(appointments.startTime)
       .limit(3);
 
-    // Unread notifications count
+    // Unread notifications count — guardian sees the target's count too
+    // (so badges work in the switcher); the actual notification list is
+    // not exposed to guardians yet.
     const unreadNotifs = await db
       .select()
       .from(notifications)
@@ -85,8 +132,10 @@ export async function clientPortalRoutes(app: FastifyInstance) {
    *
    * Phase 9β — Only returns results the counselor has explicitly opted in
    * for client visibility. Clients never see scores by default.
+   * Phase 14 — Guardians cannot see assessment results at all.
    */
   app.get('/results', async (request) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
     const orgId = request.org!.orgId;
 
@@ -105,8 +154,10 @@ export async function clientPortalRoutes(app: FastifyInstance) {
   /**
    * Phase 9β — Single result detail for the portal.
    * Owned by user only. Returns 404 if the counselor hasn't opted-in.
+   * Phase 14 — Guardians cannot see assessment results.
    */
   app.get('/results/:resultId', async (request) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
     const orgId = request.org!.orgId;
     const { resultId } = request.params as { resultId: string };
@@ -132,8 +183,10 @@ export async function clientPortalRoutes(app: FastifyInstance) {
   /**
    * Phase 9β — Trajectory query scoped to the calling user only.
    * Filters by clientVisible inside the service layer.
+   * Phase 14 — Guardians cannot see trajectory.
    */
   app.get('/results/trajectory/:scaleId', async (request) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
     const orgId = request.org!.orgId;
     const { scaleId } = request.params as { scaleId: string };
@@ -142,9 +195,9 @@ export async function clientPortalRoutes(app: FastifyInstance) {
     return getTrajectory(orgId, userId, scaleId, { onlyClientVisible: true });
   });
 
-  /** My appointments */
+  /** My appointments — guardian-readable */
   app.get('/appointments', async (request) => {
-    const userId = request.user!.id;
+    const userId = await resolveTargetUserId(request);
     const orgId = request.org!.orgId;
 
     return db
@@ -157,8 +210,9 @@ export async function clientPortalRoutes(app: FastifyInstance) {
       .orderBy(desc(appointments.startTime));
   });
 
-  /** My health timeline */
+  /** My health timeline — Phase 14: guardian-blocked */
   app.get('/timeline', async (request) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
     const orgId = request.org!.orgId;
 
@@ -182,8 +236,9 @@ export async function clientPortalRoutes(app: FastifyInstance) {
       .limit(50);
   });
 
-  /** Available groups to join */
+  /** Available groups to join — Phase 14: guardian-blocked */
   app.get('/groups', async (request) => {
+    rejectAsParam(request);
     const orgId = request.org!.orgId;
     const userId = request.user!.id;
 
@@ -239,8 +294,9 @@ export async function clientPortalRoutes(app: FastifyInstance) {
     });
   });
 
-  /** Available courses (published only) */
+  /** Available courses (published only) — Phase 14: guardian-blocked */
   app.get('/courses', async (request) => {
+    rejectAsParam(request);
     const orgId = request.org!.orgId;
 
     return db
@@ -258,8 +314,9 @@ export async function clientPortalRoutes(app: FastifyInstance) {
       .orderBy(desc(courses.createdAt));
   });
 
-  /** My course enrollments */
+  /** My course enrollments — Phase 14: guardian-blocked */
   app.get('/my-courses', async (request) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
 
     return db
@@ -284,6 +341,7 @@ export async function clientPortalRoutes(app: FastifyInstance) {
    * Verifies the caller is enrolled in this group before returning anything.
    */
   app.get('/groups/:instanceId', async (request) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
     const orgId = request.org!.orgId;
     const { instanceId } = request.params as { instanceId: string };
@@ -359,6 +417,7 @@ export async function clientPortalRoutes(app: FastifyInstance) {
    * POST /api/orgs/:orgId/client/groups/:instanceId/sessions/:sessionRecordId/check-in
    */
   app.post('/groups/:instanceId/sessions/:sessionRecordId/check-in', async (request, reply) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
     const { instanceId, sessionRecordId } = request.params as {
       instanceId: string;
@@ -425,6 +484,7 @@ export async function clientPortalRoutes(app: FastifyInstance) {
    * List referrals where the calling user is the subject and status is pending.
    */
   app.get('/referrals', async (request) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
     const { referrals: referralsTable } = await import('../../db/schema.js');
     return db
@@ -443,6 +503,7 @@ export async function clientPortalRoutes(app: FastifyInstance) {
    * or notifies the platform receiver.
    */
   app.post('/referrals/:referralId/consent', async (request, reply) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
     const { referralId } = request.params as { referralId: string };
     const body = request.body as { consent?: boolean };
@@ -455,8 +516,9 @@ export async function clientPortalRoutes(app: FastifyInstance) {
     return reply.status(200).send(updated);
   });
 
-  /** My group enrollments */
+  /** My group enrollments — Phase 14: guardian-blocked */
   app.get('/my-groups', async (request) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
 
     return db
@@ -476,6 +538,7 @@ export async function clientPortalRoutes(app: FastifyInstance) {
    * Returns assessments the user should fill (or has already filled).
    */
   app.get('/my-assessments', async (request) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
     const orgId = request.org!.orgId;
 
@@ -573,10 +636,10 @@ export async function clientPortalRoutes(app: FastifyInstance) {
     }));
   });
 
-  /** List counselors in this org (for appointment booking) */
+  /** List counselors in this org (for appointment booking) — guardian-readable */
   app.get('/counselors', async (request) => {
     const orgId = request.org!.orgId;
-    const clientUserId = request.user!.id;
+    const clientUserId = await resolveTargetUserId(request);
 
     const counselors = await db
       .select({
@@ -617,8 +680,9 @@ export async function clientPortalRoutes(app: FastifyInstance) {
       });
   });
 
-  /** Submit an appointment request (client-initiated) */
+  /** Submit an appointment request (client-initiated) — Phase 14: guardian-blocked */
   app.post('/appointment-requests', async (request, reply) => {
+    rejectAsParam(request);
     const userId = request.user!.id;
     const orgId = request.org!.orgId;
     const body = request.body as {
@@ -648,44 +712,59 @@ export async function clientPortalRoutes(app: FastifyInstance) {
 
   // ─── Documents & Consents ───────────────────────────────────
 
-  /** List my documents (pending + signed) */
+  /** List my documents (pending + signed) — guardian-readable */
   app.get('/documents', async (request) => {
-    return consentService.getMyDocuments(request.org!.orgId, request.user!.id);
+    const userId = await resolveTargetUserId(request);
+    return consentService.getMyDocuments(request.org!.orgId, userId);
   });
 
-  /** Get document content */
+  /** Get document content — guardian-readable */
   app.get('/documents/:docId', async (request) => {
     const { docId } = request.params as { docId: string };
+    const userId = await resolveTargetUserId(request);
     const doc = await consentService.getDocumentById(docId);
-    if (doc.clientId !== request.user!.id) throw new ValidationError('Unauthorized');
+    if (doc.clientId !== userId) throw new ValidationError('Unauthorized');
     return doc;
   });
 
-  /** Sign a document */
+  /**
+   * Sign a document.
+   *
+   * Phase 14: When `?as=<childUserId>` is set, the caller (guardian) is
+   * signing on behalf of the child. The consent_records row records this
+   * via `signerOnBehalfOf=guardianUserId` for audit traceability.
+   */
   app.post('/documents/:docId/sign', async (request, reply) => {
     const { docId } = request.params as { docId: string };
     const body = request.body as { name: string };
     if (!body.name) throw new ValidationError('name is required');
 
-    const signed = await consentService.signDocument(docId, request.user!.id, {
+    const callerId = request.user!.id;
+    const targetUserId = await resolveTargetUserId(request);
+    const signerOnBehalfOf = targetUserId !== callerId ? callerId : undefined;
+
+    const signed = await consentService.signDocument(docId, targetUserId, {
       name: body.name,
       ip: request.ip,
       userAgent: request.headers['user-agent'],
+      signerOnBehalfOf,
     });
 
     await logAudit(request, 'create', 'consent_records', signed.id);
     return signed;
   });
 
-  /** List my consent records */
+  /** List my consent records — guardian-readable */
   app.get('/consents', async (request) => {
-    return consentService.getMyConsents(request.org!.orgId, request.user!.id);
+    const userId = await resolveTargetUserId(request);
+    return consentService.getMyConsents(request.org!.orgId, userId);
   });
 
-  /** Revoke a consent */
+  /** Revoke a consent — guardian-readable (and revokable on behalf of) */
   app.post('/consents/:consentId/revoke', async (request) => {
+    const userId = await resolveTargetUserId(request);
     const { consentId } = request.params as { consentId: string };
-    const revoked = await consentService.revokeConsent(consentId, request.user!.id);
+    const revoked = await consentService.revokeConsent(consentId, userId);
     await logAudit(request, 'update', 'consent_records', consentId);
     return revoked;
   });

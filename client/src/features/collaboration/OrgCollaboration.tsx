@@ -7,10 +7,13 @@
  *   - 督导待审 (Pending Review) — supervisor inbox for note review
  *   - 收到的转介 (Inbox)        — accept/reject incoming referrals
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
-  Users, ShieldCheck, ClipboardList, Inbox, Loader2, Check, X, Plus, Trash2,
+  Users, ShieldCheck, ClipboardList, Inbox, Loader2, Check, X, Plus, Trash2, Sparkles, AlertTriangle,
 } from 'lucide-react';
+import { CandidatePoolTab } from '../workflow/CandidatePoolTab';
+import { CrisisDashboardTab } from './CrisisDashboardTab';
 import {
   useUnassignedClients,
   useAssignmentsList,
@@ -29,17 +32,37 @@ import { useAuthStore } from '../../stores/authStore';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 
-type TabKey = 'assignment' | 'grants' | 'supervision' | 'inbox';
+type TabKey = 'assignment' | 'candidates' | 'crisis' | 'grants' | 'supervision' | 'inbox';
 
 const TABS: { key: TabKey; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'assignment', label: '派单', Icon: Users },
+  { key: 'candidates', label: '待处理候选', Icon: Sparkles },
+  { key: 'crisis', label: '危机仪表板', Icon: AlertTriangle },
   { key: 'grants', label: '临时授权', Icon: ShieldCheck },
   { key: 'supervision', label: '督导待审', Icon: ClipboardList },
   { key: 'inbox', label: '收到的转介', Icon: Inbox },
 ];
 
 export function OrgCollaboration() {
-  const [tab, setTab] = useState<TabKey>('assignment');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = (searchParams.get('tab') as TabKey) || 'assignment';
+  const [tab, setTab] = useState<TabKey>(
+    TABS.some((t) => t.key === initialTab) ? initialTab : 'assignment',
+  );
+
+  // Keep URL ?tab= in sync with state for deep-linking
+  useEffect(() => {
+    const current = searchParams.get('tab');
+    if (tab !== 'assignment' && current !== tab) {
+      const next = new URLSearchParams(searchParams);
+      next.set('tab', tab);
+      setSearchParams(next, { replace: true });
+    } else if (tab === 'assignment' && current) {
+      const next = new URLSearchParams(searchParams);
+      next.delete('tab');
+      setSearchParams(next, { replace: true });
+    }
+  }, [tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="space-y-4">
@@ -63,6 +86,8 @@ export function OrgCollaboration() {
 
       <div>
         {tab === 'assignment' && <AssignmentTab />}
+        {tab === 'candidates' && <CandidatePoolTab />}
+        {tab === 'crisis' && <CrisisDashboardTab />}
         {tab === 'grants' && <GrantsTab />}
         {tab === 'supervision' && <SupervisionTab />}
         {tab === 'inbox' && <ReferralInboxTab />}

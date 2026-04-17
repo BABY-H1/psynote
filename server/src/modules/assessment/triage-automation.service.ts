@@ -33,7 +33,13 @@ interface AutoTriageParams {
 
 /**
  * Auto-generate AI triage recommendations and store on the result row.
- * Then dispatch notifications based on risk level.
+ * Then:
+ *   1. Dispatch built-in risk-level notifications (kept for backwards compat)
+ *   2. Run the org's custom workflow rules (Phase 12+ — additive)
+ *
+ * The two paths are independent: if the org hasn't configured any rules,
+ * the built-in behaviour is unchanged. If rules exist, they run after the
+ * built-in step and produce additional candidate_pool entries / notifications.
  */
 export async function autoTriageAndNotify(params: AutoTriageParams): Promise<void> {
   const { orgId, resultId, riskLevel, userId, dimensionScores } = params;
@@ -48,11 +54,18 @@ export async function autoTriageAndNotify(params: AutoTriageParams): Promise<voi
       label: score > 20 ? '偏高' : score > 10 ? '中等' : '正常', // simplified labels
     }));
 
-    const triageResult = await recommendTriage({
-      riskLevel,
-      dimensions,
-      availableInterventions: ['course', 'group', 'counseling', 'referral'],
-    });
+    const triageResult = await recommendTriage(
+      {
+        riskLevel,
+        dimensions,
+        availableInterventions: ['course', 'group', 'counseling', 'referral'],
+      },
+      {
+        orgId,
+        userId,
+        pipeline: 'triage-auto',
+      },
+    );
 
     // Store recommendations on the result row
     await db
@@ -63,11 +76,72 @@ export async function autoTriageAndNotify(params: AutoTriageParams): Promise<voi
     console.warn('[auto-triage] AI recommendation failed (non-blocking):', err);
   }
 
-  // 2. Dispatch notifications
+  // 2. Dispatch built-in notifications (legacy behaviour — unchanged)
   try {
     await dispatchTriageNotifications(orgId, resultId, riskLevel, userId);
   } catch (err) {
     console.warn('[auto-triage] Notification dispatch failed (non-blocking):', err);
+  }
+
+  // 3. Run workflow rules (Phase 12 — additive).
+  //    This may create candidate_pool entries, push courses, or send internal
+  //    notifications according to the org's configured rules. The engine is
+  //    self-isolating: rule failures don't propagate.
+  try {
+    const { runRulesForEvent } = await import('../workflow/rule-engine.service.js');
+    // Load orgType for condition evaluation
+    const [org] = await db
+      .select({ settings: organizations.settings })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+    const orgType = ((org?.settings as Record<string, any>) || {}).orgType || 'counseling';
+
+    // Look up assessmentId + answers so the rule engine can evaluate
+    // item_value:<itemId> and dimension_score:<dimId> conditions.
+    const [result] = await db
+      .select({
+        assessmentId: assessmentResults.assessmentId,
+        totalScore: assessmentResults.totalScore,
+        answers: assessmentResults.answers,
+      })
+      .from(assessmentResults)
+      .where(eq(assessmentResults.id, resultId))
+      .limit(1);
+
+    // Flatten answers → itemValues map. `answers` is stored as
+    // `{ [itemId]: number | string }` (numbers for likert scales, strings
+    // for free-text — free text is simply filtered out here).
+    const itemValues: Record<string, number> = {};
+    if (result?.answers && typeof result.answers === 'object') {
+      for (const [k, v] of Object.entries(result.answers as Record<string, unknown>)) {
+        const n = typeof v === 'number' ? v : Number(v);
+        if (Number.isFinite(n)) itemValues[k] = n;
+      }
+    }
+
+    // `totalScore` comes back as string|null from drizzle's numeric type
+    const totalScoreNum = result?.totalScore != null
+      ? Number(result.totalScore)
+      : undefined;
+
+    await runRulesForEvent({
+      orgId,
+      event: 'assessment_result.created',
+      payload: {
+        resultId,
+        userId,
+        assessmentId: result?.assessmentId || '',
+        riskLevel,
+        totalScore: Number.isFinite(totalScoreNum) ? totalScoreNum : undefined,
+        dimensionScores,
+        itemValues,
+        orgType,
+      },
+      triggeringUserId: userId,
+    });
+  } catch (err) {
+    console.warn('[auto-triage] Rule engine failed (non-blocking):', err);
   }
 }
 

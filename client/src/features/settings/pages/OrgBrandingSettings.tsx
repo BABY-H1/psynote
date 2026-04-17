@@ -33,7 +33,7 @@ export function OrgBrandingSettings() {
     <FeatureGate
       feature="branding"
       mode="upsell"
-      requiredTier="team"
+      requiredTier="growth"
       featureLabel="品牌定制"
     >
       <BrandingForm />

@@ -1,4 +1,5 @@
 import { aiClient } from '../providers/openai-compatible.js';
+import type { AiCallContext } from '../usage-tracker.js';
 
 interface RiskAssessmentInput {
   dimensions: { name: string; score: number; label: string; riskLevel?: string | null }[];
@@ -19,8 +20,15 @@ interface RiskAssessmentResult {
 /**
  * AI-enhanced risk assessment.
  * Combines rule-based risk level with AI analysis for a richer risk picture.
+ *
+ * `track` is optional — when supplied (by callers that know the orgId), the
+ * client logs token usage to `ai_call_logs` for the SubscriptionTab's monthly
+ * quota meter.
  */
-export async function assessRisk(input: RiskAssessmentInput): Promise<RiskAssessmentResult> {
+export async function assessRisk(
+  input: RiskAssessmentInput,
+  track?: Partial<AiCallContext>,
+): Promise<RiskAssessmentResult> {
   const dimSummary = input.dimensions
     .map((d) => `${d.name}: ${d.score}分 (${d.label}, 规则风险: ${d.riskLevel || '未设定'})`)
     .join('\n');
@@ -48,6 +56,11 @@ ${input.chiefComplaint ? `主诉: ${input.chiefComplaint}` : ''}
 
 维度得分:
 ${dimSummary}`,
-    { temperature: 0.3 },
+    {
+      temperature: 0.3,
+      track: track?.orgId
+        ? { orgId: track.orgId, userId: track.userId, pipeline: track.pipeline ?? 'risk-detection' }
+        : undefined,
+    },
   );
 }

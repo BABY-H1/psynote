@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import type { WorkMode } from './ChatWorkspace';
-import type { TreatmentPlan, TreatmentGoal, SessionNote } from '@psynote/shared';
+import type { TreatmentPlan, TreatmentGoal, SessionNote, CrisisCase, NoteTemplate } from '@psynote/shared';
 import { useCreateSessionNote, useNoteTemplates, useUpdateAiConversation, useDeleteAiConversation } from '../../../api/useCounseling';
 import { useCreateTreatmentPlan, useUpdateGoalStatus } from '../../../api/useTreatmentPlan';
 import { useToast } from '../../../shared/components';
 import { Save, FileText, Target, User, GraduationCap, BarChart3, X, MessageSquare, Trash2, Edit3 } from 'lucide-react';
 import { BUILT_IN_FORMATS } from './NoteFormatSelector';
 import { NoteViewer } from './NoteViewer';
+import { CrisisChecklistPanel } from './CrisisChecklistPanel';
 
 interface Props {
   mode: WorkMode;
@@ -36,6 +37,9 @@ interface Props {
   // AI conversation viewing
   viewingConversation?: any;
   onCloseConversation?: () => void;
+  // Phase 13: crisis case (only passed when episode is a crisis episode)
+  crisisCase?: CrisisCase | null;
+  clientName?: string;
 }
 
 export function OutputPanel({
@@ -46,6 +50,7 @@ export function OutputPanel({
   viewingNote, onCloseNote,
   viewingResult, onCloseResult,
   viewingConversation, onCloseConversation,
+  crisisCase, clientName,
 }: Props) {
   const createNote = useCreateSessionNote();
   const updateGoalStatus = useUpdateGoalStatus();
@@ -148,6 +153,19 @@ export function OutputPanel({
             lastNoteSummary={lastNoteSummary}
             lastNoteDate={lastNoteDate}
           />
+        )}
+        {mode === 'crisis' && crisisCase && (
+          <CrisisChecklistPanel
+            crisisCase={crisisCase}
+            episodeId={episodeId}
+            clientId={clientId}
+            clientName={clientName}
+          />
+        )}
+        {mode === 'crisis' && !crisisCase && (
+          <div className="p-6 text-center text-sm text-slate-400">
+            没有找到危机案件记录。如果你是从危机候选池跳转进来,请刷新页面。
+          </div>
         )}
       </div>
     </div>

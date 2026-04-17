@@ -1,8 +1,11 @@
 import React from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { ArrowLeft, LogOut } from 'lucide-react';
+import { ArrowLeft, LogOut, ChevronDown, User as UserIcon } from 'lucide-react';
 import { useAuthStore } from '@client/stores/authStore';
 import { BottomTabBar } from './components/BottomTabBar';
+import { useMyChildren } from './api/useFamily';
+import { useViewingContext } from './stores/viewingContext';
+import { PARENT_RELATION_LABELS } from '@psynote/shared';
 
 /**
  * Phase 8c — Mobile-first portal shell.
@@ -76,9 +79,9 @@ export function PortalAppShell() {
         <header className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-sm h-14 flex items-center px-4 border-b border-slate-200">
           {isRootRoute ? (
             <>
-              <div className="flex-1 flex items-center gap-2">
-                <span className="text-base font-bold text-brand-600">Psynote</span>
-                <span className="text-xs text-slate-400">来访者服务</span>
+              <div className="flex-1 flex items-center gap-2 min-w-0">
+                <span className="text-base font-bold text-brand-600 flex-shrink-0">Psynote</span>
+                <IdentitySwitcher />
               </div>
               <button
                 type="button"
@@ -119,5 +122,103 @@ export function PortalAppShell() {
         <BottomTabBar />
       </div>
     </div>
+  );
+}
+
+/**
+ * Phase 14 — Identity switcher in the header.
+ *
+ * - When the user has 0 active children bindings → show only "来访者服务"
+ *   subtitle (= original behavior).
+ * - When the user has 1+ children bindings → show a clickable pill that
+ *   reads either "我自己" or the child's name. Clicking opens a dropdown.
+ *
+ * Uses `useViewingContext` Zustand store. Switching does NOT navigate; it
+ * just changes the param consumers (HomeTab/MyServices/AccountTab) read.
+ */
+function IdentitySwitcher() {
+  const { data: children } = useMyChildren();
+  const { viewingAs, viewingAsName, setViewingAs } = useViewingContext();
+  const [open, setOpen] = React.useState(false);
+  const list = children ?? [];
+
+  // No bindings → mimic original subtitle
+  if (list.length === 0) {
+    return <span className="text-xs text-slate-400">来访者服务</span>;
+  }
+
+  const currentLabel = viewingAs
+    ? `${viewingAsName || '孩子'} (孩子)`
+    : '我自己';
+
+  return (
+    <div className="relative min-w-0">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="flex items-center gap-1 px-2 py-1 rounded-md text-xs bg-brand-50 text-brand-700 hover:bg-brand-100 transition"
+      >
+        <UserIcon className="w-3 h-3 flex-shrink-0" />
+        <span className="truncate max-w-[140px]">{currentLabel}</span>
+        <ChevronDown className="w-3 h-3 flex-shrink-0" />
+      </button>
+      {open && (
+        <>
+          {/* Click-outside backdrop */}
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setOpen(false)}
+          />
+          <div className="absolute left-0 top-full mt-1 z-50 min-w-[180px] bg-white border border-slate-200 rounded-lg shadow-lg overflow-hidden">
+            <SwitcherRow
+              label="我自己"
+              active={viewingAs === null}
+              onClick={() => {
+                setViewingAs(null);
+                setOpen(false);
+              }}
+            />
+            <div className="border-t border-slate-100" />
+            {list.map((c) => (
+              <SwitcherRow
+                key={c.relationshipId}
+                label={`${c.childName}（${PARENT_RELATION_LABELS[c.relation]}）`}
+                active={viewingAs === c.childUserId}
+                onClick={() => {
+                  setViewingAs(c.childUserId, c.childName);
+                  setOpen(false);
+                }}
+              />
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function SwitcherRow({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left px-3 py-2.5 text-sm transition flex items-center gap-2 ${
+        active
+          ? 'bg-brand-50 text-brand-700 font-semibold'
+          : 'text-slate-700 hover:bg-slate-50'
+      }`}
+    >
+      <UserIcon className="w-3.5 h-3.5 flex-shrink-0" />
+      <span className="flex-1 truncate">{label}</span>
+      {active && <span className="text-brand-500 text-xs">✓</span>}
+    </button>
   );
 }

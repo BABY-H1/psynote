@@ -14,6 +14,9 @@ import { CourseReader } from './pages/CourseReader';
 import { ConsentCenter } from './pages/ConsentCenter';
 // Phase 9β — assessment report detail with trajectory + AI interpretation
 import { AssessmentReportDetail } from './pages/AssessmentReportDetail';
+// Phase 14 — Parent self-binding pages
+import { ParentBindPage } from './pages/ParentBindPage';
+import { MyChildrenPage } from './pages/MyChildrenPage';
 
 /**
  * Phase 8c — Portal route tree (mobile-first, 4-tab bottom navigation).
@@ -59,6 +62,8 @@ export function PortalApp() {
   return (
     <Routes>
       <Route path="/login" element={<LoginPage />} />
+      {/* Phase 14 — Public parent-binding landing page (no auth required) */}
+      <Route path="/invite/:token" element={<ParentBindPage />} />
 
       {!user ? (
         <Route path="*" element={<Navigate to="/login" replace />} />
@@ -75,6 +80,7 @@ export function PortalApp() {
             <Route path="account" element={<AccountTab />} />
             <Route path="account/profile" element={<ProfileSettings />} />
             <Route path="account/consents" element={<ConsentCenter />} />
+            <Route path="account/children" element={<MyChildrenPage />} />
           </Route>
           <Route path="*" element={<Navigate to="/portal" replace />} />
         </>

@@ -5,6 +5,7 @@ import { useMyAppointments, useAvailableGroups, useAvailableCourses, useMyAssess
 import { PageLoading } from '@client/shared/components';
 import { ServiceCard } from '../components/ServiceCard';
 import { SectionHeader } from '../components/SectionHeader';
+import { useViewingContext } from '../stores/viewingContext';
 
 /**
  * Phase 8c — MyServicesTab: unified "my services" landing page.
@@ -44,7 +45,12 @@ import { SectionHeader } from '../components/SectionHeader';
 
 export function MyServicesTab() {
   const navigate = useNavigate();
-  const { data: appointments, isLoading: apptLoading } = useMyAppointments();
+  // Phase 14 — viewingAs: appointments are guardian-readable, but groups/
+  // courses/assessments are guardian-blocked. We only fetch the latter
+  // when looking at our own data.
+  const viewingAs = useViewingContext((s) => s.viewingAs);
+  const isViewingChild = !!viewingAs;
+  const { data: appointments, isLoading: apptLoading } = useMyAppointments({ as: viewingAs ?? undefined });
   const { data: groups, isLoading: groupsLoading } = useAvailableGroups();
   const { data: courses, isLoading: coursesLoading } = useAvailableCourses();
   const { data: myAssessments } = useMyAssessments();
@@ -90,15 +96,17 @@ export function MyServicesTab() {
     return Array.from(byCounselor.values());
   }, [appointments]);
 
-  // "My groups" = groups where I'm approved / pending / waitlisted
+  // "My groups" = groups where I'm approved / pending / waitlisted.
+  // Hidden when viewing a child (groups/courses are guardian-blocked).
   const myGroups = useMemo(() => {
-    if (!groups) return [];
+    if (isViewingChild || !groups) return [];
     return (groups as any[]).filter((g) => !!g.myEnrollmentStatus);
-  }, [groups]);
+  }, [groups, isViewingChild]);
 
   // "My courses" — /client/my-courses returns { enrollment, courseTitle, courseCategory }[]
+  // Hidden when viewing a child (courses are guardian-blocked).
   const myCourses = useMemo(() => {
-    if (!courses) return [];
+    if (isViewingChild || !courses) return [];
     return (courses as any[]).map((c) => {
       // Handle both old shape (flat course object) and new shape (enrollment wrapper)
       if (c.enrollment) {
@@ -205,8 +213,8 @@ export function MyServicesTab() {
         </section>
       )}
 
-      {/* 我的量表 */}
-      {myAssessments && myAssessments.length > 0 && (
+      {/* 我的量表 — guardian-blocked */}
+      {!isViewingChild && myAssessments && myAssessments.length > 0 && (
         <section>
           <SectionHeader title="我的量表" count={myAssessments.length} />
           <div className="space-y-2">

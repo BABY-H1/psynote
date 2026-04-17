@@ -18,6 +18,7 @@ export interface OrgMember {
   permissions: Record<string, unknown>;
   validUntil?: string;
   supervisorId?: string | null;
+  fullPracticeAccess?: boolean;
   certifications?: Array<{
     name: string;
     issuer: string;
@@ -53,7 +54,14 @@ export function useInviteMember() {
 export function useUpdateMember() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ memberId, ...data }: { memberId: string; role?: string; status?: string; permissions?: Record<string, unknown> }) =>
+    mutationFn: ({ memberId, ...data }: {
+      memberId: string;
+      role?: string;
+      status?: string;
+      permissions?: Record<string, unknown>;
+      supervisorId?: string | null;
+      fullPracticeAccess?: boolean;
+    }) =>
       api.patch(`${orgPrefix()}/members/${memberId}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['members'] }); },
   });

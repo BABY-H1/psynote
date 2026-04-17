@@ -8,6 +8,8 @@ import {
 import { useToast } from '../../../shared/components';
 import { BlockCard } from './wizard/BlockCard';
 import { ScreeningRulesStep } from './wizard/ScreeningRulesStep';
+import { useSyncRulesByAssessment } from '../../../api/useWorkflow';
+import { mapScreeningRulesToWorkflow } from '../../workflow/screening-rules-mapper';
 
 interface Props {
   onClose: () => void;
@@ -40,7 +42,23 @@ export function AssessmentWizard({ onClose, onCreated, editAssessmentId, draft }
   const { data: editData } = useAssessment(editAssessmentId);
   const createAssessment = useCreateAssessment();
   const updateAssessment = useUpdateAssessment();
+  const syncRules = useSyncRulesByAssessment();
   const { toast } = useToast();
+
+  /**
+   * Ported from the legacy `screeningRules` field. Each save syncs the
+   * current rules into the workflow engine so they actually execute. The
+   * legacy field is kept as authoring state only; engine reads workflow_rules.
+   */
+  const syncWorkflowRules = async (assessmentId: string) => {
+    if (!needsRules) return;
+    try {
+      const mapped = mapScreeningRulesToWorkflow(screeningRules);
+      await syncRules.mutateAsync({ assessmentId, rules: mapped });
+    } catch (err) {
+      console.warn('[wizard] rule sync failed (non-blocking):', err);
+    }
+  };
 
   const init = editData || draft;
   const [step, setStep] = useState(draft?.step || 0);
@@ -115,26 +133,31 @@ export function AssessmentWizard({ onClose, onCreated, editAssessmentId, draft }
 
   const saveDraft = async () => {
     const data = { title: title || '未命名测评', description, assessmentType, blocks, collectMode, resultDisplay, screeningRules: needsRules ? screeningRules : undefined };
+    let id = draftId;
     if (draftId) {
       await updateAssessment.mutateAsync({ assessmentId: draftId, ...data } as any);
-      toast('草稿已保存', 'success');
     } else {
       const created = await createAssessment.mutateAsync({ ...data, status: 'draft' } as any);
+      id = created.id;
       setDraftId(created.id);
-      toast('草稿已保存', 'success');
     }
+    if (id) await syncWorkflowRules(id);
+    toast('草稿已保存', 'success');
   };
 
   const handleSubmit = async () => {
     const data = { title, description: description || undefined, assessmentType, blocks, collectMode, resultDisplay, allowClientReport, screeningRules: needsRules ? screeningRules : undefined };
+    let id = draftId;
     if (draftId) {
       await updateAssessment.mutateAsync({ assessmentId: draftId, ...data, status: 'active', isActive: true } as any);
-      toast('测评已发布', 'success');
-      onCreated(draftId);
     } else {
       const created = await createAssessment.mutateAsync({ ...data, status: 'active' } as any);
-      toast('测评���建成功', 'success');
-      onCreated(created.id);
+      id = created.id;
+    }
+    if (id) {
+      await syncWorkflowRules(id);
+      toast(draftId ? '测评已发布' : '测评创建成功', 'success');
+      onCreated(id);
     }
   };
 

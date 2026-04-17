@@ -18,8 +18,12 @@ import './index.css';
  * path runs because `import.meta.env.DEV` is false.
  */
 if (import.meta.env.DEV) {
-  const { seedDemoAuth } = await import('@client/dev-seed');
-  await seedDemoAuth('client');
+  // Skip the dev-seed when landing on /invite/:token so we can actually
+  // test the parent-binding flow as an unauthenticated visitor would.
+  if (!window.location.pathname.startsWith('/invite/')) {
+    const { seedDemoAuth } = await import('@client/dev-seed');
+    await seedDemoAuth('client');
+  }
 }
 
 ReactDOM.createRoot(document.getElementById('root')!).render(

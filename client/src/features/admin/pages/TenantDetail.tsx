@@ -2,10 +2,15 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../../../api/client';
 import {
-  ArrowLeft, Users, CreditCard, Settings, Building2, Plus,
-  UserPlus, Trash2, Edit2, Check, X, RefreshCw, Ban, Wrench, Save,
+  ArrowLeft, Users, CreditCard, Building2,
+  UserPlus, Trash2, Edit2, X, RefreshCw, Ban, Wrench, Save,
 } from 'lucide-react';
-import { TIER_LABELS, type OrgTier, type LicenseStatus } from '@psynote/shared';
+import {
+  TIER_LABELS,
+  getOrgTypeDisplay,
+  type OrgTier,
+  type LicenseStatus,
+} from '@psynote/shared';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -28,6 +33,12 @@ interface TenantDetailData {
     expiresAt: string | null;
     issuedAt: string | null;
   };
+}
+
+function extractOrgType(data: TenantDetailData | null): string {
+  if (!data) return 'counseling';
+  const s = data.settings as { orgType?: string } | null;
+  return s?.orgType || 'counseling';
 }
 
 interface MemberRow {
@@ -242,6 +253,8 @@ export function TenantDetail() {
   }
 
   const ls = LICENSE_STATUS_LABELS[tenant.license.status];
+  const orgType = extractOrgType(tenant);
+  const typeDisplay = getOrgTypeDisplay(orgType);
 
   return (
     <div className="p-6 max-w-5xl mx-auto">
@@ -255,16 +268,19 @@ export function TenantDetail() {
       </button>
 
       {/* Header */}
-      <div className="flex items-center gap-4 mb-6">
-        <div className="w-12 h-12 bg-brand-100 rounded-xl flex items-center justify-center text-brand-600 font-bold text-lg">
+      <div className="flex items-center gap-4 mb-6 flex-wrap">
+        <div className={`w-12 h-12 ${typeDisplay.iconBgClass} rounded-xl flex items-center justify-center ${typeDisplay.iconColorClass} font-bold text-lg`}>
           {tenant.name.charAt(0)}
         </div>
         <div>
           <h1 className="text-xl font-bold text-slate-900">{tenant.name}</h1>
           <p className="text-sm text-slate-400 font-mono">{tenant.slug}</p>
         </div>
+        <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${typeDisplay.badgeClass}`}>
+          {typeDisplay.label}
+        </span>
         {tenant.license.tier && (
-          <span className="text-xs px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 font-medium ml-2">
+          <span className="text-xs px-2.5 py-1 rounded-full bg-slate-100 text-slate-700 font-medium">
             {TIER_LABELS[tenant.license.tier as OrgTier] || tenant.license.tier}
           </span>
         )}
@@ -301,8 +317,9 @@ export function TenantDetail() {
         <div className="grid grid-cols-2 gap-6">
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 space-y-3">
             <h3 className="text-sm font-semibold text-slate-700">基本信息</h3>
-            <InfoRow label="机构名称" value={tenant.name} />
-            <InfoRow label="机构标识" value={tenant.slug} mono />
+            <InfoRow label={typeDisplay.nameLabel} value={tenant.name} />
+            <InfoRow label={typeDisplay.slugLabel} value={tenant.slug} mono />
+            <InfoRow label="组织类型" value={typeDisplay.label} />
             <InfoRow label="创建时间" value={new Date(tenant.createdAt).toLocaleDateString('zh-CN')} />
             <InfoRow label="最后更新" value={new Date(tenant.updatedAt).toLocaleDateString('zh-CN')} />
           </div>

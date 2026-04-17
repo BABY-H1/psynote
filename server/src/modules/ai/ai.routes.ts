@@ -97,7 +97,11 @@ export async function aiRoutes(app: FastifyInstance) {
       chiefComplaint?: string;
     };
 
-    const result = await assessRisk(body);
+    const result = await assessRisk(body, {
+      orgId: request.org!.orgId,
+      userId: request.user!.id,
+      pipeline: 'risk-detection',
+    });
     await logAudit(request, 'ai_call', 'risk-assess');
     return result;
   });
@@ -115,10 +119,17 @@ export async function aiRoutes(app: FastifyInstance) {
 
     if (!body.riskLevel) throw new ValidationError('riskLevel is required');
 
-    const recommendation = await recommendTriage({
-      ...body,
-      availableInterventions: body.availableInterventions || ['course', 'group', 'counseling', 'referral'],
-    });
+    const recommendation = await recommendTriage(
+      {
+        ...body,
+        availableInterventions: body.availableInterventions || ['course', 'group', 'counseling', 'referral'],
+      },
+      {
+        orgId: request.org!.orgId,
+        userId: request.user!.id,
+        pipeline: 'triage',
+      },
+    );
 
     await logAudit(request, 'ai_call', 'triage');
     return recommendation;

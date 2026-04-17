@@ -73,9 +73,17 @@ export async function consentRoutes(app: FastifyInstance) {
         clientId: string;
         careEpisodeId?: string;
         templateId: string;
+        recipientType?: 'client' | 'guardian';
+        recipientName?: string;
       };
       if (!body.clientId || !body.templateId) {
         throw new ValidationError('clientId and templateId are required');
+      }
+      if (body.recipientType && !['client', 'guardian'].includes(body.recipientType)) {
+        throw new ValidationError('recipientType 必须是 client 或 guardian');
+      }
+      if (body.recipientType === 'guardian' && !body.recipientName?.trim()) {
+        throw new ValidationError('发给家长/监护人时,recipientName 必填');
       }
       const doc = await consentService.sendConsentToClient({
         orgId: request.org!.orgId,

@@ -1,4 +1,5 @@
 import { aiClient } from '../providers/openai-compatible.js';
+import type { AiCallContext } from '../usage-tracker.js';
 
 interface TriageInput {
   riskLevel: string;
@@ -48,7 +49,10 @@ export interface TriageResult {
  * - Each recommendation maps to the launch verb's actionType for one-click adoption
  * - Includes a paste-friendly summary for clinical notes
  */
-export async function recommendTriage(input: TriageInput): Promise<TriageResult> {
+export async function recommendTriage(
+  input: TriageInput,
+  track?: Partial<AiCallContext>,
+): Promise<TriageResult> {
   const dimSummary = input.dimensions
     .map((d) => `${d.name}: ${d.score}分 (${d.label})`)
     .join('\n');
@@ -88,6 +92,11 @@ ${input.chiefComplaint ? `主诉: ${input.chiefComplaint}` : ''}
 
 维度得分:
 ${dimSummary}`,
-    { temperature: 0.3 },
+    {
+      temperature: 0.3,
+      track: track?.orgId
+        ? { orgId: track.orgId, userId: track.userId, pipeline: track.pipeline ?? 'triage' }
+        : undefined,
+    },
   );
 }

@@ -137,6 +137,7 @@ export async function orgRoutes(app: FastifyInstance) {
       permissions: m.member.permissions,
       validUntil: m.member.validUntil,
       supervisorId: m.member.supervisorId,
+      fullPracticeAccess: m.member.fullPracticeAccess,
       certifications: m.member.certifications,
       specialties: m.member.specialties,
       maxCaseload: m.member.maxCaseload,
@@ -219,6 +220,7 @@ export async function orgRoutes(app: FastifyInstance) {
       status?: string;
       permissions?: Record<string, unknown>;
       supervisorId?: string | null;
+      fullPracticeAccess?: boolean;
       certifications?: unknown[];
       specialties?: string[];
       maxCaseload?: number | null;
@@ -235,6 +237,9 @@ export async function orgRoutes(app: FastifyInstance) {
         throw new ForbiddenError('督导功能需要团队版或更高版本');
       }
       updates.supervisorId = body.supervisorId;
+    }
+    if (body.fullPracticeAccess !== undefined) {
+      updates.fullPracticeAccess = body.fullPracticeAccess;
     }
     if (body.certifications !== undefined) updates.certifications = body.certifications;
     if (body.specialties !== undefined) updates.specialties = body.specialties;

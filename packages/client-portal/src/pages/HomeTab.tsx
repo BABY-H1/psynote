@@ -11,6 +11,7 @@ import { useMyDocuments } from '@client/api/useConsent';
 import { PageLoading, RiskBadge } from '@client/shared/components';
 import { TaskCard } from '../components/TaskCard';
 import { SectionHeader } from '../components/SectionHeader';
+import { useViewingContext } from '../stores/viewingContext';
 
 /**
  * Phase 8c — HomeTab: task-driven landing page.
@@ -75,9 +76,14 @@ const INTERVENTION_LABEL: Record<string, string> = {
 
 export function HomeTab() {
   const navigate = useNavigate();
-  const { data: dashboard, isLoading: dashboardLoading } = useClientDashboard();
+  // Phase 14 — viewingAs decides whether HomeTab shows my own data or
+  // a child's data. Timeline is guardian-blocked; only fetch when looking
+  // at myself (otherwise the API returns 403).
+  const viewingAs = useViewingContext((s) => s.viewingAs);
+  const isViewingChild = !!viewingAs;
+  const { data: dashboard, isLoading: dashboardLoading } = useClientDashboard({ as: viewingAs ?? undefined });
   const { data: timeline } = useMyTimeline();
-  const { data: myDocs } = useMyDocuments();
+  const { data: myDocs } = useMyDocuments({ as: viewingAs ?? undefined });
 
   // Compute the todo list by combining 3 data sources.
   const todos = useMemo(() => {
@@ -148,8 +154,10 @@ export function HomeTab() {
     dashboard?.episode?.interventionType &&
     INTERVENTION_LABEL[dashboard.episode.interventionType];
 
-  // Take the 3 most recent timeline events for the "最近动态" section
-  const recentEvents = (timeline ?? []).slice(0, 3);
+  // Take the 3 most recent timeline events for the "最近动态" section.
+  // When viewing a child, we don't show the timeline (it's a sensitive
+  // mix of session events that guardians shouldn't see).
+  const recentEvents = isViewingChild ? [] : (timeline ?? []).slice(0, 3);
 
   return (
     <div className="space-y-6">

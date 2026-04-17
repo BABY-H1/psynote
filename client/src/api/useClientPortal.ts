@@ -8,6 +8,20 @@ function orgPrefix() {
   return `/orgs/${orgId}/client`;
 }
 
+/**
+ * Phase 14 — Optional `as` query string helper.
+ *
+ * If `as` is set and not equal to the caller's own user id, we append it as
+ * `?as=<uid>` so the server treats the request as "guardian viewing on
+ * behalf of <uid>". The server validates the relationship before fulfilling.
+ *
+ * Many of these hooks are only used inside `packages/client-portal` (which has
+ * its own `viewingContext` store). Pages there pass `{ as: viewingAs }`.
+ */
+function asSuffix(as?: string): string {
+  return as ? `?as=${encodeURIComponent(as)}` : '';
+}
+
 interface DashboardData {
   episode: CareEpisode | null;
   recentResults: AssessmentResult[];
@@ -15,11 +29,11 @@ interface DashboardData {
   unreadNotificationCount: number;
 }
 
-export function useClientDashboard() {
+export function useClientDashboard(opts?: { as?: string }) {
   const orgId = useAuthStore((s) => s.currentOrgId);
   return useQuery({
-    queryKey: ['clientDashboard', orgId],
-    queryFn: () => api.get<DashboardData>(`${orgPrefix()}/dashboard`),
+    queryKey: ['clientDashboard', orgId, opts?.as ?? null],
+    queryFn: () => api.get<DashboardData>(`${orgPrefix()}/dashboard${asSuffix(opts?.as)}`),
     enabled: !!orgId,
   });
 }
@@ -33,11 +47,11 @@ export function useMyResults() {
   });
 }
 
-export function useMyAppointments() {
+export function useMyAppointments(opts?: { as?: string }) {
   const orgId = useAuthStore((s) => s.currentOrgId);
   return useQuery({
-    queryKey: ['myAppointments', orgId],
-    queryFn: () => api.get<Appointment[]>(`${orgPrefix()}/appointments`),
+    queryKey: ['myAppointments', orgId, opts?.as ?? null],
+    queryFn: () => api.get<Appointment[]>(`${orgPrefix()}/appointments${asSuffix(opts?.as)}`),
     enabled: !!orgId,
   });
 }
@@ -89,12 +103,12 @@ export function useMyAssessments() {
   });
 }
 
-export function useCounselors() {
+export function useCounselors(opts?: { as?: string }) {
   const orgId = useAuthStore((s) => s.currentOrgId);
   return useQuery({
-    queryKey: ['counselors', orgId],
+    queryKey: ['counselors', orgId, opts?.as ?? null],
     queryFn: () => api.get<{ id: string; name: string; avatarUrl?: string }[]>(
-      `${orgPrefix()}/counselors`,
+      `${orgPrefix()}/counselors${asSuffix(opts?.as)}`,
     ),
     enabled: !!orgId,
   });

@@ -13,8 +13,9 @@ export type EpisodeStatus = 'active' | 'paused' | 'closed' | 'archived';
 /** Four-level risk/triage system (Chinese standard) */
 export type RiskLevel = 'level_1' | 'level_2' | 'level_3' | 'level_4';
 
-/** Intervention type mapped from risk level */
-export type InterventionType = 'course' | 'group' | 'counseling' | 'referral';
+/** Intervention type mapped from risk level. 'crisis' was added in Phase 13 for
+ * crisis-handling cases (distinct from regular counseling). */
+export type InterventionType = 'course' | 'group' | 'counseling' | 'referral' | 'crisis';
 
 /** Appointment status */
 export type AppointmentStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled' | 'no_show';

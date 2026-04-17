@@ -52,7 +52,15 @@ export function useDeleteConsentTemplate() {
 export function useSendConsent() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { clientId: string; careEpisodeId?: string; templateId: string }) =>
+    mutationFn: (data: {
+      clientId: string;
+      careEpisodeId?: string;
+      templateId: string;
+      /** Phase 13: 发给 'client'(默认)还是 'guardian'(家长/监护人) */
+      recipientType?: 'client' | 'guardian';
+      /** 当 recipientType='guardian' 时填写,例如 "母亲 王某" */
+      recipientName?: string;
+    }) =>
       api.post<ClientDocument>(`${orgPrefix()}/compliance/consent-documents`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['consentDocuments'] });
@@ -79,20 +87,29 @@ export function useConsentDocuments(filters?: { clientId?: string; status?: stri
 
 // ─── Client side ────────────────────────────────────────────────
 
-export function useMyDocuments() {
+/**
+ * Phase 14 — Optional `as` parameter for guardian impersonation.
+ * When set, appends `?as=<uid>` to the request so the server returns the
+ * child's documents/consents (after verifying the relationship).
+ */
+function asSuffix(as?: string): string {
+  return as ? `?as=${encodeURIComponent(as)}` : '';
+}
+
+export function useMyDocuments(opts?: { as?: string }) {
   const orgId = useAuthStore((s) => s.currentOrgId);
   return useQuery({
-    queryKey: ['myDocuments', orgId],
-    queryFn: () => api.get<ClientDocument[]>(`${orgPrefix()}/client/documents`),
+    queryKey: ['myDocuments', orgId, opts?.as ?? null],
+    queryFn: () => api.get<ClientDocument[]>(`${orgPrefix()}/client/documents${asSuffix(opts?.as)}`),
     enabled: !!orgId,
   });
 }
 
-export function useSignDocument() {
+export function useSignDocument(opts?: { as?: string }) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ docId, name }: { docId: string; name: string }) =>
-      api.post<ClientDocument>(`${orgPrefix()}/client/documents/${docId}/sign`, { name }),
+      api.post<ClientDocument>(`${orgPrefix()}/client/documents/${docId}/sign${asSuffix(opts?.as)}`, { name }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['myDocuments'] });
       qc.invalidateQueries({ queryKey: ['consentDocuments'] });
@@ -101,20 +118,20 @@ export function useSignDocument() {
   });
 }
 
-export function useMyConsents() {
+export function useMyConsents(opts?: { as?: string }) {
   const orgId = useAuthStore((s) => s.currentOrgId);
   return useQuery({
-    queryKey: ['myConsents', orgId],
-    queryFn: () => api.get<ConsentRecord[]>(`${orgPrefix()}/client/consents`),
+    queryKey: ['myConsents', orgId, opts?.as ?? null],
+    queryFn: () => api.get<ConsentRecord[]>(`${orgPrefix()}/client/consents${asSuffix(opts?.as)}`),
     enabled: !!orgId,
   });
 }
 
-export function useRevokeConsent() {
+export function useRevokeConsent(opts?: { as?: string }) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (consentId: string) =>
-      api.post<ConsentRecord>(`${orgPrefix()}/client/consents/${consentId}/revoke`, {}),
+      api.post<ConsentRecord>(`${orgPrefix()}/client/consents/${consentId}/revoke${asSuffix(opts?.as)}`, {}),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['myConsents'] }); },
   });
 }

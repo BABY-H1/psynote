@@ -1,4 +1,5 @@
 import { env } from '../../../config/env.js';
+import { logAiUsage, type AiCallContext } from '../usage-tracker.js';
 
 interface ChatMessage {
   role: 'system' | 'user' | 'assistant';
@@ -19,6 +20,14 @@ interface GenerateOptions {
   temperature?: number;
   maxTokens?: number;
   model?: string;
+}
+
+/**
+ * Per-call tracking context. When pipelines supply this, the AIClient
+ * automatically writes a row to `ai_call_logs` on successful responses.
+ */
+export interface AIClientCallOptions extends GenerateOptions {
+  track?: AiCallContext;
 }
 
 /**
@@ -48,7 +57,7 @@ export class AIClient {
 
   async chat(
     messages: ChatMessage[],
-    options?: GenerateOptions,
+    options?: AIClientCallOptions,
   ): Promise<string> {
     if (!this.isConfigured) {
       throw new Error('AI provider is not configured (AI_API_KEY missing)');
@@ -61,6 +70,7 @@ export class AIClient {
     // client with an empty response body.
     const timeout = setTimeout(() => controller.abort(), 270_000); // 4.5 min
 
+    const model = options?.model || this.defaultModel;
     const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
@@ -68,7 +78,7 @@ export class AIClient {
         'Authorization': `Bearer ${this.apiKey}`,
       },
       body: JSON.stringify({
-        model: options?.model || this.defaultModel,
+        model,
         messages,
         temperature: options?.temperature ?? 0.7,
         max_tokens: options?.maxTokens ?? 2048,
@@ -84,13 +94,26 @@ export class AIClient {
     }
 
     const data = await response.json() as ChatCompletionResponse;
+
+    // Fire-and-forget usage logging when the pipeline supplied a tracking
+    // context. Errors are swallowed inside logAiUsage so they never break the
+    // caller.
+    if (options?.track && data.usage) {
+      logAiUsage(options.track, {
+        promptTokens: data.usage.prompt_tokens ?? 0,
+        completionTokens: data.usage.completion_tokens ?? 0,
+        totalTokens: data.usage.total_tokens ?? 0,
+        model,
+      });
+    }
+
     return data.choices[0]?.message?.content || '';
   }
 
   /**
    * Generate text with a system prompt and user prompt.
    */
-  async generate(systemPrompt: string, userPrompt: string, options?: GenerateOptions): Promise<string> {
+  async generate(systemPrompt: string, userPrompt: string, options?: AIClientCallOptions): Promise<string> {
     return this.chat([
       { role: 'system', content: systemPrompt },
       { role: 'user', content: userPrompt },
@@ -105,7 +128,7 @@ export class AIClient {
   async generateJSON<T>(
     systemPrompt: string,
     userPrompt: string,
-    options?: GenerateOptions,
+    options?: AIClientCallOptions,
   ): Promise<T> {
     const messages: ChatMessage[] = [
       {

@@ -44,7 +44,7 @@ export interface TriageConfig {
   levels: TriageLevel[];
   aggregation: 'highest' | 'weighted_average' | 'custom_formula';
   requireCounselorConfirm: boolean;
-  autoActions: Record<string, string[]>;
+  // autoActions removed in Phase 12 — replaced by workflow_rules.
 }
 
 export interface TriageLevel {

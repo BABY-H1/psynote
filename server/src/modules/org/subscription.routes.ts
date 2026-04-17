@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, count } from 'drizzle-orm';
+import { eq, and, count, sql, gte } from 'drizzle-orm';
 import { db } from '../../config/database.js';
-import { organizations, orgMembers } from '../../db/schema.js';
+import { organizations, orgMembers, aiCallLogs } from '../../db/schema.js';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { rejectClient } from '../../middleware/reject-client.js';
@@ -68,6 +68,61 @@ export async function subscriptionRoutes(app: FastifyInstance) {
         ...license,
         seatsUsed: seatResult.value,
       },
+    };
+  });
+
+  /**
+   * AI usage for the current calendar month.
+   *
+   * Aggregates `ai_call_logs.total_tokens` where created_at >= start of
+   * current month. The monthly limit is read from
+   * `organizations.settings.aiConfig.monthlyTokenLimit` (0 / missing = unlimited).
+   *
+   * Note: token tracking is opt-in per pipeline (Phase 11). Pipelines that
+   * don't pass a `track` context won't contribute to this count. The UI
+   * surfaces a "仅统计已接入追踪的管道" note so users aren't misled.
+   */
+  app.get('/ai-usage', async (request) => {
+    const orgId = request.org!.orgId;
+    const [org] = await db
+      .select({ settings: organizations.settings })
+      .from(organizations)
+      .where(eq(organizations.id, orgId))
+      .limit(1);
+    if (!org) throw new NotFoundError('Organization', orgId);
+
+    const aiConfig = ((org.settings as Record<string, any>) || {}).aiConfig || {};
+    const monthlyLimit: number = Number(aiConfig.monthlyTokenLimit || 0);
+
+    // First day of current month, 00:00 local time.
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const [row] = await db
+      .select({
+        tokens: sql<number>`COALESCE(SUM(${aiCallLogs.totalTokens}), 0)::int`,
+        calls: sql<number>`COUNT(*)::int`,
+      })
+      .from(aiCallLogs)
+      .where(and(
+        eq(aiCallLogs.orgId, orgId),
+        gte(aiCallLogs.createdAt, monthStart),
+      ));
+
+    const monthlyUsed = Number(row?.tokens ?? 0);
+    const callCount = Number(row?.calls ?? 0);
+    const remaining = monthlyLimit > 0 ? Math.max(0, monthlyLimit - monthlyUsed) : null;
+    const percentUsed = monthlyLimit > 0 ? Math.min(100, (monthlyUsed / monthlyLimit) * 100) : null;
+
+    return {
+      monthStart: monthStart.toISOString(),
+      monthlyLimit,
+      monthlyUsed,
+      remaining,
+      percentUsed,
+      callCount,
+      /** True when no limit is configured — show "无限制" in UI */
+      unlimited: monthlyLimit <= 0,
     };
   });
 }

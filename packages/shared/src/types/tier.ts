@@ -186,3 +186,112 @@ export const ORG_TYPE_LABELS: Record<OrgType, string> = {
   school:     '学校',
   hospital:   '医疗机构',
 };
+
+// ─── OrgType 统一展示元数据 ──────────────────────────────────────
+/**
+ * 5 种组织类型在 UI 各处（租户列表徽章、详情头部、向导卡片）共享的
+ * 展示配置。改这里一次，三个地方同步更新。
+ */
+export type OrgTypeTheme = 'green' | 'blue' | 'amber' | 'teal' | 'rose';
+
+export interface OrgTypeDisplay {
+  /** 短徽章文本，2 字最佳 */
+  badge: string;
+  /** 完整名称 */
+  label: string;
+  /** 对内描述 */
+  description: string;
+  /** 主题色名（tailwind palette key） */
+  theme: OrgTypeTheme;
+  /** 徽章 class */
+  badgeClass: string;
+  /** Avatar/iconBg class */
+  iconBgClass: string;
+  /** Icon 颜色 class */
+  iconColorClass: string;
+  /** 名称字段 label */
+  nameLabel: string;
+  /** slug 字段 label */
+  slugLabel: string;
+  /** 管理员字段 label */
+  adminLabel: string;
+  /** 创建向导 placeholder */
+  namePlaceholder: string;
+}
+
+export const ORG_TYPE_DISPLAY: Record<OrgType, OrgTypeDisplay> = {
+  solo: {
+    badge: '个体',
+    label: '个体咨询师',
+    description: '独立执业的心理咨询师，1 人使用',
+    theme: 'green',
+    badgeClass: 'bg-green-100 text-green-700',
+    iconBgClass: 'bg-green-100',
+    iconColorClass: 'text-green-600',
+    nameLabel: '执业名称',
+    slugLabel: '标识 (slug)',
+    adminLabel: '咨询师账号',
+    namePlaceholder: '如：张老师心理工作室',
+  },
+  counseling: {
+    badge: '机构',
+    label: '专业机构',
+    description: '心理咨询中心、治疗机构、EAP 服务商等多人团队',
+    theme: 'blue',
+    badgeClass: 'bg-blue-100 text-blue-700',
+    iconBgClass: 'bg-blue-100',
+    iconColorClass: 'text-blue-600',
+    nameLabel: '机构名称',
+    slugLabel: '机构标识 (slug)',
+    adminLabel: '机构管理员',
+    namePlaceholder: '如：阳光心理健康中心',
+  },
+  enterprise: {
+    badge: '企业',
+    label: '企业',
+    description: '国企、央企、民企等需要 EAP 员工心理援助服务的企业或工会',
+    theme: 'amber',
+    badgeClass: 'bg-amber-100 text-amber-700',
+    iconBgClass: 'bg-amber-100',
+    iconColorClass: 'text-amber-600',
+    nameLabel: '企业名称',
+    slugLabel: '企业标识 (slug)',
+    adminLabel: '企业管理员（HR/工会）',
+    namePlaceholder: '如：中石化工会心理关爱中心',
+  },
+  school: {
+    badge: '学校',
+    label: '学校',
+    description: '中小学、高校心理健康中心、学生心理辅导站',
+    theme: 'teal',
+    badgeClass: 'bg-teal-100 text-teal-700',
+    iconBgClass: 'bg-teal-100',
+    iconColorClass: 'text-teal-600',
+    nameLabel: '学校名称',
+    slugLabel: '学校标识 (slug)',
+    adminLabel: '学校管理员',
+    namePlaceholder: '如：清华大学心理健康中心',
+  },
+  hospital: {
+    badge: '医疗',
+    label: '医疗机构',
+    description: '精神卫生中心、综合医院心理科、康复机构',
+    theme: 'rose',
+    badgeClass: 'bg-rose-100 text-rose-700',
+    iconBgClass: 'bg-rose-100',
+    iconColorClass: 'text-rose-600',
+    nameLabel: '机构名称',
+    slugLabel: '机构标识 (slug)',
+    adminLabel: '机构管理员',
+    namePlaceholder: '如：北京安定医院心理科',
+  },
+};
+
+/**
+ * Helper：给定 orgType 或任意字符串（DB 返回的原始值），拿到展示配置。
+ * 未知值 fallback 到 counseling。
+ */
+export function getOrgTypeDisplay(orgType: string | null | undefined): OrgTypeDisplay {
+  const t = orgType as OrgType;
+  return ORG_TYPE_DISPLAY[t] ?? ORG_TYPE_DISPLAY.counseling;
+}

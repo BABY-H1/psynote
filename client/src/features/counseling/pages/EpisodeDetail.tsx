@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useEpisode, useCloseEpisode, useReopenEpisode,
   useSessionNotes,
@@ -7,6 +7,7 @@ import {
 import { useTreatmentPlans } from '../../../api/useTreatmentPlan';
 import { useClientProfile } from '../../../api/useClientProfile';
 import { useResults } from '../../../api/useAssessments';
+import { useCrisisCaseByEpisode } from '../../../api/useCrisisCase';
 
 import { WorkspaceLayout } from '../components/WorkspaceLayout';
 import { ChatWorkspace, type WorkMode } from '../components/ChatWorkspace';
@@ -18,7 +19,7 @@ import {
   useToast,
   ServiceDetailLayout,
 } from '../../../shared/components';
-import { RotateCcw } from 'lucide-react';
+import { AlertTriangle, RotateCcw } from 'lucide-react';
 import type { SessionNote, ServiceStatus } from '@psynote/shared';
 
 /**
@@ -60,19 +61,39 @@ function mapEpisodeStatus(s: string): ServiceStatus {
 export function EpisodeDetail() {
   const { episodeId } = useParams<{ episodeId: string }>();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { data: episode } = useEpisode(episodeId);
   const { data: plans } = useTreatmentPlans(episodeId);
   const { data: sessionNotes } = useSessionNotes({ careEpisodeId: episodeId });
   const { data: profile } = useClientProfile(episode?.clientId);
   const { data: assessmentResults } = useResults({ userId: episode?.clientId });
+  const { data: crisisCase } = useCrisisCaseByEpisode(episodeId);
   const closeEpisode = useCloseEpisode();
   const reopenEpisode = useReopenEpisode();
   const { toast } = useToast();
 
+  const isCrisisEpisode = episode?.interventionType === 'crisis' && !!crisisCase;
+  const urlMode = searchParams.get('mode') as WorkMode | null;
+  const initialMode: WorkMode =
+    urlMode === 'crisis' && isCrisisEpisode ? 'crisis'
+    : isCrisisEpisode ? 'crisis'
+    : 'note';
+
   const [noteFields, setNoteFields] = useState<Record<string, string>>({});
   const [noteFormat, setNoteFormat] = useState('soap');
   const [planSuggestion, setPlanSuggestion] = useState<any>(null);
-  const [currentMode, setCurrentMode] = useState<WorkMode>('note');
+  const [currentMode, setCurrentMode] = useState<WorkMode>(initialMode);
+
+  // If the crisis case loads after first render (e.g. async), snap into
+  // crisis mode automatically for a crisis episode. Also honor an explicit
+  // `?mode=crisis` URL so the Accept-candidate deep-link lands on the
+  // checklist even though `crisisCase` arrives after first paint.
+  React.useEffect(() => {
+    if (isCrisisEpisode && currentMode === 'note' && (urlMode === 'crisis' || !urlMode)) {
+      setCurrentMode('crisis');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCrisisEpisode]);
   const [viewingNote, setViewingNote] = useState<SessionNote | null>(null);
   const [viewingResult, setViewingResult] = useState<any>(null);
   const [viewingConversation, setViewingConversation] = useState<any>(null);
@@ -141,7 +162,14 @@ export function EpisodeDetail() {
       statusText={tone.text}
       statusClassName={tone.cls}
       metaLine={
-        episode.chiefComplaint ? <span>{episode.chiefComplaint}</span> : undefined
+        isCrisisEpisode ? (
+          <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full text-xs">
+            <AlertTriangle className="w-3 h-3" />
+            危机处置案件 · 在右侧清单按步骤操作
+          </span>
+        ) : episode.chiefComplaint ? (
+          <span>{episode.chiefComplaint}</span>
+        ) : undefined
       }
       onBack={() => navigate('/episodes')}
       actions={
@@ -191,6 +219,8 @@ export function EpisodeDetail() {
             sessionHistorySummary={sessionHistorySummary}
             assessmentSummary={assessmentSummary}
             lastNoteSummary={lastNote?.summary}
+            isCrisisEpisode={isCrisisEpisode}
+            initialMode={initialMode}
             onModeChange={setCurrentMode}
             onNoteFormatChange={(format) => { setNoteFormat(format); setNoteFields({}); }}
             onNoteFieldsUpdate={(fields, format) => {
@@ -227,6 +257,8 @@ export function EpisodeDetail() {
             onCloseResult={() => setViewingResult(null)}
             viewingConversation={viewingConversation}
             onCloseConversation={() => setViewingConversation(null)}
+            crisisCase={crisisCase}
+            clientName={episode.client?.name}
           />
         }
       />

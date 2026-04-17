@@ -17,8 +17,8 @@ import {
 import { SchoolClassManagement } from './SchoolClassManagement';
 import { MemberManagement } from './MemberManagement';
 import { OrgBrandingSettings } from './OrgBrandingSettings';
+import { SubscriptionTab } from './SubscriptionTab';
 import { AuditLogViewer } from '../../collaboration/AuditLogViewer';
-import { LicenseCard } from '../components/LicenseCard';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
@@ -55,6 +55,8 @@ const TABS: TabDef[] = [
   { key: 'members', label: '成员管理', Icon: Users, group: 'org', adminOnly: true, hideForSolo: true },
   { key: 'classes', label: '班级管理', Icon: GraduationCap, group: 'org', adminOnly: true, onlyForOrgType: 'school' },
   { key: 'partners', label: '合作机构', Icon: Handshake, group: 'org', adminOnly: true, requiresFeature: 'partnership', hideForSolo: true },
+  // 自动化规则 tab 已下线 — 规则改为在每个测评的「筛查规则」步骤里按测评级独立配置。
+  // 若后续需要跨测评的机构通用规则,可再恢复此入口。
   // 经营信息
   { key: 'subscription', label: '订阅管理', Icon: CreditCard, group: 'business' },
   // 安全与合规
@@ -221,36 +223,6 @@ function BasicInfoTab() {
         </button>
       </div>
 
-    </div>
-  );
-}
-
-// ─── Subscription Tab (经营信息) ────────────────────────────────────
-
-function SubscriptionTab() {
-  const { currentOrgTier, currentOrgType } = useAuthStore();
-
-  const tierLabel: Record<string, string> = { starter: '入门版', growth: '成长版', flagship: '旗舰版' };
-  const typeLabel: Record<string, string> = { solo: '个体咨询师', counseling: '专业机构', enterprise: '企业', school: '学校', hospital: '医疗机构' };
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-slate-50 rounded-lg p-4">
-          <span className="text-sm text-slate-500">当前套餐</span>
-          <p className="text-lg font-bold text-slate-900 mt-1">
-            {tierLabel[currentOrgTier || 'starter'] || '入门版'}
-          </p>
-        </div>
-        <div className="bg-slate-50 rounded-lg p-4">
-          <span className="text-sm text-slate-500">组织类型</span>
-          <p className="text-lg font-bold text-slate-900 mt-1">
-            {typeLabel[currentOrgType || 'counseling'] || '专业机构'}
-          </p>
-        </div>
-      </div>
-
-      <LicenseCard />
     </div>
   );
 }

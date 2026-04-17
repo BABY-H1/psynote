@@ -25,6 +25,12 @@ export const users = pgTable('users', {
   passwordHash: text('password_hash'),
   avatarUrl: text('avatar_url'),
   isSystemAdmin: boolean('is_system_admin').notNull().default(false),
+  /**
+   * Phase 14: 标记此 user 是通过家长自助绑定流程创建的"家长账号"。
+   * 不影响登录或权限,仅供咨询师端 UI 排序/展示用(避免把家长账号混在
+   * 来访者列表里),以及未来分析"非来访者用户量"。
+   */
+  isGuardianAccount: boolean('is_guardian_account').notNull().default(false),
   lastLoginAt: timestamp('last_login_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -346,7 +352,11 @@ export const sessionNotes = pgTable('session_notes', {
   status: text('status').notNull().default('draft'), // draft | finalized | submitted_for_review | reviewed
   supervisorAnnotation: text('supervisor_annotation'),
   submittedForReviewAt: timestamp('submitted_for_review_at', { withTimezone: true }),
-  allowedOrgIds: jsonb('allowed_org_ids').default([]),
+  // NOTE: NO allowed_org_ids here. session_notes is per-client clinical record,
+  // never cross-org shared. The previous schema had this column declared by
+  // mistake (mirroring library tables), which caused `db.select().from(sessionNotes)`
+  // to fail at runtime because the actual DB column never existed (migration 019
+  // only added it to scales/note_templates/treatment_goal_library/group_schemes/courses).
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -411,6 +421,15 @@ export const clientDocuments = pgTable('client_documents', {
   content: text('content'), // full document text (copied from template at send time)
   docType: text('doc_type'),
   consentType: text('consent_type'), // treatment | data_collection | ai_processing | ...
+  /**
+   * 文书接收方身份,用于区分发给来访者本人还是监护人/家长(Phase 13 危机处置工作流引入)。
+   *   - 'client'   默认,发给来访者本人签署(原有行为)
+   *   - 'guardian' 发给家长/监护人(危机处置场景,由咨询师线下交付并留痕)
+   * 当 recipient_type='guardian' 时,client_portal 不会在来访者端展示这份文书。
+   */
+  recipientType: text('recipient_type').notNull().default('client'),
+  /** 监护人姓名/关系,仅当 recipient_type='guardian' 时填写(如 "母亲 王某") */
+  recipientName: text('recipient_name'),
   status: text('status').notNull().default('pending'),
   signedAt: timestamp('signed_at', { withTimezone: true }),
   signatureData: jsonb('signature_data'), // { name, ip, userAgent, timestamp }
@@ -965,6 +984,12 @@ export const consentRecords = pgTable('consent_records', {
   revokedAt: timestamp('revoked_at', { withTimezone: true }),
   expiresAt: timestamp('expires_at', { withTimezone: true }),
   documentId: uuid('document_id').references(() => clientDocuments.id),
+  /**
+   * Phase 14: 当家长代孩子签同意书时,这里记签字人的 user.id;
+   * `clientId` 仍是孩子(被同意约束的人),`signerOnBehalfOf` 是实际签字的家长.
+   * 默认 NULL = 来访者本人签的.
+   */
+  signerOnBehalfOf: uuid('signer_on_behalf_of').references(() => users.id),
   status: text('status').notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
@@ -1130,6 +1155,247 @@ export const schoolStudentProfiles = pgTable('school_student_profiles', {
 }, (t) => [
   uniqueIndex('uq_school_students_org_user').on(t.orgId, t.userId),
   index('idx_school_students_org_grade').on(t.orgId, t.grade),
+]);
+
+// ─── Workflow Rule Engine ────────────────────────────────────────
+
+/**
+ * 机构级自动化规则。
+ *
+ * 语义:**当** triggerEvent 发生 + **满足** conditions + **执行** actions。
+ *
+ * MVP 范围:
+ *   - triggerEvent 仅支持 'assessment_result.created'
+ *   - conditions 是下拉式 JSON 数组(见 WorkflowCondition 类型)
+ *   - actions 是按序执行的数组,仅支持 'assign_course' 和 'create_candidate_entry'
+ *
+ * 关键设计:规则引擎**不**直接发短信/邮件等对外联系。所有外部动作一律走
+ * `candidate_pool`,由对应角色(咨询师 / 心理老师 / 管理员)在 UI 里手动决定。
+ * 这是合规 + 责任边界的硬性要求。
+ */
+export const workflowRules = pgTable('workflow_rules', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  /**
+   * 规则的作用域 —— 这是核心设计决策。
+   *   - 非空 = "测评级规则",只在该 assessmentId 触发时执行
+   *   - NULL = 预留给"跨测评通用规则"(暂未开放 UI)
+   *
+   * 主要 UI 入口是测评编辑器的"筛查规则"步骤,写入时带上本测评 ID。
+   * 引擎读取时 `WHERE scope_assessment_id = <本次测评> OR scope_assessment_id IS NULL`。
+   */
+  scopeAssessmentId: uuid('scope_assessment_id'),
+  name: text('name').notNull(),
+  description: text('description'),
+  triggerEvent: text('trigger_event').notNull(), // 'assessment_result.created' | ...
+  conditions: jsonb('conditions').notNull().default([]), // WorkflowCondition[]
+  actions: jsonb('actions').notNull().default([]), // WorkflowAction[]
+  isActive: boolean('is_active').notNull().default(true),
+  priority: integer('priority').notNull().default(0), // 高在前
+  /** 如果规则由测评向导自动同步生成,这里记一下,方便重新同步时能定位到旧行。 */
+  source: text('source'), // 'assessment_wizard' | 'manual'
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_workflow_rules_org_trigger_active').on(t.orgId, t.triggerEvent, t.isActive),
+  index('idx_workflow_rules_scope_assessment').on(t.scopeAssessmentId),
+]);
+
+/**
+ * 规则执行日志。每次触发都写一行,包括条件匹配结果和动作执行结果。
+ * 用于:① UI 展示"规则最近执行了几次" ② 调试规则没触发的原因。
+ */
+export const workflowExecutions = pgTable('workflow_executions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  ruleId: uuid('rule_id').references(() => workflowRules.id, { onDelete: 'cascade' }),
+  triggerEvent: text('trigger_event').notNull(),
+  eventPayload: jsonb('event_payload').notNull().default({}),
+  conditionsMatched: boolean('conditions_matched').notNull(),
+  actionsResult: jsonb('actions_result').notNull().default([]), // per-action { actionType, status, detail }
+  status: text('status').notNull(), // 'success' | 'partial' | 'failed' | 'skipped'
+  errorMessage: text('error_message'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_workflow_executions_org_rule').on(t.orgId, t.ruleId, t.createdAt),
+]);
+
+/**
+ * 候选池 —— 规则引擎**不会自动执行**的那些动作的产物。
+ *
+ * 比如"level_3 建议建个案"触发后,系统不会直接建个案,而是往这张表写一条
+ * `kind='episode_candidate'` 的候选,咨询师在协作中心"待处理候选"tab 看到,
+ * 决定是否真的建个案。
+ *
+ * 学校团辅候选 `kind='group_candidate'` 尤其如此,要配合班级课表人工组人。
+ * 危机候选 `kind='crisis_candidate'` 更是要咨询师手动二次访谈 → 决定是否联系家长。
+ */
+export const candidatePool = pgTable('candidate_pool', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  // 候选人(来访者)
+  clientUserId: uuid('client_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  // 候选类型
+  kind: text('kind').notNull(), // 'episode_candidate' | 'group_candidate' | 'crisis_candidate' | 'course_candidate'
+  // 规则产生的建议(显示在卡片上)
+  suggestion: text('suggestion').notNull(),
+  reason: text('reason'), // 为什么入池 —— 规则文案 / 风险等级
+  priority: text('priority').notNull().default('normal'), // 'low' | 'normal' | 'high' | 'urgent'
+  // 来源
+  sourceRuleId: uuid('source_rule_id').references(() => workflowRules.id, { onDelete: 'set null' }),
+  sourceResultId: uuid('source_result_id'), // 指向 assessment_results,不强制 FK(触发源可能扩展)
+  sourcePayload: jsonb('source_payload').default({}), // 触发时的事件 payload 快照
+  // 状态
+  status: text('status').notNull().default('pending'), // 'pending' | 'accepted' | 'dismissed' | 'expired'
+  assignedToUserId: uuid('assigned_to_user_id').references(() => users.id, { onDelete: 'set null' }), // 建议的处理人(如"轮值咨询师")
+  handledByUserId: uuid('handled_by_user_id').references(() => users.id, { onDelete: 'set null' }),
+  handledAt: timestamp('handled_at', { withTimezone: true }),
+  handledNote: text('handled_note'),
+  // 接受后关联到的实体(比如 accepted 后创建了个案,这里存个案 id)
+  resolvedRefType: text('resolved_ref_type'),
+  resolvedRefId: uuid('resolved_ref_id'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_candidate_pool_org_status_kind').on(t.orgId, t.status, t.kind),
+  index('idx_candidate_pool_client').on(t.clientUserId, t.status),
+]);
+
+// ─── AI Usage Tracking ───────────────────────────────────────────
+
+/**
+ * 记录每次 AI pipeline 调用的 token 使用量，用于按机构统计月度用量、
+ * 对照 `organizations.settings.aiConfig.monthlyTokenLimit` 给出剩余额度。
+ *
+ * 写入由 AIClient 在 chat 请求成功后自动完成（依赖调用方传入 orgId）。
+ */
+export const aiCallLogs = pgTable('ai_call_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  pipeline: text('pipeline').notNull(), // e.g. 'triage' | 'soap-analysis' | 'risk-detection'
+  model: text('model'),
+  promptTokens: integer('prompt_tokens').notNull().default(0),
+  completionTokens: integer('completion_tokens').notNull().default(0),
+  totalTokens: integer('total_tokens').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_ai_call_logs_org_created').on(t.orgId, t.createdAt),
+]);
+
+// ─── Crisis Handling (Phase 13) ──────────────────────────────────
+
+/**
+ * 危机处置案件 —— 1:1 绑定 care_episode.
+ *
+ * 当咨询师接手危机候选(candidate_pool.kind='crisis_candidate')时,
+ * 系统会原子创建:
+ *   - 一个 care_episode (interventionType='crisis', currentRisk='level_4')
+ *   - 一条 crisis_cases 记录(清单状态)
+ * 并回填 candidate_pool.resolvedRefType='crisis_case' / resolvedRefId=<id>.
+ *
+ * 设计决策(见 plan):
+ *   - 清单状态(5 步完成情况)单独存在这里,不污染 care_episodes 通用表
+ *   - 每次 checklist 步骤更新也往 care_timeline 写一条事件,这样 CaseTimeline
+ *     UI 能直接渲染处置轨迹,不用改 timeline 聚合逻辑
+ *   - 结案必须督导 sign-off: counselor 提交 → pending_sign_off → 督导点
+ *     确认 → closed(同时关闭关联 careEpisode)
+ */
+export const crisisCases = pgTable('crisis_cases', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  /** 1:1 绑定 care_episode —— 同一个 episode 不会有第二条 crisis_cases */
+  episodeId: uuid('episode_id').notNull().references(() => careEpisodes.id, { onDelete: 'cascade' }),
+  /** 触发源: candidate_pool 行(可能为 null,比如咨询师直接手工开危机案件) */
+  candidateId: uuid('candidate_id').references(() => candidatePool.id, { onDelete: 'set null' }),
+  /**
+   * 案件阶段:
+   *   'open'              咨询师正在处置
+   *   'pending_sign_off'  咨询师已提交结案,等督导审核
+   *   'closed'            督导已确认结案
+   *   'reopened'          督导退回修改(回到 open,保留审计留痕)
+   */
+  stage: text('stage').notNull().default('open'),
+  /**
+   * 5 步检查清单的状态.形如:
+   *   {
+   *     reinterview:   { done: true,  completedAt: ISO, noteId?, summary? },
+   *     parentContact: { done: true,  completedAt: ISO, method, contactName, summary },
+   *     documents:     { done: true,  completedAt: ISO, documentIds: [...] },
+   *     referral:      { done: false, skipped?: true,  skipReason? },
+   *     followUp:      { done: false, skipped?: true,  skipReason? },
+   *   }
+   * 每步结构由 @psynote/shared 的 CrisisChecklist 类型定义.
+   */
+  checklist: jsonb('checklist').notNull().default({}),
+  /** 咨询师提交结案时填的摘要(会展示给督导审核) */
+  closureSummary: text('closure_summary'),
+  /** 督导结案/退回时的备注 */
+  supervisorNote: text('supervisor_note'),
+  /** 督导 sign-off */
+  signedOffBy: uuid('signed_off_by').references(() => users.id, { onDelete: 'set null' }),
+  signedOffAt: timestamp('signed_off_at', { withTimezone: true }),
+  /** 提交审核时间(用于督导列表排序) */
+  submittedForSignOffAt: timestamp('submitted_for_sign_off_at', { withTimezone: true }),
+  createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_crisis_cases_episode').on(t.episodeId),
+  index('idx_crisis_cases_org_stage').on(t.orgId, t.stage),
+]);
+
+// ─── Parent Self-Binding (Phase 14) ──────────────────────────────
+
+/**
+ * 班级级别的"家长邀请二维码 token"。
+ *
+ * 设计核心: 老师**不能**一人一发邀请(学生太多)。改成给每个班级生成一个
+ * 共享 token,二维码贴到家长群里,N 个家长扫码自助绑定。
+ *
+ * 同班学生共享一个 token —— 防止跨班冒认靠 `class_id` 限定查询范围。
+ */
+export const classParentInviteTokens = pgTable('class_parent_invite_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  classId: uuid('class_id').notNull().references(() => schoolClasses.id, { onDelete: 'cascade' }),
+  token: text('token').notNull().unique(),
+  createdBy: uuid('created_by').notNull().references(() => users.id, { onDelete: 'set null' }),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_class_parent_tokens_class').on(t.classId),
+]);
+
+/**
+ * 家长 ↔ 来访者(孩子)的绑定关系。
+ *
+ * MVP 极简: 不在表上做权限粒度字段;数据可见性由 client.routes 的硬编码
+ * 白名单/黑名单实现(只有 dashboard / appointments / documents / consents /
+ * counselors 这些路由才接受 `?as=` 参数,其它一律 403)。
+ *
+ * `holderUserId` = 家长的 user.id (持有关系的人)
+ * `relatedClientUserId` = 孩子的 user.id (被关联的来访者)
+ */
+export const clientRelationships = pgTable('client_relationships', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  holderUserId: uuid('holder_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  relatedClientUserId: uuid('related_client_user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  /** 'father' | 'mother' | 'guardian' | 'other' */
+  relation: text('relation').notNull(),
+  /** 'active' | 'revoked' */
+  status: text('status').notNull().default('active'),
+  /** 通过哪个班级 token 绑定的(用于审计 + "由 X 老师邀请"提示) */
+  boundViaTokenId: uuid('bound_via_token_id').references(() => classParentInviteTokens.id, { onDelete: 'set null' }),
+  acceptedAt: timestamp('accepted_at', { withTimezone: true }).notNull().defaultNow(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_client_rel_org_holder_related').on(t.orgId, t.holderUserId, t.relatedClientUserId),
+  index('idx_client_rel_holder').on(t.holderUserId),
+  index('idx_client_rel_related').on(t.relatedClientUserId),
 ]);
 
 // ─── System Configuration ────────────────────────────────────────

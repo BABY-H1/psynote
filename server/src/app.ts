@@ -72,6 +72,10 @@ import {
 import { publicReferralRoutes } from './modules/referral/public-referral.routes.js';
 // Phase 9ε — Org-internal collaboration page (派单 / 授权 / 督导 / 转介接收 / 审计)
 import { collaborationRoutes } from './modules/collaboration/collaboration.routes.js';
+// Phase 12 — Workflow rule engine + candidate pool
+import { workflowRoutes } from './modules/workflow/workflow.routes.js';
+// Phase 13 — Crisis handling case workflow
+import { crisisRoutes } from './modules/crisis/crisis-case.routes.js';
 // EAP Enterprise — 国央企版 partnership & assignment
 import { eapPartnershipRoutes } from './modules/eap/eap-partnership.routes.js';
 import { eapAssignmentRoutes } from './modules/eap/eap-assignment.routes.js';
@@ -80,6 +84,10 @@ import { eapPublicRoutes } from './modules/eap/eap-public.routes.js';
 // School — 学校版班级管理 + 学生管理
 import { schoolClassRoutes } from './modules/school/school-class.routes.js';
 import { schoolStudentRoutes } from './modules/school/school-student.routes.js';
+// Phase 14 — Parent self-binding (class invite tokens + public landing)
+import { parentInvitationRoutes } from './modules/parent-binding/parent-binding.routes.js';
+import { publicParentBindingRoutes } from './modules/parent-binding/public-parent-binding.routes.js';
+import { portalChildrenRoutes } from './modules/parent-binding/portal-children.routes.js';
 import { eapCrisisRoutes } from './modules/eap/eap-crisis.routes.js';
 import { eapAnalyticsRoutes } from './modules/eap/eap-analytics.routes.js';
 import { initConfigService, getBootValue } from './lib/config-service.js';
@@ -218,6 +226,8 @@ await app.register(publicReferralRoutes, { prefix: '/api/public/referrals' });
 
 // Phase 9ε — Org-internal collaboration
 await app.register(collaborationRoutes, { prefix: '/api/orgs/:orgId/collaboration' });
+await app.register(workflowRoutes, { prefix: '/api/orgs/:orgId/workflow' });
+await app.register(crisisRoutes, { prefix: '/api/orgs/:orgId/crisis' });
 
 // EAP Enterprise — partnerships, assignments, employees
 await app.register(eapPartnershipRoutes, { prefix: '/api/orgs/:orgId/eap/partnerships' });
@@ -230,6 +240,11 @@ await app.register(eapPublicRoutes, { prefix: '/api/public/eap' });
 // School — class & student management
 await app.register(schoolClassRoutes, { prefix: '/api/orgs/:orgId/school/classes' });
 await app.register(schoolStudentRoutes, { prefix: '/api/orgs/:orgId/school/students' });
+
+// Phase 14 — Parent self-binding (class invite tokens + portal landing)
+await app.register(parentInvitationRoutes, { prefix: '/api/orgs/:orgId/school/classes/:classId/parent-invite-tokens' });
+await app.register(portalChildrenRoutes, { prefix: '/api/orgs/:orgId/client/children' });
+await app.register(publicParentBindingRoutes, { prefix: '/api/public/parent-bind' });
 
 // Start
 try {

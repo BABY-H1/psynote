@@ -9,7 +9,7 @@ import { Send, Loader2, FileText, Target, Users, GraduationCap, Paperclip, X } f
 import type { TreatmentPlan } from '@psynote/shared';
 import { BUILT_IN_FORMATS } from './NoteFormatSelector';
 
-export type WorkMode = 'note' | 'plan' | 'simulate' | 'supervise';
+export type WorkMode = 'note' | 'plan' | 'simulate' | 'supervise' | 'crisis';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -22,6 +22,10 @@ const modeConfig: Record<WorkMode, { icon: React.ReactNode; label: string; place
   plan: { icon: <Target className="w-3.5 h-3.5" />, label: '讨论方案', placeholder: '和 AI 讨论治疗计划...', color: 'teal' },
   simulate: { icon: <Users className="w-3.5 h-3.5" />, label: '模拟来访', placeholder: '开始咨询对话（你是咨询师）...', color: 'purple' },
   supervise: { icon: <GraduationCap className="w-3.5 h-3.5" />, label: '督导', placeholder: '和 AI 督导讨论你的个案...', color: 'amber' },
+  // Phase 13 — crisis mode is NOT a chat mode; OutputPanel renders the
+  // CrisisChecklistPanel directly. We define an entry so WorkMode union
+  // compiles, but the ChatWorkspace input box is hidden for this mode.
+  crisis: { icon: <FileText className="w-3.5 h-3.5" />, label: '危机处置', placeholder: '', color: 'red' },
 };
 
 interface ClientContext {
@@ -48,20 +52,43 @@ interface Props {
   onPlanSuggestion: (data: any) => void;
   onModeChange?: (mode: WorkMode) => void;
   onNoteFormatChange?: (format: string) => void;
+  /** When true, force initial mode to 'crisis' and expose the crisis tab. */
+  isCrisisEpisode?: boolean;
+  initialMode?: WorkMode;
 }
 
 export function ChatWorkspace({
   episodeId, clientId, chiefComplaint, activePlan,
   clientContext, sessionHistorySummary, assessmentSummary, lastNoteSummary,
   onNoteFieldsUpdate, onPlanSuggestion, onModeChange, onNoteFormatChange,
+  isCrisisEpisode, initialMode,
 }: Props) {
-  const [mode, setModeInternal] = useState<WorkMode>('note');
+  const [mode, setModeInternal] = useState<WorkMode>(
+    initialMode || (isCrisisEpisode ? 'crisis' : 'note'),
+  );
   const setMode = (m: WorkMode) => {
     setModeInternal(m);
     onModeChange?.(m);
   };
+  // Emit the initial mode to the parent on mount so OutputPanel renders in
+  // sync (otherwise OutputPanel starts in its default 'note' layout until the
+  // user manually switches modes).
+  useEffect(() => {
+    if (onModeChange) onModeChange(mode);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // When the crisis case arrives asynchronously, snap into crisis mode so the
+  // user lands on the checklist without having to click the tab. Only runs
+  // once per `isCrisisEpisode` becoming true, and only if the user is still on
+  // the default 'note' tab (never hijacks their own mode choice).
+  useEffect(() => {
+    if (isCrisisEpisode && mode === 'note') {
+      setMode('crisis');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isCrisisEpisode]);
   const [messages, setMessages] = useState<Record<WorkMode, ChatMessage[]>>({
-    note: [], plan: [], simulate: [], supervise: [],
+    note: [], plan: [], simulate: [], supervise: [], crisis: [],
   });
   const [input, setInput] = useState('');
   const [noteFormat, setNoteFormat] = useState('soap');
@@ -247,24 +274,40 @@ export function ChatWorkspace({
     <div className="flex flex-col h-full">
       {/* Mode tabs */}
       <div className="flex items-center gap-1 px-3 pt-3 pb-2 border-b border-slate-100">
-        {(Object.entries(modeConfig) as [WorkMode, typeof modeConfig.note][]).map(([key, cfg]) => (
-          <button
-            key={key}
-            onClick={() => setMode(key)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
-              mode === key
-                ? 'bg-brand-600 text-white'
-                : 'text-slate-500 hover:bg-slate-100'
-            }`}
-          >
-            {cfg.icon}
-            {cfg.label}
-          </button>
-        ))}
-
+        {(Object.entries(modeConfig) as [WorkMode, typeof modeConfig.note][])
+          .filter(([key]) => key !== 'crisis' || isCrisisEpisode)
+          .map(([key, cfg]) => {
+            const isCrisisTab = key === 'crisis';
+            const activeClass = isCrisisTab
+              ? 'bg-red-600 text-white'
+              : 'bg-brand-600 text-white';
+            return (
+              <button
+                key={key}
+                onClick={() => setMode(key)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition ${
+                  mode === key ? activeClass : 'text-slate-500 hover:bg-slate-100'
+                }`}
+              >
+                {cfg.icon}
+                {cfg.label}
+              </button>
+            );
+          })}
       </div>
 
-      {/* Chat messages */}
+      {mode === 'crisis' ? (
+        // Crisis mode: the chat area shows static guidance; the real action
+        // happens in OutputPanel → CrisisChecklistPanel (right column).
+        <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-center text-center">
+          <div className="text-4xl mb-3">⚠️</div>
+          <div className="text-sm font-medium text-red-700 mb-1">危机处置模式</div>
+          <div className="text-xs text-slate-500 max-w-xs">
+            请在右侧「危机处置清单」按步骤操作。系统不会自动联系任何人,所有对外沟通由您手动完成,系统只负责留痕。
+          </div>
+        </div>
+      ) : (
+      /* Chat messages */
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
         {currentMessages.length === 0 && (
           <div className="text-center py-8">
@@ -317,8 +360,10 @@ export function ChatWorkspace({
           </div>
         )}
       </div>
+      )}
 
       {/* Input */}
+      {mode !== 'crisis' && (
       <div className="border-t border-slate-200 p-3 space-y-2">
         {/* Attachment preview */}
         {attachments.length > 0 && (
@@ -361,6 +406,7 @@ export function ChatWorkspace({
           </button>
         </div>
       </div>
+      )}
     </div>
   );
 }

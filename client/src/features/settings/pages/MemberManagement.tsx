@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { useOrgMembers, useInviteMember, useUpdateMember, useRemoveMember } from '../../../api/useOrg';
+import { useOrgMembers, useInviteMember, useUpdateMember, useRemoveMember, type OrgMember } from '../../../api/useOrg';
 import { useAuthStore } from '../../../stores/authStore';
 import { PageLoading, StatusBadge, useToast } from '../../../shared/components';
-import { UserPlus, MoreVertical, Search } from 'lucide-react';
+import { UserPlus, Settings, Search, X } from 'lucide-react';
+import { useFeature } from '../../../shared/hooks/useFeature';
 
 const roleLabels: Record<string, string> = {
   org_admin: '管理员',
@@ -34,10 +35,11 @@ type FilterTab = 'all' | 'counselor' | 'client' | 'org_admin' | 'admin_staff';
 
 export function MemberManagement() {
   const { data: members, isLoading } = useOrgMembers();
-  const { toast } = useToast();
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [search, setSearch] = useState('');
   const [showInvite, setShowInvite] = useState(false);
+  const [drawerMemberId, setDrawerMemberId] = useState<string | null>(null);
+  const drawerMember = (members || []).find((m) => m.id === drawerMemberId) || null;
 
   const filtered = (members || [])
     .filter((m) => filterTab === 'all' || m.role === filterTab)
@@ -127,58 +129,50 @@ export function MemberManagement() {
             </thead>
             <tbody>
               {filtered.map((member) => (
-                <MemberRow key={member.id} member={member} />
+                <MemberRow
+                  key={member.id}
+                  member={member}
+                  onOpenDetail={() => setDrawerMemberId(member.id)}
+                />
               ))}
             </tbody>
           </table>
         </div>
       )}
+
+      {/* Member detail drawer */}
+      {drawerMember && (
+        <MemberDrawer
+          member={drawerMember}
+          allMembers={members || []}
+          onClose={() => setDrawerMemberId(null)}
+        />
+      )}
     </div>
   );
 }
 
-function MemberRow({ member }: { member: { id: string; userId: string; email: string; name: string; role: string; status: string; createdAt: string } }) {
-  const updateMember = useUpdateMember();
-  const removeMember = useRemoveMember();
-  const { toast } = useToast();
-  const [showMenu, setShowMenu] = useState(false);
-
-  const handleStatusToggle = async () => {
-    const newStatus = member.status === 'active' ? 'disabled' : 'active';
-    try {
-      await updateMember.mutateAsync({ memberId: member.id, status: newStatus });
-      toast(`已${newStatus === 'active' ? '启用' : '禁用'}`, 'success');
-    } catch {
-      toast('操作失败', 'error');
-    }
-    setShowMenu(false);
-  };
-
-  const handleRoleChange = async (role: string) => {
-    try {
-      await updateMember.mutateAsync({ memberId: member.id, role });
-      toast('角色已更新', 'success');
-    } catch {
-      toast('操作失败', 'error');
-    }
-    setShowMenu(false);
-  };
-
-  const handleRemove = async () => {
-    if (!confirm(`确定移除 ${member.name}？`)) return;
-    try {
-      await removeMember.mutateAsync(member.id);
-      toast('已移除', 'success');
-    } catch (err: any) {
-      toast(err?.message || '操作失败', 'error');
-    }
-    setShowMenu(false);
-  };
-
+function MemberRow({
+  member,
+  onOpenDetail,
+}: {
+  member: OrgMember;
+  onOpenDetail: () => void;
+}) {
   return (
-    <tr className="border-b border-slate-50 last:border-0 hover:bg-slate-50">
+    <tr
+      className="border-b border-slate-50 last:border-0 hover:bg-slate-50 cursor-pointer"
+      onClick={onOpenDetail}
+    >
       <td className="px-4 py-3">
-        <div className="text-sm font-medium text-slate-900">{member.name}</div>
+        <div className="text-sm font-medium text-slate-900 flex items-center gap-2">
+          {member.name}
+          {member.fullPracticeAccess && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium">
+              全机构
+            </span>
+          )}
+        </div>
       </td>
       <td className="px-4 py-3">
         <div className="text-sm text-slate-500">{member.email}</div>
@@ -192,46 +186,271 @@ function MemberRow({ member }: { member: { id: string; userId: string; email: st
       <td className="px-4 py-3">
         <div className="text-xs text-slate-400">{new Date(member.createdAt).toLocaleDateString('zh-CN')}</div>
       </td>
-      <td className="px-4 py-3 text-right relative">
-        <button onClick={() => setShowMenu(!showMenu)} className="p-1 text-slate-400 hover:text-slate-600 rounded">
-          <MoreVertical className="w-4 h-4" />
+      <td className="px-4 py-3 text-right">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenDetail();
+          }}
+          className="p-1.5 text-slate-400 hover:text-blue-600 rounded"
+          title="详细设置"
+        >
+          <Settings className="w-4 h-4" />
         </button>
-        {showMenu && (
-          <>
-            <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)} />
-            <div className="absolute right-4 top-10 z-20 bg-white border border-slate-200 rounded-lg shadow-lg py-1 min-w-[140px]">
-              {member.role !== 'client' && (
-                <button onClick={() => handleRoleChange('client')} className="block w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
-                  设为来访者
-                </button>
-              )}
-              {member.role !== 'counselor' && (
-                <button onClick={() => handleRoleChange('counselor')} className="block w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
-                  设为咨询师
-                </button>
-              )}
-              {member.role !== 'admin_staff' && (
-                <button onClick={() => handleRoleChange('admin_staff')} className="block w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
-                  设为行政人员
-                </button>
-              )}
-              {member.role !== 'org_admin' && (
-                <button onClick={() => handleRoleChange('org_admin')} className="block w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
-                  设为管理员
-                </button>
-              )}
-              <div className="border-t border-slate-100 my-1" />
-              <button onClick={handleStatusToggle} className="block w-full text-left px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50">
-                {member.status === 'active' ? '禁用' : '启用'}
-              </button>
-              <button onClick={handleRemove} className="block w-full text-left px-3 py-1.5 text-xs text-red-600 hover:bg-red-50">
-                移除
-              </button>
-            </div>
-          </>
-        )}
       </td>
     </tr>
+  );
+}
+
+// ─── Member Detail Drawer ───────────────────────────────────────────
+
+function MemberDrawer({
+  member,
+  allMembers,
+  onClose,
+}: {
+  member: OrgMember;
+  allMembers: OrgMember[];
+  onClose: () => void;
+}) {
+  const updateMember = useUpdateMember();
+  const removeMember = useRemoveMember();
+  const { toast } = useToast();
+  const { currentRole, currentOrgType } = useAuthStore();
+  const checkFeature = useFeature();
+  const isAdmin = currentRole === 'org_admin';
+  const hasSupervisorFeature = checkFeature('supervisor');
+
+  const [role, setRole] = useState(member.role);
+  const [status, setStatus] = useState(member.status);
+  const [supervisorId, setSupervisorId] = useState<string>(member.supervisorId || '');
+  const [fullPracticeAccess, setFullPracticeAccess] = useState(member.fullPracticeAccess || false);
+
+  // Reset form when member changes
+  React.useEffect(() => {
+    setRole(member.role);
+    setStatus(member.status);
+    setSupervisorId(member.supervisorId || '');
+    setFullPracticeAccess(member.fullPracticeAccess || false);
+  }, [member.id, member.role, member.status, member.supervisorId, member.fullPracticeAccess]);
+
+  const supervisors = allMembers.filter((m) => m.role === 'counselor' && m.id !== member.id);
+
+  const dirty = role !== member.role
+    || status !== member.status
+    || (supervisorId || null) !== (member.supervisorId || null)
+    || fullPracticeAccess !== (member.fullPracticeAccess || false);
+
+  const handleSave = async () => {
+    try {
+      await updateMember.mutateAsync({
+        memberId: member.id,
+        role: role !== member.role ? role : undefined,
+        status: status !== member.status ? status : undefined,
+        supervisorId: (supervisorId || null) !== (member.supervisorId || null) ? (supervisorId || null) : undefined,
+        fullPracticeAccess: fullPracticeAccess !== (member.fullPracticeAccess || false) ? fullPracticeAccess : undefined,
+      });
+      toast('已保存', 'success');
+      onClose();
+    } catch (err: any) {
+      toast(err?.message || '保存失败', 'error');
+    }
+  };
+
+  const handleRemove = async () => {
+    if (!confirm(`确定移除 ${member.name}？此操作不可撤销。`)) return;
+    try {
+      await removeMember.mutateAsync(member.id);
+      toast('已移除', 'success');
+      onClose();
+    } catch (err: any) {
+      toast(err?.message || '移除失败', 'error');
+    }
+  };
+
+  // Determine label for dataScope toggle based on orgType
+  const fullAccessLabel = currentOrgType === 'school'
+    ? '全校可见（可查看所有学生和档案）'
+    : currentOrgType === 'enterprise'
+      ? '全机构可见（可查看所有员工）'
+      : '全机构可见（可查看机构内所有来访者和咨询记录）';
+
+  return (
+    <>
+      {/* Backdrop */}
+      <div
+        className="fixed inset-0 bg-black/20 z-40"
+        onClick={onClose}
+      />
+      {/* Drawer */}
+      <div className="fixed top-0 right-0 bottom-0 w-full max-w-md z-50 bg-white shadow-xl overflow-y-auto">
+        {/* Header */}
+        <div className="sticky top-0 bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">{member.name}</h3>
+            <p className="text-xs text-slate-500 mt-0.5">{member.email}</p>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 text-slate-400 hover:text-slate-600 rounded"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* Body */}
+        <div className="px-6 py-5 space-y-5">
+          {/* Role */}
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-2">角色</label>
+            <select
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              disabled={!isAdmin}
+              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:bg-slate-50"
+            >
+              <option value="client">来访者</option>
+              <option value="counselor">咨询师</option>
+              <option value="admin_staff">行政人员</option>
+              <option value="org_admin">管理员</option>
+            </select>
+          </div>
+
+          {/* Supervisor (counselor only) */}
+          {role === 'counselor' && hasSupervisorFeature && supervisors.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-slate-700 mb-2">
+                督导师
+                <span className="text-slate-400 font-normal ml-1">（可选）</span>
+              </label>
+              <select
+                value={supervisorId}
+                onChange={(e) => setSupervisorId(e.target.value)}
+                disabled={!isAdmin}
+                className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500/30 disabled:bg-slate-50"
+              >
+                <option value="">无</option>
+                {supervisors.map((s) => (
+                  <option key={s.userId} value={s.userId}>
+                    {s.name} ({s.email})
+                  </option>
+                ))}
+              </select>
+              <p className="text-[11px] text-slate-400 mt-1">
+                督导师可以审阅该成员的会谈记录
+              </p>
+            </div>
+          )}
+          {role === 'counselor' && !hasSupervisorFeature && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700">
+              督导关系功能需要「成长版」或更高套餐
+            </div>
+          )}
+
+          {/* Full practice access (counselor / admin_staff only) */}
+          {(role === 'counselor' || role === 'admin_staff') && (
+            <div>
+              <label className="flex items-start gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={fullPracticeAccess}
+                  onChange={(e) => setFullPracticeAccess(e.target.checked)}
+                  disabled={!isAdmin}
+                  className="mt-0.5 w-4 h-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500/30"
+                />
+                <div>
+                  <div className="text-sm font-medium text-slate-700">{fullAccessLabel}</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    勾选后此成员不受「仅可见自己负责来访者」限制
+                  </div>
+                </div>
+              </label>
+            </div>
+          )}
+
+          {/* Status */}
+          <div>
+            <label className="block text-xs font-medium text-slate-700 mb-2">状态</label>
+            <div className="flex gap-2">
+              <StatusPill
+                active={status === 'active'}
+                onClick={() => isAdmin && setStatus('active')}
+                label="活跃"
+              />
+              <StatusPill
+                active={status === 'disabled'}
+                onClick={() => isAdmin && setStatus('disabled')}
+                label="禁用"
+              />
+              {member.status === 'pending' && (
+                <StatusPill
+                  active={status === 'pending'}
+                  onClick={() => isAdmin && setStatus('pending')}
+                  label="待激活"
+                />
+              )}
+            </div>
+          </div>
+
+          {/* Read-only info */}
+          <div className="pt-3 border-t border-slate-100 space-y-2">
+            <InfoLine label="加入时间" value={new Date(member.createdAt).toLocaleDateString('zh-CN')} />
+            <InfoLine label="用户 ID" value={member.userId} mono />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="sticky bottom-0 bg-white border-t border-slate-200 px-6 py-4 flex items-center justify-between">
+          <button
+            onClick={handleRemove}
+            disabled={!isAdmin}
+            className="text-xs text-red-500 hover:text-red-700 disabled:opacity-50"
+          >
+            移除成员
+          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-50 rounded-lg"
+            >
+              取消
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={!dirty || updateMember.isPending}
+              className="px-4 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {updateMember.isPending ? '保存中…' : '保存'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function StatusPill({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-1.5 text-xs rounded-lg border transition ${
+        active
+          ? 'bg-blue-50 border-blue-300 text-blue-700 font-medium'
+          : 'border-slate-200 text-slate-600 hover:bg-slate-50'
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function InfoLine({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="flex items-center justify-between text-xs">
+      <span className="text-slate-400">{label}</span>
+      <span className={`text-slate-600 ${mono ? 'font-mono' : ''}`}>{value}</span>
+    </div>
   );
 }
 
