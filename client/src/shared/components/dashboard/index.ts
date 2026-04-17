@@ -14,3 +14,5 @@ export { RiskBarStack } from './RiskBarStack';
 export type { RiskBarStackProps, RiskBarStackRow } from './RiskBarStack';
 export { MonthlyTrendChart } from './MonthlyTrendChart';
 export type { MonthlyTrendPoint, MonthlyTrendChartProps } from './MonthlyTrendChart';
+export { RiskLevelBreakdown } from './RiskLevelBreakdown';
+export type { RiskLevelBreakdownProps } from './RiskLevelBreakdown';

@@ -67,6 +67,7 @@ import { OrgCollaboration } from '../features/collaboration/OrgCollaboration';
 import { AuditLogViewer } from '../features/collaboration/AuditLogViewer';
 import { OrgSettingsPage } from '../features/settings/pages/OrgSettingsPage';
 import { SchoolDashboard } from '../features/dashboard/pages/SchoolDashboard';
+import { EnterpriseDashboard } from '../features/dashboard/pages/EnterpriseDashboard';
 
 function AppRoutes() {
   const { user, currentOrgId, currentRole, isSystemAdmin, _hydrated } = useAuthStore();
@@ -467,9 +468,8 @@ function RoleBasedHome() {
   if (orgType === 'solo') return <DashboardHome />;
   // School: school-specific dashboard
   if (orgType === 'school' && role === 'org_admin') return <SchoolDashboard />;
-  // Enterprise org_admin uses the generic OrgAdminDashboard (no bespoke
-  // EnterpriseDashboard — that experiment was removed in Phase 14g because
-  // keeping a dead page "in case we need it" wasn't worth the drift).
+  // Enterprise: EAP-specific dashboard (risk分布 / 部门矩阵 / 服务趋势 / HR 待办)
+  if (orgType === 'enterprise' && role === 'org_admin') return <EnterpriseDashboard />;
   if (role === 'org_admin') return <OrgAdminDashboard />;
   return <DashboardHome />;
 }
