@@ -12,9 +12,7 @@
 import type { FastifyInstance } from 'fastify';
 import { eq, and, gte, sql, count } from 'drizzle-orm';
 import { db } from '../../config/database.js';
-import {
-  eapUsageEvents, eapEmployeeProfiles, eapCrisisAlerts,
-} from '../../db/schema.js';
+import { eapUsageEvents, eapEmployeeProfiles } from '../../db/schema.js';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireOrgType } from '../../middleware/feature-flag.js';
@@ -30,34 +28,23 @@ export async function eapAnalyticsRoutes(app: FastifyInstance) {
   app.addHook('preHandler', requireRole('org_admin'));
 
   // ─── Overview KPIs ───────────────────────────────────────────────
-  /**
-   * Phase 14d — add optional ?month=current query to filter all event counts
-   * to the current calendar month only (for HR dashboard "本月 XX" tiles).
-   * When not specified: accumulates across all time (original behavior).
-   */
   app.get('/overview', async (request) => {
     const orgId = request.org!.orgId;
-    const q = request.query as { month?: string };
-    const monthOnly = q.month === 'current';
 
-    // Total employees (never time-filtered)
+    // Total employees
     const [{ totalEmployees }] = await db
       .select({ totalEmployees: count() })
       .from(eapEmployeeProfiles)
       .where(eq(eapEmployeeProfiles.orgId, orgId));
 
     // Event counts by type
-    const conditions = [eq(eapUsageEvents.enterpriseOrgId, orgId)];
-    if (monthOnly) {
-      conditions.push(sql`${eapUsageEvents.eventDate} >= date_trunc('month', CURRENT_DATE)`);
-    }
     const eventCounts = await db
       .select({
         eventType: eapUsageEvents.eventType,
         count: count(),
       })
       .from(eapUsageEvents)
-      .where(and(...conditions))
+      .where(eq(eapUsageEvents.enterpriseOrgId, orgId))
       .groupBy(eapUsageEvents.eventType);
 
     const countMap: Record<string, number> = {};
@@ -73,62 +60,6 @@ export async function eapAnalyticsRoutes(app: FastifyInstance) {
       coursesEnrolled: countMap['course_enrolled'] || 0,
       groupsParticipated: countMap['group_participated'] || 0,
       crisisFlags: countMap['crisis_flagged'] || 0,
-      monthOnly,
-    };
-  });
-
-  // ─── Todos (Phase 14d, HR main page) ─────────────────────────────
-  /**
-   * Three HR action-oriented counts:
-   *  - openCrisisCount:            eap_crisis_alerts.status='open' in this org
-   *  - pendingEmployeeBindCount:  users with eap_usage_events but incomplete
-   *                                eap_employee_profiles (missing employee_id
-   *                                or department)
-   *  - subscriptionEndsInDays:     days until license/subscription expires
-   *                                (null if expired already or no data)
-   */
-  app.get('/todos', async (request) => {
-    const orgId = request.org!.orgId;
-
-    const [openRow] = await db
-      .select({ value: count() })
-      .from(eapCrisisAlerts)
-      .where(and(
-        eq(eapCrisisAlerts.enterpriseOrgId, orgId),
-        eq(eapCrisisAlerts.status, 'open'),
-      ));
-
-    const [pendingBindRow] = await db.execute<{ cnt: string }>(sql`
-      SELECT count(DISTINCT eue.user_id)::int AS cnt
-      FROM eap_usage_events eue
-      LEFT JOIN eap_employee_profiles eep
-        ON eep.user_id = eue.user_id AND eep.org_id = eue.enterprise_org_id
-      WHERE eue.enterprise_org_id = ${orgId}
-        AND eue.user_id IS NOT NULL
-        AND (
-          eep.id IS NULL
-          OR eep.employee_id IS NULL
-          OR eep.department IS NULL
-        )
-    `).then((r: any) => r.rows ?? r);
-
-    // Read license expiry from request.org.license (resolved by orgContextGuard)
-    const lic = (request.org as any)?.license;
-    const expiresAtStr = lic?.expiresAt as string | null | undefined;
-    let subscriptionEndsInDays: number | null = null;
-    let subscriptionEndsAt: string | null = null;
-    if (expiresAtStr) {
-      subscriptionEndsAt = expiresAtStr;
-      const expiresAt = new Date(expiresAtStr).getTime();
-      const days = Math.floor((expiresAt - Date.now()) / (24 * 60 * 60 * 1000));
-      subscriptionEndsInDays = days;
-    }
-
-    return {
-      openCrisisCount: Number(openRow?.value ?? 0),
-      pendingEmployeeBindCount: Number((pendingBindRow as any)?.cnt ?? 0),
-      subscriptionEndsInDays,
-      subscriptionEndsAt,
     };
   });
 
