@@ -354,9 +354,13 @@ function AppShell() {
   const { data: branding } = useOrgBranding();
   const logoUrl = branding?.logoUrl;
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar */}
-      <aside className="w-56 bg-white border-r border-slate-200 flex flex-col">
+    // Lock outer to viewport height so the sidebar stays fixed and only
+    // <main> scrolls. Without this, the whole page would scroll together
+    // and `sticky` inside sub-pages would lose its frame of reference.
+    <div className="h-screen bg-slate-50 flex overflow-hidden">
+      {/* Sidebar — flex-shrink-0 keeps the 224px width; inner overflow-y-auto
+          lets very long nav lists scroll independently too. */}
+      <aside className="w-56 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 overflow-y-auto">
         <div className="px-5 py-5 border-b border-slate-100">
           {logoUrl ? (
             <img

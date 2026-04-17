@@ -103,14 +103,9 @@ export function CaseWorkbench() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">个案管理</h1>
-          <p className="text-sm text-slate-500 mt-1">
-            共 {counts.all} 个个案，{counts.active} 个进行中
-          </p>
-        </div>
+      {/* Header — title removed (Phase 14e: lives in DeliveryCenter tab label now).
+          Keep only the CTA; count hint moves into the filter bar below. */}
+      <div className="flex items-center justify-end">
         <button
           onClick={() => navigate('/episodes/new')}
           className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 flex items-center gap-2"

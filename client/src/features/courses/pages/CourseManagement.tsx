@@ -175,12 +175,8 @@ export function CourseManagement() {
 
   return (
     <div>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h2 className="text-xl font-bold text-slate-900">{DELIVERY_COPY.title}</h2>
-          <p className="text-sm text-slate-500 mt-1">{DELIVERY_COPY.subtitle}</p>
-        </div>
+      {/* Header — title removed (Phase 14e: lives in DeliveryCenter tab label). */}
+      <div className="flex items-center justify-end mb-6">
         <button
           onClick={() => setView('create')}
           className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition"
