@@ -7,6 +7,7 @@ import { join } from 'path';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
+import { userRoutes } from './modules/user/user.routes.js';
 import { orgRoutes } from './modules/org/org.routes.js';
 import { scaleRoutes } from './modules/assessment/scale.routes.js';
 import { assessmentRoutes } from './modules/assessment/assessment.routes.js';
@@ -122,6 +123,8 @@ app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOS
 
 // Routes
 await app.register(authRoutes, { prefix: '/api/auth' });
+// Phase 14f — self-service user endpoints (/me)
+await app.register(userRoutes, { prefix: '/api/users' });
 await app.register(orgRoutes, { prefix: '/api/orgs' });
 
 // Assessment domain (nested under org context)

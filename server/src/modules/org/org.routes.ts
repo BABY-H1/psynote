@@ -210,6 +210,56 @@ export async function orgRoutes(app: FastifyInstance) {
     });
   });
 
+  /**
+   * Phase 14f — Self edit own counselor profile fields.
+   *
+   * Limited subset: only `bio / specialties / certifications`.
+   * Role / status / supervisor / permissions / fullPracticeAccess
+   * stay on the admin PATCH below (same endpoint but with :memberId).
+   *
+   * Defined BEFORE the :memberId route so the literal "me" segment matches
+   * first (Fastify route matching order).
+   */
+  app.patch('/:orgId/members/me', {
+    preHandler: [orgContextGuard],
+  }, async (request) => {
+    const orgId = request.org!.orgId;
+    const userId = request.user!.id;
+
+    const body = request.body as {
+      bio?: string | null;
+      specialties?: string[];
+      certifications?: unknown[];
+    };
+
+    const updates: Record<string, unknown> = {};
+    if (body.bio !== undefined) updates.bio = body.bio;
+    if (body.specialties !== undefined) updates.specialties = body.specialties;
+    if (body.certifications !== undefined) updates.certifications = body.certifications;
+
+    if (Object.keys(updates).length === 0) {
+      throw new ValidationError('没有可更新的字段');
+    }
+
+    // Find the caller's membership in this org
+    const [existing] = await db
+      .select({ id: orgMembers.id })
+      .from(orgMembers)
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)))
+      .limit(1);
+
+    if (!existing) throw new NotFoundError('OrgMember');
+
+    const [updated] = await db
+      .update(orgMembers)
+      .set(updates)
+      .where(eq(orgMembers.id, existing.id))
+      .returning();
+
+    await logAudit(request, 'update', 'org_members', existing.id);
+    return updated;
+  });
+
   /** Update a member (role, status) */
   app.patch('/:orgId/members/:memberId', {
     preHandler: [orgContextGuard, requireRole('org_admin')],

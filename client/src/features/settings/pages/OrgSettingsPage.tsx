@@ -13,6 +13,7 @@
 import React, { useState } from 'react';
 import {
   Building2, Users, Palette, ShieldCheck, FileSearch, Globe, Plus, Trash2, Handshake, GraduationCap, CreditCard,
+  User as UserIcon, BookOpen, Lock,
 } from 'lucide-react';
 import { SchoolClassManagement } from './SchoolClassManagement';
 import { SchoolStudentList } from './SchoolStudentList';
@@ -20,6 +21,11 @@ import { MemberManagement } from './MemberManagement';
 import { OrgBrandingSettings } from './OrgBrandingSettings';
 import { SubscriptionTab } from './SubscriptionTab';
 import { AuditLogViewer } from '../../collaboration/AuditLogViewer';
+// Phase 14f (merged) — personal "我的" tabs
+import { BasicInfoTab as MyBasicInfoTab } from '../../me/components/BasicInfoTab';
+import { CounselorProfileTab as MyCounselorProfileTab } from '../../me/components/CounselorProfileTab';
+import { ChangePasswordTab } from '../../me/components/ChangePasswordTab';
+import { useMe } from '../../../api/useMe';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
@@ -27,20 +33,29 @@ import { useOrgMembers, type OrgMember } from '../../../api/useOrg';
 import { useToast } from '../../../shared/components';
 import { useFeature } from '../../../shared/hooks/useFeature';
 
-type SettingsTab = 'basic' | 'services' | 'branding' | 'members' | 'classes' | 'students' | 'partners' | 'subscription' | 'audit' | 'certifications';
+type SettingsTab =
+  | 'basic' | 'services' | 'branding'
+  | 'members' | 'classes' | 'students' | 'partners'
+  | 'subscription'
+  | 'audit' | 'certifications'
+  // Phase 14f (merged) — "我的" 分组, 人人可见的个人设置
+  | 'my-basic' | 'my-counselor' | 'my-password';
 
 interface TabDef {
   key: SettingsTab;
   label: string;
   Icon: React.ComponentType<{ className?: string }>;
-  group: 'facade' | 'org' | 'business' | 'security';
+  group: 'me' | 'facade' | 'org' | 'business' | 'security';
   adminOnly?: boolean;
   requiresFeature?: string;
   hideForSolo?: boolean;
   onlyForOrgType?: string;
+  /** Restrict to specific roles. Undefined = all roles can see. */
+  onlyForRoles?: string[];
 }
 
 const GROUP_LABELS: Record<string, string> = {
+  me: '我的',
   facade: '门面信息',
   org: '组织管理',
   business: '经营信息',
@@ -48,6 +63,11 @@ const GROUP_LABELS: Record<string, string> = {
 };
 
 const TABS: TabDef[] = [
+  // 我的 (Phase 14f merged — 每个登录用户都能看到这一组)
+  { key: 'my-basic', label: '基本资料', Icon: UserIcon, group: 'me' },
+  // 咨询师档案仅对 counselor / org_admin 可见 (admin_staff 不做咨询不需要此 tab)
+  { key: 'my-counselor', label: '咨询师档案', Icon: BookOpen, group: 'me', onlyForRoles: ['counselor', 'org_admin'] },
+  { key: 'my-password', label: '修改密码', Icon: Lock, group: 'me' },
   // 门面信息
   { key: 'basic', label: '基本信息', Icon: Building2, group: 'facade' },
   { key: 'services', label: '公开服务', Icon: Globe, group: 'facade', adminOnly: true, hideForSolo: true },
@@ -66,20 +86,19 @@ const TABS: TabDef[] = [
   { key: 'certifications', label: '合规证书', Icon: ShieldCheck, group: 'security', adminOnly: true, hideForSolo: true },
 ];
 
-const SETTINGS_TITLE: Record<string, string> = {
-  solo: '个人设置',
-  counseling: '机构设置',
-  enterprise: '企业设置',
-  school: '学校设置',
-  hospital: '机构设置',
-};
+// Phase 14f (merged) — page title is now unified as "我的设置" across all orgTypes
+// since the page starts with the personal ("我的") group. The orgType-specific
+// label is kept only for the sidebar nav label (see App.tsx SETTINGS_LABELS).
+const PAGE_TITLE = '我的设置';
 
 export function OrgSettingsPage() {
-  const [tab, setTab] = useState<SettingsTab>('basic');
+  // Default to "my-basic" so every logged-in user sees personal tab first.
+  const [tab, setTab] = useState<SettingsTab>('my-basic');
   const { currentRole, currentOrgType } = useAuthStore();
   const isAdmin = currentRole === 'org_admin';
   const isSolo = currentOrgType === 'solo';
   const checkFeature = useFeature();
+  const { data: me } = useMe();
 
   const isSchool = currentOrgType === 'school';
 
@@ -88,6 +107,7 @@ export function OrgSettingsPage() {
       if (t.hideForSolo && isSolo) return false;
       if (t.onlyForOrgType && t.onlyForOrgType !== currentOrgType) return false;
       if (t.adminOnly && !isAdmin && !isSolo) return false;
+      if (t.onlyForRoles && !t.onlyForRoles.includes(currentRole || '')) return false;
       if (t.requiresFeature && !checkFeature(t.requiresFeature as any)) return false;
       return true;
     })
@@ -96,13 +116,15 @@ export function OrgSettingsPage() {
       return t;
     });
 
-  // Group visible tabs
-  const groups = ['facade', 'org', 'business', 'security'] as const;
+  // Group visible tabs — "me" first, then org-level groups
+  const groups = ['me', 'facade', 'org', 'business', 'security'] as const;
   const groupedTabs = groups
     .map((g) => ({ group: g, label: GROUP_LABELS[g], tabs: visibleTabs.filter((t) => t.group === g) }))
     .filter((g) => g.tabs.length > 0);
 
-  const pageTitle = SETTINGS_TITLE[currentOrgType || 'counseling'] || '机构设置';
+  // Page title ("我的设置") is intentionally not rendered — see commit
+  // fix(去掉页面重复标题). Kept PAGE_TITLE const for docs + potential future use.
+  void PAGE_TITLE;
 
   // Active group determines which sub-tabs to show
   const activeGroup = groupedTabs.find((g) => g.tabs.some((t) => t.key === tab)) || groupedTabs[0];
@@ -154,6 +176,11 @@ export function OrgSettingsPage() {
 
       {/* Content */}
       <div>
+        {/* 我的 (Phase 14f merged) — each tab needs `me` fetched */}
+        {tab === 'my-basic' && (me ? <MyBasicInfoTab me={me} /> : <div className="text-sm text-slate-400 py-8 text-center">加载中...</div>)}
+        {tab === 'my-counselor' && (me ? <MyCounselorProfileTab me={me} /> : <div className="text-sm text-slate-400 py-8 text-center">加载中...</div>)}
+        {tab === 'my-password' && <ChangePasswordTab hasExistingPassword={true} />}
+        {/* Org-level tabs */}
         {tab === 'basic' && <BasicInfoTab />}
         {tab === 'services' && <PublicServicesTab />}
         {tab === 'branding' && <OrgBrandingSettings />}

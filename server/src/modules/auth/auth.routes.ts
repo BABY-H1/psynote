@@ -7,6 +7,7 @@ import { db } from '../../config/database.js';
 import { users } from '../../db/schema.js';
 import { ValidationError } from '../../lib/errors.js';
 import { getBootValue } from '../../lib/config-service.js';
+import { authGuard } from '../../middleware/auth.js';
 
 const JWT_SECRET = env.JWT_SECRET || 'psynote-dev-secret-change-in-production';
 const ACCESS_TOKEN_EXPIRY = getBootValue('security', 'accessTokenExpiry', '7d');
@@ -144,6 +145,48 @@ export async function authRoutes(app: FastifyInstance) {
 
   /** Logout */
   app.post('/logout', async (_request, reply) => {
+    return reply.send({ ok: true });
+  });
+
+  /**
+   * Phase 14f — Change own password.
+   *
+   * Body: { currentPassword?: string; newPassword: string }
+   *
+   * Auth required (authGuard). If the user has no existing passwordHash
+   * (legacy/seed accounts), `currentPassword` may be omitted; otherwise it
+   * must match. New password is at least 6 chars. After success the existing
+   * JWT still works — we do not force logout.
+   */
+  app.post('/change-password', {
+    preHandler: [authGuard],
+  }, async (request, reply) => {
+    const body = request.body as {
+      currentPassword?: string;
+      newPassword?: string;
+    };
+    const newPassword = body?.newPassword;
+
+    if (!newPassword || newPassword.length < 6) {
+      throw new ValidationError('新密码至少 6 位');
+    }
+
+    const userId = request.user!.id;
+    const [user] = await db.select().from(users).where(eq(users.id, userId)).limit(1);
+    if (!user) throw new ValidationError('用户不存在');
+
+    // Verify current password when the account already has one
+    if (user.passwordHash) {
+      if (!body.currentPassword) {
+        throw new ValidationError('请输入当前密码');
+      }
+      const ok = await bcrypt.compare(body.currentPassword, user.passwordHash);
+      if (!ok) throw new ValidationError('当前密码不正确');
+    }
+
+    const newHash = await bcrypt.hash(newPassword, 10);
+    await db.update(users).set({ passwordHash: newHash }).where(eq(users.id, userId));
+
     return reply.send({ ok: true });
   });
 }

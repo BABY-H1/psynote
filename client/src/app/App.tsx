@@ -266,43 +266,31 @@ const allNavItems: NavItem[] = [
   { to: '/knowledge', label: '知识库' },
   { to: '/delivery', label: '交付中心' },
   { to: '/collaboration', label: '协作中心' },
-  { to: '/settings', label: '机构设置' },
+  { to: '/settings', label: '我的设置' },
 ];
 
+// admin_staff can only see home + settings (which now includes their 我的 group)
 const adminStaffPaths = new Set(['/', '/settings']);
 const collabRoles = new Set(['org_admin', 'counselor']);
-const settingsRoles = new Set(['org_admin']);
 
-/** Settings label by orgType */
-const SETTINGS_LABELS: Record<string, string> = {
-  solo: '个人设置',
-  counseling: '机构设置',
-  enterprise: '企业设置',
-  school: '学校设置',
-  hospital: '机构设置',
-};
-
+/**
+ * Phase 14f (merged) — "设置" 入口统一改名为「我的设置」并对所有 role 可见。
+ * 页面内部通过 TabDef 的 adminOnly / onlyForRoles 精确过滤: 所有人都能看
+ * 到"我的"分组（基本资料/咨询师档案/修改密码）, 只有 org_admin 能看到
+ * 组织管理 / 门面信息 / 安全与合规等机构级分组。
+ */
 function getNavItems(role: string | null, orgType?: string | null): NavItem[] {
-  let items = allNavItems.map((item) => {
-    // Relabel settings based on orgType
-    if (item.to === '/settings' && orgType) {
-      return { ...item, label: SETTINGS_LABELS[orgType] || item.label };
-    }
-    return item;
-  });
+  let items = allNavItems.slice();
 
   if (role === 'admin_staff') {
     items = items.filter((item) => adminStaffPaths.has(item.to));
   } else if (orgType === 'solo') {
-    // Solo: no collaboration, counselor can see settings (manages own settings)
-    items = items.filter((item) => {
-      if (item.to === '/collaboration') return false;
-      return true;
-    });
+    // Solo: no collaboration center, everything else visible
+    items = items.filter((item) => item.to !== '/collaboration');
   } else {
     items = items.filter((item) => {
       if (item.to === '/collaboration') return collabRoles.has(role ?? '');
-      if (item.to === '/settings') return settingsRoles.has(role ?? '');
+      // Settings is now visible to everyone (personal "我的" group is inside)
       return true;
     });
   }
