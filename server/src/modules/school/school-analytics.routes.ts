@@ -39,17 +39,22 @@ export async function schoolAnalyticsRoutes(app: FastifyInstance) {
   /**
    * Header overview — replaces the old hard-coded "测评完成=0/预警关注=0" tiles.
    *
-   * - assessmentsThisMonth      本月完成的测评条数(去重 user)
-   * - highRiskActiveStudents    当前 level_3/4 风险且没在 closed crisis 案件里的学生数
-   * - openCrisisCount           处置中的危机案件
-   * - pendingSignOffCount       待督导审核的危机案件
+   * Returns:
+   * - assessmentsThisMonth    本月完成的测评人次 (count DISTINCT user_id)
+   * - riskLevelDistribution   各学生的**最新一次**风险等级分布 (L1-L4 完整)
+   *                            每个学生按最新测评一次去重 — 不是累计 count
+   * - openCrisisCount         处置中的危机案件
+   * - pendingSignOffCount     待督导审核的危机案件
+   *
+   * 风险分布口径：只统计 school_student_profiles 里的学生 (以排除非学校场景的 user)；
+   * 每学生取最新一次 ar.created_at 的 risk_level。没做过测评的学生不计入任何 level。
    */
   app.get('/overview', async (request) => {
     const orgId = request.org!.orgId;
 
+    // Header counts (assessments + crisis)
     const [overviewRow] = await db.execute<{
       assessments_this_month: string;
-      high_risk_active_students: string;
       open_crisis: string;
       pending_signoff: string;
     }>(sql`
@@ -57,20 +62,41 @@ export async function schoolAnalyticsRoutes(app: FastifyInstance) {
         (SELECT count(DISTINCT user_id)::int FROM assessment_results
           WHERE org_id = ${orgId}
             AND created_at >= date_trunc('month', CURRENT_DATE)) AS assessments_this_month,
-        (SELECT count(DISTINCT ar.user_id)::int FROM assessment_results ar
-          INNER JOIN school_student_profiles ss ON ss.user_id = ar.user_id AND ss.org_id = ar.org_id
-          WHERE ar.org_id = ${orgId}
-            AND ar.risk_level IN ('level_3', 'level_4')
-            AND ar.deleted_at IS NULL) AS high_risk_active_students,
         (SELECT count(*)::int FROM crisis_cases
           WHERE org_id = ${orgId} AND stage = 'open') AS open_crisis,
         (SELECT count(*)::int FROM crisis_cases
           WHERE org_id = ${orgId} AND stage = 'pending_sign_off') AS pending_signoff
     `).then((r: any) => r.rows ?? r);
 
+    // Latest risk level per student (excluding students with no assessment)
+    const riskRows = await db.execute<{ risk_level: string | null; cnt: string }>(sql`
+      WITH latest_per_student AS (
+        SELECT DISTINCT ON (ar.user_id)
+          ar.user_id, ar.risk_level
+        FROM assessment_results ar
+        INNER JOIN school_student_profiles ss ON ss.user_id = ar.user_id AND ss.org_id = ar.org_id
+        WHERE ar.org_id = ${orgId}
+          AND ar.deleted_at IS NULL
+          AND ar.risk_level IS NOT NULL
+        ORDER BY ar.user_id, ar.created_at DESC
+      )
+      SELECT risk_level, count(*)::int AS cnt
+      FROM latest_per_student
+      GROUP BY risk_level
+    `).then((r: any) => r.rows ?? r);
+
+    const riskLevelDistribution: Record<string, number> = {
+      level_1: 0, level_2: 0, level_3: 0, level_4: 0,
+    };
+    for (const row of (riskRows as any[])) {
+      if (row.risk_level && riskLevelDistribution[row.risk_level] !== undefined) {
+        riskLevelDistribution[row.risk_level] = Number(row.cnt ?? 0);
+      }
+    }
+
     return {
       assessmentsThisMonth: Number((overviewRow as any)?.assessments_this_month ?? 0),
-      highRiskActiveStudents: Number((overviewRow as any)?.high_risk_active_students ?? 0),
+      riskLevelDistribution,
       openCrisisCount: Number((overviewRow as any)?.open_crisis ?? 0),
       pendingSignOffCount: Number((overviewRow as any)?.pending_signoff ?? 0),
     };

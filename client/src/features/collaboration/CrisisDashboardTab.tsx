@@ -13,61 +13,12 @@
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../../api/client';
-import { useAuthStore } from '../../stores/authStore';
 import {
   AlertTriangle, ClipboardCheck, CheckCircle2, RefreshCcw,
-  Users, Activity, FileText, ChevronRight, Loader2, Sparkles,
+  Activity, FileText, ChevronRight, Loader2, Sparkles, Inbox,
 } from 'lucide-react';
-
-interface CrisisStats {
-  cards: {
-    total: number;
-    openCount: number;
-    pendingSignOffCount: number;
-    closedThisMonth: number;
-    reopenedCount: number;
-  };
-  byCounselor: {
-    counselorId: string;
-    counselorName: string;
-    openCount: number;
-    pendingCount: number;
-    closedCount: number;
-    total: number;
-  }[];
-  bySource: { auto_candidate: number; manual: number };
-  monthlyTrend: { month: string; opened: number; closed: number }[];
-  recentActivity: {
-    id: string;
-    eventType: string;
-    title: string | null;
-    summary: string | null;
-    careEpisodeId: string;
-    createdAt: string;
-    createdByName: string | null;
-    clientName: string | null;
-  }[];
-  pendingSignOffList: {
-    caseId: string;
-    episodeId: string;
-    submittedAt: string | null;
-    counselorName: string | null;
-    clientName: string | null;
-    closureSummary: string | null;
-  }[];
-}
-
-function useCrisisStats() {
-  const orgId = useAuthStore((s) => s.currentOrgId);
-  return useQuery({
-    queryKey: ['crisisStats', orgId],
-    queryFn: () => api.get<CrisisStats>(`/orgs/${orgId}/crisis/stats`),
-    enabled: !!orgId,
-    refetchInterval: 60_000, // refresh every minute (supervisors expect near-realtime)
-  });
-}
+import { useCrisisStats } from '../../api/useCrisisStats';
+import { StatTile, MonthlyTrendChart } from '../../shared/components/dashboard';
 
 const EVENT_LABELS: Record<string, { label: string; tone: string; icon: React.ComponentType<{ className?: string }> }> = {
   crisis_opened: { label: '案件开启', tone: 'text-rose-700 bg-rose-50', icon: AlertTriangle },
@@ -109,39 +60,47 @@ export function CrisisDashboardTab() {
 
   return (
     <div className="space-y-5">
-      {/* Top cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <StatCard
+      {/* Top cards — now 6 (added 待处置) */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <StatTile
+          icon={<Sparkles className="w-4 h-4" />}
+          tone="slate"
           label="案件总数"
           value={cards.total}
-          icon={<Sparkles className="w-4 h-4" />}
-          tone="text-slate-700 bg-slate-100"
         />
-        <StatCard
+        <StatTile
+          icon={<Activity className="w-4 h-4" />}
+          tone="rose"
           label="处置中"
           value={cards.openCount}
-          icon={<Activity className="w-4 h-4" />}
-          tone="text-rose-700 bg-rose-50"
           highlight={cards.openCount > 0}
         />
-        <StatCard
+        <StatTile
+          icon={<Inbox className="w-4 h-4" />}
+          tone="amber"
+          label="待处置"
+          value={cards.pendingCandidateCount}
+          highlight={cards.pendingCandidateCount > 0}
+          hint="候选池"
+        />
+        <StatTile
+          icon={<ClipboardCheck className="w-4 h-4" />}
+          tone="amber"
           label="待督导审核"
           value={cards.pendingSignOffCount}
-          icon={<ClipboardCheck className="w-4 h-4" />}
-          tone="text-amber-700 bg-amber-50"
           highlight={cards.pendingSignOffCount > 0}
         />
-        <StatCard
+        <StatTile
+          icon={<CheckCircle2 className="w-4 h-4" />}
+          tone="emerald"
           label="本月结案"
           value={cards.closedThisMonth}
-          icon={<CheckCircle2 className="w-4 h-4" />}
-          tone="text-emerald-700 bg-emerald-50"
         />
-        <StatCard
+        <StatTile
+          icon={<RefreshCcw className="w-4 h-4" />}
+          tone="amber"
           label="督导退回中"
           value={cards.reopenedCount}
-          icon={<RefreshCcw className="w-4 h-4" />}
-          tone="text-amber-700 bg-amber-50"
         />
       </div>
 
@@ -310,26 +269,6 @@ export function CrisisDashboardTab() {
   );
 }
 
-function StatCard({
-  label, value, icon, tone, highlight,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  tone: string;
-  highlight?: boolean;
-}) {
-  return (
-    <div className={`bg-white border rounded-2xl p-4 ${highlight ? 'border-rose-200 ring-1 ring-rose-100' : 'border-slate-200'}`}>
-      <div className="flex items-center gap-2 mb-2">
-        <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${tone}`}>{icon}</div>
-        <span className="text-xs text-slate-500">{label}</span>
-      </div>
-      <div className={`text-2xl font-bold ${highlight ? 'text-rose-700' : 'text-slate-900'}`}>{value}</div>
-    </div>
-  );
-}
-
 function Card({
   title, subtitle, badge, children,
 }: {
@@ -356,46 +295,4 @@ function Card({
 
 function Empty({ text }: { text: string }) {
   return <div className="p-8 text-center text-sm text-slate-400">{text}</div>;
-}
-
-function MonthlyTrendChart({ data }: { data: { month: string; opened: number; closed: number }[] }) {
-  const max = Math.max(1, ...data.flatMap((d) => [d.opened, d.closed]));
-  return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-6 gap-2">
-        {data.map((m) => (
-          <div key={m.month} className="text-center">
-            <div className="flex items-end justify-center gap-1 h-24">
-              <div
-                className="w-3 bg-rose-400 rounded-t"
-                style={{ height: `${(m.opened / max) * 100}%` }}
-                title={`开案 ${m.opened}`}
-              />
-              <div
-                className="w-3 bg-emerald-400 rounded-t"
-                style={{ height: `${(m.closed / max) * 100}%` }}
-                title={`结案 ${m.closed}`}
-              />
-            </div>
-            <div className="text-[10px] text-slate-400 mt-1">{m.month.slice(5)}</div>
-            <div className="text-[10px] text-slate-500 leading-tight">
-              <span className="text-rose-600">{m.opened}</span>
-              <span className="text-slate-300 mx-0.5">/</span>
-              <span className="text-emerald-600">{m.closed}</span>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="flex items-center justify-center gap-4 text-[11px] text-slate-500">
-        <div className="flex items-center gap-1">
-          <span className="w-3 h-3 bg-rose-400 rounded inline-block" />
-          开案
-        </div>
-        <div className="flex items-center gap-1">
-          <span className="w-3 h-3 bg-emerald-400 rounded inline-block" />
-          结案
-        </div>
-      </div>
-    </div>
-  );
 }

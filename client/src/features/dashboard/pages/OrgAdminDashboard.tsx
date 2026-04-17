@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
+import { StatTile } from '../../../shared/components/dashboard';
 
 interface DashboardStats {
   counselorCount: number;
@@ -78,47 +79,53 @@ export function OrgAdminDashboard() {
         <p className="text-sm text-slate-500 mt-1">机构运营概览</p>
       </div>
 
-      {/* Metrics cards — 2 rows of 3 */}
+      {/* Metrics cards — 2 rows of 3 (Phase 14c: migrated to shared StatTile) */}
       <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <MetricCard
-          icon={<UserCheck className="w-5 h-5 text-blue-600" />}
+        <StatTile
+          icon={<UserCheck className="w-5 h-5" />}
+          tone="blue"
           label="活跃咨询师"
           value={stats?.counselorCount}
           loading={isLoading}
         />
-        <MetricCard
-          icon={<Users className="w-5 h-5 text-emerald-600" />}
+        <StatTile
+          icon={<Users className="w-5 h-5" />}
+          tone="emerald"
           label="活跃来访者"
           value={stats?.clientCount}
           loading={isLoading}
         />
-        <MetricCard
-          icon={<Calendar className="w-5 h-5 text-violet-600" />}
+        <StatTile
+          icon={<Calendar className="w-5 h-5" />}
+          tone="violet"
           label="本月个咨"
           value={stats?.monthlySessionCount}
-          loading={isLoading}
           suffix="场"
+          loading={isLoading}
         />
-        <MetricCard
-          icon={<UsersRound className="w-5 h-5 text-orange-600" />}
+        <StatTile
+          icon={<UsersRound className="w-5 h-5" />}
+          tone="orange"
           label="进行中团辅"
           value={stats?.activeGroupCount}
           loading={isLoading}
           onClick={() => navigate('/delivery')}
         />
-        <MetricCard
-          icon={<BookOpen className="w-5 h-5 text-teal-600" />}
+        <StatTile
+          icon={<BookOpen className="w-5 h-5" />}
+          tone="teal"
           label="进行中课程"
           value={stats?.activeCourseCount}
           loading={isLoading}
           onClick={() => navigate('/delivery')}
         />
-        <MetricCard
-          icon={<ClipboardCheck className="w-5 h-5 text-indigo-600" />}
+        <StatTile
+          icon={<ClipboardCheck className="w-5 h-5" />}
+          tone="indigo"
           label="本月测评"
           value={stats?.monthlyAssessmentCount}
-          loading={isLoading}
           suffix="份"
+          loading={isLoading}
           onClick={() => navigate('/delivery')}
         />
       </div>
@@ -203,32 +210,6 @@ export function OrgAdminDashboard() {
         </div>
       </div>
     </div>
-  );
-}
-
-function MetricCard({ icon, label, value, loading, suffix, onClick }: {
-  icon: React.ReactNode;
-  label: string;
-  value?: number;
-  loading: boolean;
-  suffix?: string;
-  onClick?: () => void;
-}) {
-  const Tag = onClick ? 'button' : 'div';
-  return (
-    <Tag
-      type={onClick ? 'button' : undefined}
-      onClick={onClick}
-      className={`bg-white border border-slate-200 rounded-xl p-4 flex items-center gap-4 text-left ${onClick ? 'hover:border-slate-300 hover:bg-slate-50 transition cursor-pointer' : ''}`}
-    >
-      <div className="p-2 bg-slate-50 rounded-lg">{icon}</div>
-      <div>
-        <div className="text-2xl font-bold text-slate-900">
-          {loading ? '—' : (value ?? 0)}{suffix && !loading ? <span className="text-sm font-normal text-slate-400 ml-1">{suffix}</span> : null}
-        </div>
-        <div className="text-xs text-slate-500">{label}</div>
-      </div>
-    </Tag>
   );
 }
 

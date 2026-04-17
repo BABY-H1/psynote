@@ -456,20 +456,25 @@ export async function getDashboardStats(orgId: string) {
     recentActivityRows,
     pendingSignOffRows,
   ] = await Promise.all([
-    // ── 卡片计数(单条 SQL，按 stage 分组）──
+    // ── 卡片计数(单条 SQL，按 stage 分组 + 候选池待处置计数) ──
     db.execute<{
       total: string;
       open_count: string;
       pending_count: string;
       closed_this_month: string;
       reopened_count: string;
+      pending_candidate_count: string;
     }>(sql`
       SELECT
         count(*)::int AS total,
         count(*) FILTER (WHERE stage = 'open')::int AS open_count,
         count(*) FILTER (WHERE stage = 'pending_sign_off')::int AS pending_count,
         count(*) FILTER (WHERE stage = 'closed' AND signed_off_at >= date_trunc('month', CURRENT_DATE))::int AS closed_this_month,
-        count(*) FILTER (WHERE stage = 'reopened')::int AS reopened_count
+        count(*) FILTER (WHERE stage = 'reopened')::int AS reopened_count,
+        (SELECT count(*)::int FROM candidate_pool
+          WHERE org_id = ${orgId}
+            AND kind = 'crisis_candidate'
+            AND status = 'pending') AS pending_candidate_count
       FROM crisis_cases
       WHERE org_id = ${orgId}
     `),
@@ -589,12 +594,13 @@ export async function getDashboardStats(orgId: string) {
     `),
   ]);
 
-  const card = cardCounts.rows?.[0] ?? cardCounts[0] ?? {};
+  const card = (cardCounts as any).rows?.[0] ?? (cardCounts as any)[0] ?? {};
 
   return {
     cards: {
       total: Number((card as any).total ?? 0),
       openCount: Number((card as any).open_count ?? 0),
+      pendingCandidateCount: Number((card as any).pending_candidate_count ?? 0),
       pendingSignOffCount: Number((card as any).pending_count ?? 0),
       closedThisMonth: Number((card as any).closed_this_month ?? 0),
       reopenedCount: Number((card as any).reopened_count ?? 0),
