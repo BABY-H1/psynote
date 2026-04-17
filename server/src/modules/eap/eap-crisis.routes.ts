@@ -30,7 +30,7 @@ export async function eapCrisisRoutes(app: FastifyInstance) {
 
   // ─── List Crisis Alerts ──────────────────────────────────────────
   app.get('/', {
-    preHandler: [requireRole('org_admin', 'hr_admin')],
+    preHandler: [requireRole('org_admin')],
   }, async (request) => {
     const orgId = request.org!.orgId;
 
@@ -151,7 +151,7 @@ export async function eapCrisisRoutes(app: FastifyInstance) {
 
   // ─── Update Alert Status ─────────────────────────────────────────
   app.patch('/:alertId', {
-    preHandler: [requireRole('org_admin', 'hr_admin')],
+    preHandler: [requireRole('org_admin')],
   }, async (request) => {
     const orgId = request.org!.orgId;
     const { alertId } = request.params as { alertId: string };

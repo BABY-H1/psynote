@@ -1,5 +1,11 @@
-/** Organization member roles */
-export type OrgRole = 'org_admin' | 'counselor' | 'admin_staff' | 'client' | 'hr_admin';
+/** Organization member roles.
+ *
+ * Note on enterprise/EAP: there's **no separate `hr_admin` role**. Enterprise
+ * org administrators use the same `org_admin` role; routing + data scope
+ * branches on `orgType === 'enterprise'` to give them the HR dashboard shell
+ * and aggregate-only data scope. See `App.tsx` and `middleware/data-scope.ts`.
+ */
+export type OrgRole = 'org_admin' | 'counselor' | 'admin_staff' | 'client';
 
 /** Session note status (supervision workflow) */
 export type NoteStatus = 'draft' | 'finalized' | 'submitted_for_review' | 'reviewed';

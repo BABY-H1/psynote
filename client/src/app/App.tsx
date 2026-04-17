@@ -67,13 +67,7 @@ import { OrgCollaboration } from '../features/collaboration/OrgCollaboration';
 import { AuditLogViewer } from '../features/collaboration/AuditLogViewer';
 import { OrgSettingsPage } from '../features/settings/pages/OrgSettingsPage';
 import { SchoolDashboard } from '../features/dashboard/pages/SchoolDashboard';
-// EAP Enterprise — HR Dashboard
-import { HRDashboardShell } from '../features/eap-dashboard/HRDashboardShell';
-import { HRDashboardHome } from '../features/eap-dashboard/pages/HRDashboardHome';
-import { HREmployeeList } from '../features/eap-dashboard/pages/HREmployeeList';
-import { HRProviders } from '../features/eap-dashboard/pages/HRProviders';
-import { HRCrisisAlerts } from '../features/eap-dashboard/pages/HRCrisisAlerts';
-import { HRSettings } from '../features/eap-dashboard/pages/HRSettings';
+import { EnterpriseDashboard } from '../features/dashboard/pages/EnterpriseDashboard';
 
 function AppRoutes() {
   const { user, currentOrgId, currentRole, isSystemAdmin, _hydrated } = useAuthStore();
@@ -122,18 +116,6 @@ function AppRoutes() {
         <>
           <Route path="/select-org" element={<OrgSelector />} />
           <Route path="*" element={<Navigate to="/select-org" replace />} />
-        </>
-      ) : (currentRole as string) === 'hr_admin' ? (
-        /* EAP Enterprise — HR Dashboard for hr_admin role */
-        <>
-          <Route path="/hr" element={<HRDashboardShell />}>
-            <Route index element={<HRDashboardHome />} />
-            <Route path="employees" element={<HREmployeeList />} />
-            <Route path="providers" element={<HRProviders />} />
-            <Route path="crisis" element={<HRCrisisAlerts />} />
-            <Route path="settings" element={<HRSettings />} />
-          </Route>
-          <Route path="*" element={<Navigate to="/hr" replace />} />
         </>
       ) : isClient ? (
         /* Phase 8c — Client (来访者) portal with 4-tab mobile shell.
@@ -494,6 +476,8 @@ function RoleBasedHome() {
   if (orgType === 'solo') return <DashboardHome />;
   // School: school-specific dashboard
   if (orgType === 'school' && role === 'org_admin') return <SchoolDashboard />;
+  // Enterprise: EAP-specific dashboard (risk分布 / 部门矩阵 / 服务趋势 / HR 待办)
+  if (orgType === 'enterprise' && role === 'org_admin') return <EnterpriseDashboard />;
   if (role === 'org_admin') return <OrgAdminDashboard />;
   return <DashboardHome />;
 }

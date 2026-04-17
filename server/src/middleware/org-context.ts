@@ -165,8 +165,9 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     throw new ForbiddenError('Your membership has expired');
   }
 
-  // Load supervisee user IDs (people this member supervises)
-  // hr_admin does not need supervisee info (they only see aggregates)
+  // Load supervisee user IDs (people this member supervises).
+  // Note: enterprise org_admin is aggregate-only so doesn't need supervisees;
+  // the role gate below naturally excludes enterprise admins from loading them.
   let superviseeUserIds: string[] = [];
   if (member.role === 'counselor' || member.role === 'org_admin' || member.role === 'admin_staff') {
     const supervisees = await db

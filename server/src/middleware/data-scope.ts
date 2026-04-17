@@ -26,13 +26,10 @@ export async function dataScopeGuard(request: FastifyRequest, _reply: FastifyRep
 
   const userId = request.user!.id;
 
-  // hr_admin → aggregate-only (can only see eap_usage_events aggregates, no clinical data)
-  if (org.role === 'hr_admin') {
-    request.dataScope = { type: 'aggregate_only' };
-    return;
-  }
-
-  // Enterprise org's org_admin: aggregate-only (same as hr_admin — no clinical data)
+  // Enterprise org's org_admin (= EAP 负责人): aggregate-only (no clinical data).
+  // In enterprise/EAP context, HR-facing data must be privacy-isolated — the
+  // enterprise admin can only see eap_usage_events aggregates, never individual
+  // clinical records.
   if (org.role === 'org_admin' && org.orgType === 'enterprise') {
     request.dataScope = { type: 'aggregate_only' };
     return;

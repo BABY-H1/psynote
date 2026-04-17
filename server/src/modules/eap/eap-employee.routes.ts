@@ -31,7 +31,7 @@ export async function eapEmployeeRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
   app.addHook('preHandler', requireOrgType('enterprise'));
-  app.addHook('preHandler', requireRole('org_admin', 'hr_admin'));
+  app.addHook('preHandler', requireRole('org_admin'));
 
   // ─── List Employees ──────────────────────────────────────────────
   app.get('/', async (request) => {
