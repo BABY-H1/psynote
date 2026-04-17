@@ -84,6 +84,8 @@ import { eapPublicRoutes } from './modules/eap/eap-public.routes.js';
 // School — 学校版班级管理 + 学生管理
 import { schoolClassRoutes } from './modules/school/school-class.routes.js';
 import { schoolStudentRoutes } from './modules/school/school-student.routes.js';
+// Phase 14c — School-side analytics for the redesigned dashboard
+import { schoolAnalyticsRoutes } from './modules/school/school-analytics.routes.js';
 // Phase 14 — Parent self-binding (class invite tokens + public landing)
 import { parentInvitationRoutes } from './modules/parent-binding/parent-binding.routes.js';
 import { publicParentBindingRoutes } from './modules/parent-binding/public-parent-binding.routes.js';
@@ -240,6 +242,7 @@ await app.register(eapPublicRoutes, { prefix: '/api/public/eap' });
 // School — class & student management
 await app.register(schoolClassRoutes, { prefix: '/api/orgs/:orgId/school/classes' });
 await app.register(schoolStudentRoutes, { prefix: '/api/orgs/:orgId/school/students' });
+await app.register(schoolAnalyticsRoutes, { prefix: '/api/orgs/:orgId/school/analytics' });
 
 // Phase 14 — Parent self-binding (class invite tokens + portal landing)
 await app.register(parentInvitationRoutes, { prefix: '/api/orgs/:orgId/school/classes/:classId/parent-invite-tokens' });
