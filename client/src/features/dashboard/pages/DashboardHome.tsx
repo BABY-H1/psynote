@@ -2,13 +2,10 @@ import React from 'react';
 import { useAuthStore } from '../../../stores/authStore';
 import { DashboardCountGrid } from '../components/DashboardCountGrid';
 import { Workstation } from '../components/Workstation';
-import { ArchiveSection } from '../components/ArchiveSection';
+import { FollowUpAlerts } from '../components/FollowUpAlerts';
 
 /**
- * 首页 — 三段式工作台
- *
- * 本文件作为 Phase 1 重构的最终形态：仅是三个段（看板/操作台/档案库）的容器，
- * 不再持有任何业务逻辑。
+ * 首页 — 三段式工作台（Phase 14e 调整）
  *
  *   ┌──────────────────────────────────────────┐
  *   │  你好，{user}                            │
@@ -19,16 +16,14 @@ import { ArchiveSection } from '../components/ArchiveSection';
  *   │  ─── 操作台 · 现在 ───────────────       │
  *   │  <Workstation />                         │
  *   ├──────────────────────────────────────────┤
- *   │  ─── 档案库 · 过去 ───────────────       │
- *   │  <ArchiveSection />                      │
+ *   │  ─── 风险关注 ─────────────────────      │
+ *   │  <FollowUpAlerts />                      │
  *   └──────────────────────────────────────────┘
  *
- * 已删除（相对于旧版）：
- *   - 4 个 ShortcutCard（与侧边栏导航重复）
- *   - 4 个 StatCard（被 6 瓦片 DashboardCountGrid 取代）
- *   - 风险等级分布图（迁移到对象档案 / 个案列表，详见 Phase 6）
- *   - 内联的 ShortcutCard / StatCard / RiskBar 子组件
- *   - 预约管理面板与建案弹窗（迁移到 Workstation.tsx）
+ * Phase 14e 把原「档案库·过去」段（ArchiveSection = PersonArchivePreview +
+ * RecentInteractions + FollowUpAlerts）替换为直接展示 FollowUpAlerts
+ * 一张卡，段名改为「风险关注」。原来的"对象档案 top5"和"最近互动"从
+ * 主页移除（仍可通过 交付中心 → 对象档案 入口访问）。
  */
 export function DashboardHome() {
   const user = useAuthStore((s) => s.user);
@@ -41,7 +36,7 @@ export function DashboardHome() {
           你好，{user?.name || '用户'}
         </h1>
         <p className="text-sm text-slate-500 mt-1">
-          欢迎回到 Psynote 工作台，以下是今天的概览
+          欢迎回到 Psynote 工作台，以下是今天需要关注的内容
         </p>
       </div>
 
@@ -53,9 +48,9 @@ export function DashboardHome() {
       <SectionDivider label="操作台 · 现在" />
       <Workstation />
 
-      {/* ─── 档案库 · 过去 ─── */}
-      <SectionDivider label="档案库 · 过去" />
-      <ArchiveSection />
+      {/* ─── 风险关注 ─── */}
+      <SectionDivider label="风险关注" />
+      <FollowUpAlerts />
     </div>
   );
 }

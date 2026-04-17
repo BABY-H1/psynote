@@ -86,7 +86,7 @@ function orgPrefix(orgId: string | null) {
 
 /**
  * Fetch the list of all users in the org with at least one service touchpoint.
- * Used by `PeopleList.tsx` and `PersonArchivePreview.tsx`.
+ * Used by `PeopleList.tsx` (交付中心 → 对象档案).
  */
 export function usePeople() {
   const orgId = useAuthStore((s) => s.currentOrgId);
