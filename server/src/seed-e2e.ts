@@ -365,6 +365,23 @@ async function seedE2E() {
   }
   console.log('  + 1 school class + 1 student profile + 1 active invite token');
 
+  // 6. Rate-limit bump for E2E.
+  // Fastify's global rate limiter reads `limits.rateLimitMax` from
+  // system_config at boot (default 100/min). A full Playwright run does
+  // setup (7 logins) + smoke (~36 tests, many with pooled logins + ~3-5
+  // requests each) in under 60s → saturates the 100/min budget and
+  // starts 429-ing partway through. This was invisible on dev machines
+  // after a one-off manual SQL bump; CI starts from a fresh DB so the
+  // default kicks in and trips the suite. We settle the bump in seed
+  // so both local and CI stay in sync.
+  await sql`
+    INSERT INTO system_config (category, key, value, description, requires_restart)
+    VALUES ('limits', 'rateLimitMax', '500'::jsonb, '每分钟最大请求数 (E2E seed)', true)
+    ON CONFLICT (category, key) DO UPDATE
+      SET value = '500'::jsonb
+  `;
+  console.log('  + system_config.limits.rateLimitMax = 500 (E2E smoke headroom)');
+
   console.log('\n--- E2E seed completed ---');
   console.log('Accounts (all passwords = admin123):');
   for (const u of Object.values(USERS)) {
