@@ -1409,4 +1409,12 @@ export const systemConfig = pgTable('system_config', {
   requiresRestart: boolean('requires_restart').notNull().default(false),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   updatedBy: uuid('updated_by').references(() => users.id),
-});
+}, (t) => [
+  // Migration 017 declared this UNIQUE constraint but it was never
+  // ported into the drizzle schema source. seed-e2e's rate-limit UPSERT
+  // needs it (`ON CONFLICT (category, key)`), and `drizzle-kit push`
+  // only mirrors what's declared here. Adding it keeps the CI DB and
+  // any legacy DB that already has the constraint converge on the
+  // same shape.
+  uniqueIndex('uq_system_config_category_key').on(t.category, t.key),
+]);
