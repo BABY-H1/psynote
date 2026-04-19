@@ -112,6 +112,12 @@ const USERS: Record<string, SeedUser> = {
     email: 'ybzx@psynote.cn',
     name: '学校管理员',
   },
+  // Phase-B.3d — parent invite-token binding E2E fixtures
+  schoolStudent: {
+    id: demoUUID('school-student'),
+    email: 'zhangsan@demo.psynote.cn',
+    name: '张三',
+  },
   // Solo org
   soloOwner: {
     id: demoUUID('solo-owner'),
@@ -207,6 +213,7 @@ async function seedE2E() {
     { orgKey: 'counseling', userKey: 'parentUnbound',        role: 'client',     fullPracticeAccess: false },
     { orgKey: 'enterprise', userKey: 'enterpriseHR',         role: 'org_admin',  fullPracticeAccess: false },
     { orgKey: 'school',     userKey: 'schoolAdmin',          role: 'org_admin',  fullPracticeAccess: true },
+    { orgKey: 'school',     userKey: 'schoolStudent',        role: 'client',     fullPracticeAccess: false },
     { orgKey: 'solo',       userKey: 'soloOwner',            role: 'org_admin',  fullPracticeAccess: true },
   ];
 
@@ -272,6 +279,91 @@ async function seedE2E() {
     }
   }
   console.log(`  + ${bindings.length} parent-binding relationships`);
+
+  // 5. School invite-binding fixtures (Phase-B.3d) — one class + one student
+  //    profile + one active invite token in the school org. The happy path
+  //    E2E uses these to exercise the full /api/public/parent-bind/:token
+  //    flow (preview → submit with 3-field match → new parent user + JWT).
+  const schoolOrgId = orgIds['school'];
+  const schoolAdminId = userIds['schoolAdmin'];
+  const schoolStudentId = userIds['schoolStudent'];
+
+  // 5.1 class (match by unique index: org_id + grade + class_name)
+  const GRADE = '七年级';
+  const CLASS_NAME = '一班';
+  const existingClass = await sql<{ id: string }[]>`
+    SELECT id FROM school_classes
+    WHERE org_id = ${schoolOrgId} AND grade = ${GRADE} AND class_name = ${CLASS_NAME}
+    LIMIT 1
+  `;
+  let classId: string;
+  if (existingClass.length) {
+    classId = existingClass[0].id;
+    await sql`
+      UPDATE school_classes
+      SET homeroom_teacher_id = ${schoolAdminId}
+      WHERE id = ${classId}
+    `;
+  } else {
+    const [row] = await sql<{ id: string }[]>`
+      INSERT INTO school_classes (org_id, grade, class_name, homeroom_teacher_id, student_count)
+      VALUES (${schoolOrgId}, ${GRADE}, ${CLASS_NAME}, ${schoolAdminId}, 1)
+      RETURNING id
+    `;
+    classId = row.id;
+  }
+
+  // 5.2 student profile — the 3 anti-impersonation fields are studentId,
+  // user.name, and phoneLast4 of parentPhone. Pin the phone so the E2E
+  // can assert on 138-0000-9988 → last4 '9988'.
+  const STUDENT_ID = 'S2026001';
+  const PARENT_PHONE = '13800009988';
+  const existingProfile = await sql<{ id: string }[]>`
+    SELECT id FROM school_student_profiles
+    WHERE org_id = ${schoolOrgId} AND user_id = ${schoolStudentId}
+    LIMIT 1
+  `;
+  if (existingProfile.length) {
+    await sql`
+      UPDATE school_student_profiles
+      SET student_id = ${STUDENT_ID},
+          grade = ${GRADE},
+          class_name = ${CLASS_NAME},
+          parent_phone = ${PARENT_PHONE},
+          entry_method = 'import'
+      WHERE id = ${existingProfile[0].id}
+    `;
+  } else {
+    await sql`
+      INSERT INTO school_student_profiles (org_id, user_id, student_id, grade, class_name, parent_phone, entry_method)
+      VALUES (${schoolOrgId}, ${schoolStudentId}, ${STUDENT_ID}, ${GRADE}, ${CLASS_NAME}, ${PARENT_PHONE}, 'import')
+    `;
+  }
+
+  // 5.3 active invite token — pinned (not random) so E2E can build the URL
+  //     without querying the DB. Expires far in the future; revoked_at=NULL.
+  const INVITE_TOKEN = 'e2e-school-invite-token-fixed-2026';
+  const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+  const existingTok = await sql<{ id: string }[]>`
+    SELECT id FROM class_parent_invite_tokens WHERE token = ${INVITE_TOKEN} LIMIT 1
+  `;
+  if (existingTok.length) {
+    await sql`
+      UPDATE class_parent_invite_tokens
+      SET org_id = ${schoolOrgId},
+          class_id = ${classId},
+          created_by = ${schoolAdminId},
+          expires_at = ${future},
+          revoked_at = NULL
+      WHERE id = ${existingTok[0].id}
+    `;
+  } else {
+    await sql`
+      INSERT INTO class_parent_invite_tokens (org_id, class_id, token, created_by, expires_at)
+      VALUES (${schoolOrgId}, ${classId}, ${INVITE_TOKEN}, ${schoolAdminId}, ${future})
+    `;
+  }
+  console.log('  + 1 school class + 1 student profile + 1 active invite token');
 
   console.log('\n--- E2E seed completed ---');
   console.log('Accounts (all passwords = admin123):');
