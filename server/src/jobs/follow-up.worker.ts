@@ -112,7 +112,10 @@ async function processDailyScan(_job: Job<{}>) {
  */
 export function startFollowUpWorker() {
   const worker = new Worker(QUEUE_NAME, processDailyScan, {
-    connection: { url: env.REDIS_URL },
+    // `lazyConnect: true` parallels queue.ts — keeps the socket dormant
+    // until the first dequeue attempt. The caller in app.ts has already
+    // confirmed Redis is reachable via `isRedisReachable` before calling us.
+    connection: { url: env.REDIS_URL, lazyConnect: true },
     concurrency: 1, // The scan is heavy and there's no benefit to running it twice
   });
 

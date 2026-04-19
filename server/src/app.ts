@@ -255,14 +255,23 @@ try {
   await app.listen({ port: env.PORT, host: env.HOST });
   app.log.info(`Server running on http://${env.HOST}:${env.PORT}`);
 
-  // Start follow-up worker (requires Redis — gracefully skip if unavailable)
-  try {
-    const { startFollowUpWorker, scheduleDailyFollowUpScan } = await import('./jobs/follow-up.worker.js');
-    startFollowUpWorker();
-    await scheduleDailyFollowUpScan();
-    app.log.info('Follow-up worker started');
-  } catch (workerErr: any) {
-    app.log.warn(`Follow-up worker skipped: ${workerErr.message}`);
+  // Start follow-up worker — requires Redis. Probe first with a tight
+  // timeout; skip worker init entirely when Redis is down so BullMQ's
+  // background reconnect loop doesn't saturate the event loop and take
+  // the dev server with it.
+  const { isRedisReachable } = await import('./lib/redis-health.js');
+  const redisUp = await isRedisReachable(env.REDIS_URL);
+  if (!redisUp) {
+    app.log.warn(`Follow-up worker skipped: Redis unreachable at ${env.REDIS_URL}`);
+  } else {
+    try {
+      const { startFollowUpWorker, scheduleDailyFollowUpScan } = await import('./jobs/follow-up.worker.js');
+      startFollowUpWorker();
+      await scheduleDailyFollowUpScan();
+      app.log.info('Follow-up worker started');
+    } catch (workerErr: any) {
+      app.log.warn(`Follow-up worker failed to start: ${workerErr.message}`);
+    }
   }
 } catch (err) {
   app.log.error(err);

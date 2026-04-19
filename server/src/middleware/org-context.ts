@@ -4,7 +4,6 @@ import { db } from '../config/database.js';
 import { queryClient } from '../config/database.js';
 import { orgMembers, organizations } from '../db/schema.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
-import { env } from '../config/env.js';
 import type { OrgRole, OrgTier, OrgType, LicenseInfo } from '@psynote/shared';
 import { planToTier } from '@psynote/shared';
 import { verifyLicense } from '../lib/license/verify.js';
@@ -131,32 +130,6 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
       eq(orgMembers.status, 'active'),
     ))
     .limit(1);
-
-  // Dev mode: if no membership found, use dev role header
-  if (!member && env.NODE_ENV === 'development') {
-    const devRole = (request.headers['x-dev-role'] as string) || 'counselor';
-    const [orgRow] = await db
-      .select({ plan: organizations.plan, licenseKey: organizations.licenseKey, settings: organizations.settings })
-      .from(organizations)
-      .where(eq(organizations.id, orgId))
-      .limit(1);
-    const { tier, license } = await resolveTier(orgId, orgRow?.licenseKey, orgRow?.plan);
-    const devOrgSettings = (orgRow?.settings || {}) as Record<string, any>;
-    request.org = {
-      orgId,
-      role: devRole as OrgRole,
-      memberId: 'dev-member',
-      supervisorId: null,
-      fullPracticeAccess: devRole === 'org_admin',
-      superviseeUserIds: [],
-      tier,
-      orgType: (devOrgSettings.orgType || 'counseling') as OrgType,
-      license,
-    };
-    await queryClient`SELECT set_config('app.current_org_id', ${orgId}, true)`;
-    await queryClient`SELECT set_config('app.current_user_id', ${userId}, true)`;
-    return;
-  }
 
   if (!member) {
     throw new ForbiddenError('You are not a member of this organization');

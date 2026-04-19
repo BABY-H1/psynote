@@ -179,50 +179,49 @@ describe('orgContextGuard', () => {
     envState.NODE_ENV = 'test';
   });
 
-  it('dev mode (NODE_ENV=development): x-dev-role="counselor" lets non-member in', async () => {
+  // ─── x-dev-role backdoor has been REMOVED (security fix) ───
+  // Pre-launch audit found the dev-mode bypass at org-context.ts:134-157
+  // silently let non-members through in NODE_ENV=development. Nothing on
+  // the client side ever sent the header, so removing it is zero-impact
+  // on real dev workflows but closes a tenant-isolation hole that would
+  // have shipped to any deployment accidentally booted with NODE_ENV
+  // !== 'production' (e.g. staging, CI pre-prod).
+
+  it('NODE_ENV=development + non-member is REJECTED (x-dev-role bypass removed)', async () => {
     envState.NODE_ENV = 'development';
 
-    // 1. orgMembers lookup → empty (no membership)
-    selectQueue.push([]);
-    // 2. organizations row
-    selectQueue.push([{ plan: 'free', licenseKey: null, settings: { orgType: 'enterprise' } }]);
+    selectQueue.push([]); // orgMembers → empty
 
     const r = reqFor({ userId: 'u1', orgId: 'o1', devRole: 'counselor' });
-    await orgContextGuard(r, reply);
-
-    expect(r.org).toMatchObject({
-      orgId: 'o1',
-      role: 'counselor',
-      memberId: 'dev-member',
-      orgType: 'enterprise',
-      tier: 'starter',
-      fullPracticeAccess: false,
-    });
+    await expect(orgContextGuard(r, reply)).rejects.toBeInstanceOf(ForbiddenError);
 
     envState.NODE_ENV = 'test';
   });
 
-  it("dev mode with x-dev-role='org_admin' → fullPracticeAccess=true", async () => {
+  it("NODE_ENV=development + x-dev-role='org_admin' still REJECTED (no privilege escalation)", async () => {
     envState.NODE_ENV = 'development';
 
     selectQueue.push([]);
-    selectQueue.push([{ plan: 'pro', licenseKey: null, settings: { orgType: 'enterprise' } }]);
 
     const r = reqFor({ userId: 'u1', orgId: 'o1', devRole: 'org_admin' });
-    await orgContextGuard(r, reply);
+    await expect(orgContextGuard(r, reply)).rejects.toBeInstanceOf(ForbiddenError);
 
-    expect(r.org?.role).toBe('org_admin');
-    expect(r.org?.fullPracticeAccess).toBe(true);
-    expect(r.org?.orgType).toBe('enterprise');
+    envState.NODE_ENV = 'test';
   });
 
-  it('orgType falls back to counseling when settings.orgType is missing', async () => {
-    envState.NODE_ENV = 'development';
+  it('orgType falls back to counseling when settings.orgType is missing (real member path)', async () => {
+    envState.NODE_ENV = 'production';
 
+    // orgMembers → active member
+    selectQueue.push([
+      { id: 'm1', orgId: 'o1', userId: 'u1', role: 'counselor', status: 'active', validUntil: null, supervisorId: null, fullPracticeAccess: false },
+    ]);
+    // supervisees (counselor path loads them)
     selectQueue.push([]);
+    // organizations with empty settings
     selectQueue.push([{ plan: 'free', licenseKey: null, settings: {} }]);
 
-    const r = reqFor({ userId: 'u1', orgId: 'o1', devRole: 'counselor' });
+    const r = reqFor({ userId: 'u1', orgId: 'o1' });
     await orgContextGuard(r, reply);
 
     expect(r.org?.orgType).toBe('counseling');

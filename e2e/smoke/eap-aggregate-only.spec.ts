@@ -3,16 +3,17 @@ import { test, expect, request, type APIRequestContext } from '@playwright/test'
 /**
  * Phase-A.3 · EAP compliance boundary (HR / enterprise org_admin).
  *
- * Scope note (honest): a full "HR cannot see individual employee PHI"
- * assertion requires (1) seeding an enterprise employee + their
- * client_profiles row, and (2) NODE_ENV=production so the dev-mode
- * x-dev-role bypass in org-context.ts:134-157 doesn't mask membership
- * rejection. Both are future work.
+ * Scope note: a full "HR cannot see individual employee PHI" assertion
+ * still requires seeding an enterprise employee + their client_profiles
+ * row — that's future work. With the dev-mode x-dev-role bypass now
+ * removed (pre-launch security fix), membership rejection is no longer
+ * masked in dev, but the intra-tenant clinical-PHI denial for HR depends
+ * on route-level aggregate_only enforcement which is covered at the
+ * middleware layer in data-scope.test.ts.
  *
- * What these tests DO pin: the positive aggregate paths — any accidental
- * regression on EAP route mount or on aggregate_only scope resolution
- * fails here. The NEGATIVE side (intra-tenant clinical PHI denied) is
- * covered at the middleware layer in data-scope.test.ts.
+ * What these tests pin: the positive aggregate paths — any accidental
+ * regression on EAP route mount or aggregate_only scope resolution
+ * fails here.
  *
  * Logins pooled in beforeAll to stay under the Fastify auth rate limiter
  * when the whole smoke suite runs.

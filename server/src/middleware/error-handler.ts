@@ -23,6 +23,17 @@ export function errorHandler(
     });
   }
 
+  // FastifyError with its own 4xx statusCode (e.g. 413 body-too-large,
+  // 415 unsupported media type, 429 rate-limit). Preserve the status so
+  // clients get the right signal instead of a misleading 500.
+  const fastifyStatus = (error as FastifyError).statusCode;
+  if (typeof fastifyStatus === 'number' && fastifyStatus >= 400 && fastifyStatus < 500) {
+    return reply.status(fastifyStatus).send({
+      error: (error as FastifyError).code ?? 'CLIENT_ERROR',
+      message: error.message,
+    });
+  }
+
   // Default 500
   return reply.status(500).send({
     error: 'INTERNAL_ERROR',
