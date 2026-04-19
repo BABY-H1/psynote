@@ -89,6 +89,17 @@ const USERS: Record<string, SeedUser> = {
     email: 'client@demo.psynote.cn',
     name: '李同学',
   },
+  // Phase-A.2 — guardian impersonation E2E fixtures
+  parentBound: {
+    id: demoUUID('parent-bound'),
+    email: 'parent-bound@demo.psynote.cn',
+    name: '李妈妈',
+  },
+  parentUnbound: {
+    id: demoUUID('parent-unbound'),
+    email: 'parent-unbound@demo.psynote.cn',
+    name: '路人甲',
+  },
   // Enterprise org
   enterpriseHR: {
     id: demoUUID('enterprise-hr'),
@@ -192,6 +203,8 @@ async function seedE2E() {
     { orgKey: 'counseling', userKey: 'counselingAdmin',      role: 'org_admin',  fullPracticeAccess: true },
     { orgKey: 'counseling', userKey: 'counselingCounselor',  role: 'counselor',  fullPracticeAccess: false },
     { orgKey: 'counseling', userKey: 'counselingClient',     role: 'client',     fullPracticeAccess: false },
+    { orgKey: 'counseling', userKey: 'parentBound',          role: 'client',     fullPracticeAccess: false },
+    { orgKey: 'counseling', userKey: 'parentUnbound',        role: 'client',     fullPracticeAccess: false },
     { orgKey: 'enterprise', userKey: 'enterpriseHR',         role: 'org_admin',  fullPracticeAccess: false },
     { orgKey: 'school',     userKey: 'schoolAdmin',          role: 'org_admin',  fullPracticeAccess: true },
     { orgKey: 'solo',       userKey: 'soloOwner',            role: 'org_admin',  fullPracticeAccess: true },
@@ -220,6 +233,45 @@ async function seedE2E() {
     }
   }
   console.log(`  + ${memberships.length} memberships`);
+
+  // 4. Parent-binding (client_relationships) — for Phase-A.2 guardian
+  //    impersonation E2E. `parentBound` holds an active relation to
+  //    `counselingClient`; `parentUnbound` holds no relationship at all.
+  const bindings: Array<{
+    holderKey: keyof typeof USERS;
+    relatedKey: keyof typeof USERS;
+    orgKey: keyof typeof ORG;
+    relation: string;
+  }> = [
+    { holderKey: 'parentBound', relatedKey: 'counselingClient', orgKey: 'counseling', relation: 'guardian' },
+  ];
+  for (const b of bindings) {
+    const orgId = orgIds[b.orgKey];
+    const holderId = userIds[b.holderKey];
+    const relatedId = userIds[b.relatedKey];
+    const existing = await sql<{ id: string }[]>`
+      SELECT id FROM client_relationships
+      WHERE org_id = ${orgId}
+        AND holder_user_id = ${holderId}
+        AND related_client_user_id = ${relatedId}
+      LIMIT 1
+    `;
+    if (existing.length) {
+      await sql`
+        UPDATE client_relationships
+        SET status = 'active',
+            relation = ${b.relation},
+            revoked_at = NULL
+        WHERE id = ${existing[0].id}
+      `;
+    } else {
+      await sql`
+        INSERT INTO client_relationships (org_id, holder_user_id, related_client_user_id, relation, status)
+        VALUES (${orgId}, ${holderId}, ${relatedId}, ${b.relation}, 'active')
+      `;
+    }
+  }
+  console.log(`  + ${bindings.length} parent-binding relationships`);
 
   console.log('\n--- E2E seed completed ---');
   console.log('Accounts (all passwords = admin123):');
