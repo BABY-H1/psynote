@@ -19,7 +19,14 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   workers: process.env.CI ? 1 : 1,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  // `github` reporter emits `::error::` workflow commands per failed
+  // test, which surface as check-run annotations readable via the
+  // public GitHub REST API (/repos/.../check-runs/:id/annotations).
+  // This lets us diagnose CI failures without needing admin rights to
+  // the raw job-log download endpoint.
+  reporter: process.env.CI
+    ? [['list'], ['html', { open: 'never' }], ['github']]
+    : [['list'], ['html', { open: 'never' }]],
 
   use: {
     baseURL: 'http://localhost:5173',
