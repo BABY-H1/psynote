@@ -103,13 +103,18 @@ jobs:
           until pg_isready -h localhost -p 5432 -U postgres -t 3; do sleep 1; done
           PGPASSWORD=psynote123 psql -h localhost -U postgres -d psynote -c "SELECT version();"
 
-      - name: Apply DB migrations
-        # Run from inside `server/` so drizzle-kit resolves its config at
-        # the expected relative path. Use npx directly (not the workspace
-        # npm-script indirection) so the invocation matches what we run
-        # locally and any stderr surfaces uncensored.
+      - name: Apply schema (drizzle-kit push)
+        # We use `push` (schema-sync) instead of `migrate` (journal-based)
+        # because server/drizzle/meta/_journal.json is known to be stale —
+        # it stops at migration 0003 but 0004/0005/0006 exist as SQL files
+        # that were never registered. `push` diffs TS schema against DB
+        # and applies whatever's needed, so the CI DB always lands on the
+        # schema the code actually expects. Safe for CI's throwaway DB;
+        # NEVER for prod.
+        # `yes |` feeds "y" to any destructive-change prompt drizzle-kit
+        # surfaces in interactive mode (a no-op on an empty DB).
         working-directory: ./server
-        run: npx drizzle-kit migrate
+        run: yes | npx drizzle-kit push
 
       - name: Seed E2E fixtures (idempotent)
         run: npm run test:e2e:seed
