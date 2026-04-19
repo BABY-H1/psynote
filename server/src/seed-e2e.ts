@@ -365,7 +365,58 @@ async function seedE2E() {
   }
   console.log('  + 1 school class + 1 student profile + 1 active invite token');
 
-  // 6. Rate-limit bump for E2E.
+  // 6. Minimal self-contained assessment fixture (Phase-B.3b).
+  //    The client-self-assessment E2E submits to POST /api/orgs/:orgId/results
+  //    which needs a scale + dimension + items + assessment chain. The full
+  //    seed.ts creates a 9-item PHQ-9, but in CI we run drizzle-kit push +
+  //    seed-e2e only (no seed.ts), so seed this minimal 2-item scale here
+  //    with deterministic UUIDs the spec can reference directly.
+  const MINI = {
+    scaleId:      demoUUID('e2e-scale-mini'),
+    dimId:        demoUUID('e2e-dim-0'),
+    item0Id:      demoUUID('e2e-item-0'),
+    item1Id:      demoUUID('e2e-item-1'),
+    assessmentId: demoUUID('e2e-assessment-mini'),
+  };
+  const counselorId = userIds['counselingCounselor'];
+  const countOrgId = orgIds['counseling'];
+  const miniOpts = JSON.stringify([
+    { label: '否', value: 0 },
+    { label: '是', value: 1 },
+  ]);
+  await sql`
+    INSERT INTO scales (id, org_id, title, description, instructions, scoring_mode, created_by, is_public)
+    VALUES (${MINI.scaleId}, ${countOrgId}, 'E2E 迷你量表', 'E2E smoke test fixture', '请如实作答', 'sum', ${counselorId}, false)
+    ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title
+  `;
+  await sql`
+    INSERT INTO scale_dimensions (id, scale_id, name, description, calculation_method, sort_order)
+    VALUES (${MINI.dimId}, ${MINI.scaleId}, '总分', 'single dimension', 'sum', 0)
+    ON CONFLICT (id) DO NOTHING
+  `;
+  await sql`
+    INSERT INTO scale_items (id, scale_id, dimension_id, text, is_reverse_scored, options, sort_order)
+    VALUES (${MINI.item0Id}, ${MINI.scaleId}, ${MINI.dimId}, '题 1', false, ${miniOpts}::jsonb, 0)
+    ON CONFLICT (id) DO NOTHING
+  `;
+  await sql`
+    INSERT INTO scale_items (id, scale_id, dimension_id, text, is_reverse_scored, options, sort_order)
+    VALUES (${MINI.item1Id}, ${MINI.scaleId}, ${MINI.dimId}, '题 2', false, ${miniOpts}::jsonb, 1)
+    ON CONFLICT (id) DO NOTHING
+  `;
+  await sql`
+    INSERT INTO assessments (id, org_id, title, description, is_active, created_by)
+    VALUES (${MINI.assessmentId}, ${countOrgId}, 'E2E 迷你测评', 'E2E smoke test assessment', true, ${counselorId})
+    ON CONFLICT (id) DO NOTHING
+  `;
+  await sql`
+    INSERT INTO assessment_scales (assessment_id, scale_id, sort_order)
+    VALUES (${MINI.assessmentId}, ${MINI.scaleId}, 0)
+    ON CONFLICT DO NOTHING
+  `;
+  console.log('  + E2E mini scale (2 items) + assessment (B.3b)');
+
+  // 7. Rate-limit bump for E2E.
   // Fastify's global rate limiter reads `limits.rateLimitMax` from
   // system_config at boot (default 100/min). A full Playwright run does
   // setup (7 logins) + smoke (~36 tests, many with pooled logins + ~3-5
