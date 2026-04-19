@@ -27,6 +27,13 @@ jobs:
           node-version: '20'
           cache: 'npm'
       - run: npm ci
+      # client/ and server/ tsconfigs use TypeScript project references
+      # (composite: true) pointing at packages/shared. With composite,
+      # `tsc --noEmit` in a dependent project refuses to run until the
+      # referenced project has produced its .d.ts — otherwise you get
+      # TS6305 "Output file has not been built from source file". Build
+      # shared first, then the 3 downstream workspaces check clean.
+      - run: npm run build --workspace=@psynote/shared
       - run: npm run typecheck
 
   vitest:
@@ -85,8 +92,24 @@ jobs:
       - name: Install workspaces
         run: npm ci
 
+      - name: Probe Postgres reachability
+        # Drill-down diagnostics because the service-container health-check
+        # doesn't guarantee the CLI from the runner host can reach it — if
+        # the first migrate attempt fails, the logs below pinpoint whether
+        # it's a network/auth issue vs a drizzle/migration-content issue.
+        run: |
+          echo "DATABASE_URL=$DATABASE_URL"
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          until pg_isready -h localhost -p 5432 -U postgres -t 3; do sleep 1; done
+          PGPASSWORD=psynote123 psql -h localhost -U postgres -d psynote -c "SELECT version();"
+
       - name: Apply DB migrations
-        run: npm run db:migrate --workspace=server
+        # Run from inside `server/` so drizzle-kit resolves its config at
+        # the expected relative path. Use npx directly (not the workspace
+        # npm-script indirection) so the invocation matches what we run
+        # locally and any stderr surfaces uncensored.
+        working-directory: ./server
+        run: npx drizzle-kit migrate
 
       - name: Seed E2E fixtures (idempotent)
         run: npm run test:e2e:seed
