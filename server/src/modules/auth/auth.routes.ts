@@ -88,12 +88,20 @@ export async function authRoutes(app: FastifyInstance) {
       throw new ValidationError('邮箱或密码错误');
     }
 
-    // Verify password (if user has no password_hash, accept any password for migration)
-    if (user.passwordHash) {
-      const valid = await bcrypt.compare(password, user.passwordHash);
-      if (!valid) {
-        throw new ValidationError('邮箱或密码错误');
-      }
+    // Accounts with no stored password hash must fail closed — the old
+    // "accept any password for migration" branch was a trivial takeover
+    // primitive for any row whose `password_hash` column ended up NULL
+    // (legacy imports, partial provisioning, direct DB edits). If a
+    // legacy account genuinely needs activation, drive it through the
+    // admin password-reset flow, not a public login bypass.
+    // Using the same message as the wrong-password case so clients can't
+    // probe which emails have unhashed rows.
+    if (!user.passwordHash) {
+      throw new ValidationError('邮箱或密码错误');
+    }
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) {
+      throw new ValidationError('邮箱或密码错误');
     }
 
     const tokens = signTokens(user);

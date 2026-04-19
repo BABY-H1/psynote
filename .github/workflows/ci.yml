@@ -1,0 +1,151 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Manual re-run button in the Actions UI (e.g. when a flaky E2E needs
+  # a retry without pushing a no-op commit).
+  workflow_dispatch:
+
+concurrency:
+  # Cancel superseded runs on the same ref — no point finishing an older
+  # PR commit's E2E after a new push lands.
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  typecheck:
+    name: Typecheck (4 workspaces)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+
+  vitest:
+    name: Unit tests (Vitest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      # Vitest suite is DB-free (all DB calls mocked); no Postgres service
+      # needed here. Keep it that way — it's why this job stays <1 min.
+      - run: npm test
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: psynote123
+          POSTGRES_DB: psynote
+        ports:
+          - 5432:5432
+        # Health check is non-negotiable — without it the first
+        # db:migrate tries to connect before Postgres is ready.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:psynote123@localhost:5432/psynote
+      # Explicitly set — the env schema falls back to a placeholder in dev,
+      # but the fallback trips the NODE_ENV=production guard and we want the
+      # freedom to flip NODE_ENV here if needed.
+      JWT_SECRET: ci-jwt-secret-never-use-in-prod
+      # Intentionally unset REDIS_URL → server uses the default
+      # localhost:6379, the startup probe finds it unreachable, and the
+      # follow-up worker is skipped. E2E does not exercise it.
+      NODE_ENV: development
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install workspaces
+        run: npm ci
+
+      - name: Apply DB migrations
+        run: npm run db:migrate --workspace=server
+
+      - name: Seed E2E fixtures (idempotent)
+        run: npm run test:e2e:seed
+
+      - name: Install Playwright browser (chromium only)
+        # Our playwright.config.ts pins Desktop Chrome for setup + smoke;
+        # installing chromium alone saves ~90s vs the full browser set.
+        run: npx playwright install --with-deps chromium
+
+      - name: Start server (background)
+        # `tsx` directly (not `tsx watch`) — CI has no file-change
+        # ergonomics to gain from the watcher, and the watcher adds
+        # log noise + a second process tree to clean up.
+        run: |
+          cd server
+          nohup npx tsx src/app.ts > ../server.log 2>&1 &
+          echo $! > ../server.pid
+
+      - name: Start client (background)
+        run: |
+          cd client
+          nohup npm run dev > ../client.log 2>&1 &
+          echo $! > ../client.pid
+
+      - name: Wait for server + client to respond
+        # `curl -s -o /dev/null` exits 0 as soon as HTTP round-trips — any
+        # status counts (404 on the probe path IS a valid readiness signal
+        # because it proves the route is registered and the app is serving).
+        # Job-level timeout-minutes guards against a hung service.
+        run: |
+          until curl -s -o /dev/null http://localhost:4000/api/public/parent-bind/__probe__; do sleep 1; done
+          curl -s -o /dev/null -w "server status=%{http_code}\n" http://localhost:4000/api/public/parent-bind/__probe__
+          until curl -s -o /dev/null http://localhost:5173/; do sleep 1; done
+          curl -s -o /dev/null -w "client status=%{http_code}\n" http://localhost:5173/
+
+      - name: Run Playwright smoke suite
+        run: npm run test:e2e
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Upload server/client logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-client-logs
+          path: |
+            server.log
+            client.log
+          retention-days: 7
+
+      - name: Stop background services
+        # Always — don't leave zombies behind even if earlier steps failed.
+        if: always()
+        run: |
+          [ -f server.pid ] && kill $(cat server.pid) 2>/dev/null || true
+          [ -f client.pid ] && kill $(cat client.pid) 2>/dev/null || true
