@@ -38,19 +38,6 @@ export function requirePermission(permission: string) {
 }
 
 /**
- * Blocks admin_staff from clinical endpoints (notes, AI, treatment plans, etc.)
- */
-export function requireClinicalAccess() {
-  return async (request: FastifyRequest, _reply: FastifyReply) => {
-    if (request.user?.isSystemAdmin) return;
-
-    if (request.org?.role === 'admin_staff') {
-      throw new ForbiddenError('Administrative staff cannot access clinical data');
-    }
-  };
-}
-
-/**
  * Checks that the requesting user can access a specific client's data.
  * Uses the DataScope resolved by dataScopeGuard.
  *
@@ -75,7 +62,7 @@ export function requireClientAccess(extractClientId: (req: FastifyRequest) => st
       return;
     }
 
-    // basic_only and none → deny access to specific client data
+    // scope=none → deny access to any specific client data
     throw new ForbiddenError('You do not have access to this client');
   };
 }

@@ -31,7 +31,7 @@ export async function listConversations(
         conditions.push(eq(aiConversations.careEpisodeId, 'no-access'));
       }
     }
-  } else if (filters.scope?.type === 'basic_only' || filters.scope?.type === 'none') {
+  } else if (filters.scope?.type === 'none') {
     // No clinical access
     conditions.push(eq(aiConversations.careEpisodeId, 'no-access'));
   }

@@ -15,18 +15,10 @@ export async function clientProfileRoutes(app: FastifyInstance) {
   app.get('/:userId/profile', async (request) => {
     const { userId } = request.params as { userId: string };
     await logPhiAccess(request, userId, 'client_profiles', 'view');
-    const profile = await profileService.getProfile(request.org!.orgId, userId);
-
-    // Strip clinical fields for basic_only scope (admin_staff)
-    if (request.dataScope?.type === 'basic_only') {
-      const { diagnosis, riskLevel, clinicalNotes, treatmentHistory, ...basicProfile } = profile as any;
-      return basicProfile;
-    }
-
-    return profile;
+    return profileService.getProfile(request.org!.orgId, userId);
   });
 
-  /** Create or update client profile - block admin_staff */
+  /** Create or update client profile */
   app.put(
     '/:userId/profile',
     { preHandler: [requireRole('org_admin', 'counselor')] },
@@ -49,14 +41,6 @@ export async function clientProfileRoutes(app: FastifyInstance) {
   app.get('/:userId/summary', async (request) => {
     const { userId } = request.params as { userId: string };
     await logPhiAccess(request, userId, 'client_profiles', 'view');
-    const summary = await profileService.getClientSummary(request.org!.orgId, userId);
-
-    // Strip clinical fields for basic_only scope (admin_staff)
-    if (request.dataScope?.type === 'basic_only') {
-      const { episodes, results, ...basicSummary } = summary as any;
-      return basicSummary;
-    }
-
-    return summary;
+    return profileService.getClientSummary(request.org!.orgId, userId);
   });
 }

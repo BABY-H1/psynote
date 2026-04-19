@@ -5,7 +5,7 @@
  * branches on `orgType === 'enterprise'` to give them the HR dashboard shell
  * and aggregate-only data scope. See `App.tsx` and `middleware/data-scope.ts`.
  */
-export type OrgRole = 'org_admin' | 'counselor' | 'admin_staff' | 'client';
+export type OrgRole = 'org_admin' | 'counselor' | 'client';
 
 /** Session note status (supervision workflow) */
 export type NoteStatus = 'draft' | 'finalized' | 'submitted_for_review' | 'reviewed';

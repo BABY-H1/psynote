@@ -14,6 +14,7 @@
  *      (authed API calls will 401 in that mode).
  */
 import { useAuthStore } from './stores/authStore';
+import { DEFAULT_ORG_TYPE } from './shared/constants/roles';
 
 const DEMO_USERS = {
   counselor: {
@@ -108,10 +109,12 @@ export async function seedDemoAuth(role: 'counselor' | 'client' | 'org_admin' = 
       const store = useAuthStore.getState();
       store.setAuth(user, accessToken, refreshToken, !!isSystemAdmin);
       if (org) {
-        const orgType = org.settings?.orgType || 'counseling';
-        store.setOrg(org.id, org.myRole ?? demo.role, planToTier(org.plan), undefined, orgType);
+        const orgType = org.settings?.orgType || DEFAULT_ORG_TYPE;
+        store.setOrg(org.id, org.myRole ?? demo.role, planToTier(org.plan), null, orgType);
       } else {
-        store.setOrg(demo.orgId, demo.role, planToTier(null));
+        // /orgs was empty — fall back to demo-declared id + default orgType
+        // so the UI doesn't render with a null currentOrgType.
+        store.setOrg(demo.orgId, demo.role, planToTier(null), null, DEFAULT_ORG_TYPE);
       }
       return;
     }
@@ -123,8 +126,11 @@ export async function seedDemoAuth(role: 'counselor' | 'client' | 'org_admin' = 
     console.warn('[dev-seed] backend unreachable, falling back to fake token', err);
   }
 
-  // Fallback: fake token (UI renders but authed API calls will 401).
+  // Fallback: fake token (backend-down dev path). The UI renders but any
+  // authed API call will 401. Populate orgType with the default so
+  // scene-dependent components don't choke on null.
+  const { planToTier } = await import('@psynote/shared');
   const store = useAuthStore.getState();
   store.setAuth(demo.user, FAKE_TOKEN, FAKE_TOKEN);
-  store.setOrg(demo.orgId, demo.role);
+  store.setOrg(demo.orgId, demo.role, planToTier(null), null, DEFAULT_ORG_TYPE);
 }

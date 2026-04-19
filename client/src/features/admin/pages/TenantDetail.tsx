@@ -11,6 +11,7 @@ import {
   type OrgTier,
   type LicenseStatus,
 } from '@psynote/shared';
+import { getRoleLabel } from '../../../shared/constants/roles';
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -58,14 +59,7 @@ interface ServiceConfig {
   emailConfig: { smtpHost: string; smtpPort: number; smtpUser: string; smtpPass: string; senderName: string; senderEmail: string };
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  org_admin: '机构管理员',
-  counselor: '咨询师',
-  admin_staff: '行政人员',
-  client: '来访者',
-};
-
-const ROLE_OPTIONS = ['org_admin', 'counselor', 'admin_staff', 'client'];
+const ROLE_OPTIONS = ['org_admin', 'counselor', 'client'] as const;
 
 const LICENSE_STATUS_LABELS: Record<LicenseStatus, { label: string; color: string }> = {
   active: { label: '有效', color: 'bg-green-100 text-green-700' },
@@ -374,7 +368,7 @@ export function TenantDetail() {
                         className="text-xs border border-slate-200 rounded px-2 py-1 text-slate-600"
                       >
                         {ROLE_OPTIONS.map((r) => (
-                          <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                          <option key={r} value={r}>{getRoleLabel(r)}</option>
                         ))}
                       </select>
                     </td>
@@ -545,7 +539,7 @@ export function TenantDetail() {
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg"
               >
                 {ROLE_OPTIONS.map((r) => (
-                  <option key={r} value={r}>{ROLE_LABELS[r]}</option>
+                  <option key={r} value={r}>{getRoleLabel(r)}</option>
                 ))}
               </select>
             </div>

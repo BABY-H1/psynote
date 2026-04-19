@@ -9,7 +9,7 @@ interface Props {
   episodeId: string;
   existingPlan?: TreatmentPlan;
   chiefComplaint?: string;
-  currentRisk?: string;
+  currentRisk?: 'level_1' | 'level_2' | 'level_3' | 'level_4';
   onDone: () => void;
 }
 

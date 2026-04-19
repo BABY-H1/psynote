@@ -153,7 +153,6 @@ psynote/
 | `system_admin` | 系统管理员，全平台管理 |
 | `org_admin` | 机构管理员，管理本机构 |
 | `counselor` | 咨询师，临床操作 |
-| `admin_staff` | 行政人员，非临床操作 |
 | `client` | 来访者，自助门户 |
 
 ## License

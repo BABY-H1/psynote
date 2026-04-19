@@ -23,7 +23,7 @@ import { signLicense } from '../../lib/license/sign.js';
 import { DEFAULT_TRIAGE_CONFIG, hasFeature, planToTier } from '@psynote/shared';
 
 const VALID_TIERS = ['starter', 'growth', 'flagship'] as const;
-const VALID_ROLES = ['org_admin', 'counselor', 'admin_staff', 'client'] as const;
+const VALID_ROLES = ['org_admin', 'counselor', 'client'] as const;
 
 export async function adminTenantRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);

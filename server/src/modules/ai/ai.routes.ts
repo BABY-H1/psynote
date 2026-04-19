@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
-import { requireRole, requireClinicalAccess } from '../../middleware/rbac.js';
+import { requireRole } from '../../middleware/rbac.js';
 import { dataScopeGuard } from '../../middleware/data-scope.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
@@ -58,7 +58,6 @@ export async function aiRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
   app.addHook('preHandler', dataScopeGuard);
-  app.addHook('preHandler', requireClinicalAccess());
 
   // Check AI is configured
   app.addHook('preHandler', async (_request, reply) => {

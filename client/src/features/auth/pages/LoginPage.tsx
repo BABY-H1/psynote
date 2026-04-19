@@ -3,6 +3,7 @@ import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../stores/authStore';
 import { api } from '../../../api/client';
 import { Shield, Zap, BarChart3 } from 'lucide-react';
+import { DEFAULT_ORG_TYPE } from '../../../shared/constants/roles';
 
 export function LoginPage() {
   const [email, setEmail] = useState('');
@@ -51,13 +52,26 @@ export function LoginPage() {
         return;
       }
 
-      // Fetch user's orgs to get role + plan (for tier)
-      const orgs = await api.get<{ id: string; myRole: string; plan?: string }[]>('/orgs');
+      // Fetch user's orgs to get role + plan (for tier) + settings.orgType
+      const orgs = await api.get<{
+        id: string;
+        myRole: string;
+        plan?: string;
+        settings?: { orgType?: string };
+      }[]>('/orgs');
 
       if (orgs.length > 0) {
         const { setOrg } = useAuthStore.getState();
         const { planToTier } = await import('@psynote/shared');
-        setOrg(orgs[0].id, orgs[0].myRole as any, planToTier(orgs[0].plan));
+        const firstOrg = orgs[0];
+        const orgType = (firstOrg.settings?.orgType as any) ?? DEFAULT_ORG_TYPE;
+        setOrg(
+          firstOrg.id,
+          firstOrg.myRole as any,
+          planToTier(firstOrg.plan),
+          null,
+          orgType,
+        );
       }
 
       // Navigate based on role

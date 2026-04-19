@@ -39,7 +39,7 @@ export const orgMembers = pgTable('org_members', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(), // org_admin | counselor | admin_staff | client
+  role: text('role').notNull(), // org_admin | counselor | client
   permissions: jsonb('permissions').notNull().default({}),
   status: text('status').notNull().default('active'),
   validUntil: timestamp('valid_until', { withTimezone: true }),

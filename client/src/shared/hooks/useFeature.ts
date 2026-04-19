@@ -20,10 +20,9 @@ import { hasFeature, type Feature, type OrgTier } from '@psynote/shared';
 export function useFeature() {
   const tier = useAuthStore((s) => s.currentOrgTier);
   return useMemo(() => {
-    // Default to 'solo' if tier hasn't loaded yet. This is the safest choice:
-    // a user in transit sees the most restrictive feature set, avoiding flashes
-    // of premium-only UI.
-    const effectiveTier: OrgTier = tier ?? 'solo';
+    // Default to 'starter' (the most restrictive tier) if tier hasn't loaded
+    // yet. This avoids flashes of premium-only UI while the auth hydrates.
+    const effectiveTier: OrgTier = tier ?? 'starter';
     return (feature: Feature) => hasFeature(effectiveTier, feature);
   }, [tier]);
 }
@@ -36,11 +35,11 @@ export function useFeature() {
  */
 export function useHasFeature(feature: Feature): boolean {
   const tier = useAuthStore((s) => s.currentOrgTier);
-  const effectiveTier: OrgTier = tier ?? 'solo';
+  const effectiveTier: OrgTier = tier ?? 'starter';
   return hasFeature(effectiveTier, feature);
 }
 
-/** Read the current tier directly (with a 'solo' default). */
+/** Read the current tier directly (with a 'starter' default — the most restrictive tier). */
 export function useCurrentTier(): OrgTier {
-  return useAuthStore((s) => s.currentOrgTier) ?? 'solo';
+  return useAuthStore((s) => s.currentOrgTier) ?? 'starter';
 }

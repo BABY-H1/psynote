@@ -33,6 +33,10 @@ export async function reportRoutes(app: FastifyInstance) {
       assessmentId?: string;
       userId?: string;
       title?: string;
+      // Longitudinal (group_longitudinal) — identifies the group/course instance
+      // whose PRE/POST assessments are compared across time.
+      instanceId?: string;
+      instanceType?: 'group' | 'course';
     };
 
     if (!body.reportType) throw new ValidationError('reportType is required');

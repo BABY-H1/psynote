@@ -7,11 +7,11 @@
 
 import React, { useState } from 'react';
 import { Shield, ShieldCheck, ShieldAlert, ShieldX, Users, Calendar, Key } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
-import { useToast } from '../../../shared/components';
 import { TIER_LABELS, type LicenseStatus } from '@psynote/shared';
+import { useLicenseActivation } from '../hooks/useLicenseActivation';
 
 interface SubscriptionData {
   tier: string;
@@ -40,10 +40,6 @@ const STATUS_CONFIG: Record<LicenseStatus, {
 
 export function LicenseCard() {
   const orgId = useAuthStore((s) => s.currentOrgId);
-  const setOrg = useAuthStore((s) => s.setOrg);
-  const currentRole = useAuthStore((s) => s.currentRole);
-  const { toast } = useToast();
-  const qc = useQueryClient();
   const [licenseInput, setLicenseInput] = useState('');
   const [showInput, setShowInput] = useState(false);
 
@@ -53,29 +49,9 @@ export function LicenseCard() {
     enabled: !!orgId,
   });
 
-  const activateMutation = useMutation({
-    mutationFn: (licenseKey: string) =>
-      api.post<{ success: boolean; tier: string; label: string; maxSeats: number; expiresAt: string }>(
-        `/orgs/${orgId}/license`,
-        { licenseKey },
-      ),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['subscription'] });
-      // Update auth store with new tier
-      if (orgId && currentRole) {
-        setOrg(orgId, currentRole, data.tier as any, {
-          status: 'active',
-          maxSeats: data.maxSeats,
-          expiresAt: data.expiresAt,
-        });
-      }
-      setLicenseInput('');
-      setShowInput(false);
-      toast(`许可证已激活 — ${data.label}`, 'success');
-    },
-    onError: (err: any) => {
-      toast(err?.message || '许可证激活失败', 'error');
-    },
+  const activateMutation = useLicenseActivation(() => {
+    setLicenseInput('');
+    setShowInput(false);
   });
 
   if (isLoading || !sub) {

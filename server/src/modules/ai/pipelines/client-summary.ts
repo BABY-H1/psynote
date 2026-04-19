@@ -17,7 +17,7 @@ interface ClientSummaryInput {
   treatmentPlan?: { title?: string; approach?: string; goals: { description: string; status: string }[] };
 }
 
-interface ClientSummaryResult {
+export interface ClientSummaryResult {
   overview: string;
   keyThemes: string[];
   riskProfile: {

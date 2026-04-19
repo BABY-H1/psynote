@@ -10,7 +10,7 @@ interface CaseProgressInput {
   treatmentGoals: { description: string; status: string }[];
 }
 
-interface CaseProgressReport {
+export interface CaseProgressReport {
   reportPeriod: { from: string; to: string };
   sessionSummary: {
     totalSessions: number;

@@ -150,6 +150,9 @@ export function useSuggestTreatmentPlan() {
       chiefComplaint?: string;
       assessmentSummary?: string;
       sessionNotes?: string;
+      /** Current risk level of the episode — used by AI to calibrate the
+       *  aggressiveness of the suggested plan (safety planning vs. routine CBT). */
+      riskLevel?: 'level_1' | 'level_2' | 'level_3' | 'level_4';
       clientContext?: {
         name?: string;
         age?: number;

@@ -7,3 +7,15 @@ dist/
 
 # License private keys (NEVER commit)
 server/src/lib/license/keys/
+
+# Playwright E2E artifacts
+e2e/.auth/
+playwright-report/
+test-results/
+
+# Claude Code local session state
+.claude/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+

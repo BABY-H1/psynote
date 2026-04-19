@@ -108,7 +108,9 @@ export function ParentBindPage() {
         data.user.isSystemAdmin ?? false,
       );
       const { planToTier } = await import('@psynote/shared');
-      setOrg(data.orgId, 'client', planToTier('starter'));
+      // Parent binding: student's org type is 'school' by definition
+      // (parent binding only exists for school orgs).
+      setOrg(data.orgId, 'client', planToTier('starter'), null, 'school');
 
       // Switch viewing context to the child immediately so HomeTab shows
       // the right thing on first paint.

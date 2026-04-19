@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
-import { requireRole, requireClinicalAccess } from '../../middleware/rbac.js';
+import { requireRole } from '../../middleware/rbac.js';
 import { dataScopeGuard } from '../../middleware/data-scope.js';
 import * as service from './ai-conversation.service.js';
 
@@ -9,7 +9,6 @@ export async function aiConversationRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
   app.addHook('preHandler', dataScopeGuard);
-  app.addHook('preHandler', requireClinicalAccess());
 
   /** List conversations (filter by episodeId, mode) */
   app.get('/', async (request) => {

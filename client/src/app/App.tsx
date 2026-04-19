@@ -3,6 +3,9 @@ import { Routes, Route, Navigate, NavLink, Outlet } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../api/client';
 import { Providers } from './providers';
+import { RoleBasedHome } from './RoleBasedHome';
+import { isVisible, type SceneContext, type SceneVisibility } from './scene/visibility';
+import { DEFAULT_ORG_TYPE } from '../shared/constants/roles';
 import { useAuthStore } from '../stores/authStore';
 import { LoginPage } from '../features/auth/pages/LoginPage';
 import { ScaleLibrary } from '../features/assessment/pages/ScaleLibrary';
@@ -29,8 +32,6 @@ import {
   CourseReader,
   ConsentCenter,
 } from '@psynote/client-portal';
-import { DashboardHome } from '../features/dashboard/pages/DashboardHome';
-import { OrgAdminDashboard } from '../features/dashboard/pages/OrgAdminDashboard';
 import { KnowledgeBase } from '../features/knowledge/pages/KnowledgeBase';
 import { GoalLibrary } from '../features/knowledge/pages/GoalLibrary';
 import { CoursesTab } from '../features/knowledge/pages/PlaceholderTabs';
@@ -66,8 +67,6 @@ import { useOrgBranding } from '../api/useOrgBranding';
 import { OrgCollaboration } from '../features/collaboration/OrgCollaboration';
 import { AuditLogViewer } from '../features/collaboration/AuditLogViewer';
 import { OrgSettingsPage } from '../features/settings/pages/OrgSettingsPage';
-import { SchoolDashboard } from '../features/dashboard/pages/SchoolDashboard';
-import { EnterpriseDashboard } from '../features/dashboard/pages/EnterpriseDashboard';
 
 function AppRoutes() {
   const { user, currentOrgId, currentRole, isSystemAdmin, _hydrated } = useAuthStore();
@@ -220,9 +219,9 @@ function OrgSelector() {
         }
         const { planToTier } = await import('@psynote/shared');
         const orgSettings = (orgs[0] as any).settings;
-        const orgType = orgSettings?.orgType || 'counseling';
+        const orgType = orgSettings?.orgType || DEFAULT_ORG_TYPE;
         console.log('[OrgSelector] orgType:', orgType, 'settings:', orgSettings);
-        setOrg(orgs[0].id, orgs[0].myRole as any, planToTier(orgs[0].plan), undefined, orgType);
+        setOrg(orgs[0].id, orgs[0].myRole as any, planToTier(orgs[0].plan), null, orgType);
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : '加载机构失败');
       }
@@ -254,87 +253,49 @@ function OrgSelector() {
 // "交付中心" entry. Type filtering happens inside DeliveryCenter via querystring.
 // Phase 7b — "品牌定制" added as a feature-gated entry (only shown when the
 // current org's tier includes the `branding` feature).
-interface NavItem {
+interface NavItem extends SceneVisibility {
   to: string;
   label: string;
   end?: boolean;
   disabled?: boolean;
 }
 
+/**
+ * Sidebar nav items, declaratively scene-gated. Visibility is computed by
+ * `isVisible(item, scene)` at render time (see AppShell). The "系统管理"
+ * entry is added out-of-band inside AppShell for `isSystemAdmin` users —
+ * it is intentionally NOT represented via SceneVisibility (sysadmin is a
+ * global identity dimension, not a scene dimension).
+ *
+ * Phase 14f (merged) — "我的设置" visible to all roles; per-tab filtering
+ * lives inside OrgSettingsPage via the same SceneVisibility utility.
+ */
 const allNavItems: NavItem[] = [
   { to: '/', label: '首页', end: true },
   { to: '/knowledge', label: '知识库' },
   { to: '/delivery', label: '交付中心' },
-  { to: '/collaboration', label: '协作中心' },
+  {
+    to: '/collaboration',
+    label: '协作中心',
+    onlyForRoles: ['org_admin', 'counselor'],
+    hideForOrgTypes: ['solo'],
+  },
   { to: '/settings', label: '我的设置' },
 ];
 
-// admin_staff can only see home + settings (which now includes their 我的 group)
-const adminStaffPaths = new Set(['/', '/settings']);
-const collabRoles = new Set(['org_admin', 'counselor']);
-
-/**
- * Phase 14f (merged) — "设置" 入口统一改名为「我的设置」并对所有 role 可见。
- * 页面内部通过 TabDef 的 adminOnly / onlyForRoles 精确过滤: 所有人都能看
- * 到"我的"分组（基本资料/咨询师档案/修改密码）, 只有 org_admin 能看到
- * 组织管理 / 门面信息 / 安全与合规等机构级分组。
- */
-function getNavItems(role: string | null, orgType?: string | null): NavItem[] {
-  let items = allNavItems.slice();
-
-  if (role === 'admin_staff') {
-    items = items.filter((item) => adminStaffPaths.has(item.to));
-  } else if (orgType === 'solo') {
-    // Solo: no collaboration center, everything else visible
-    items = items.filter((item) => item.to !== '/collaboration');
-  } else {
-    items = items.filter((item) => {
-      if (item.to === '/collaboration') return collabRoles.has(role ?? '');
-      // Settings is now visible to everyone (personal "我的" group is inside)
-      return true;
-    });
-  }
-  return items;
-}
-
 function AppShell() {
-  const { user, currentRole, currentOrgId, currentOrgTier, currentOrgType, setOrg, isSystemAdmin, logout } = useAuthStore();
-  const navItems = getNavItems(currentRole, currentOrgType);
+  const { user, currentRole, currentOrgId, currentOrgTier, currentOrgType, isSystemAdmin, logout } = useAuthStore();
+  const scene: SceneContext = { orgType: currentOrgType, role: currentRole, tier: currentOrgTier };
+  const navItems = allNavItems.filter((item) => isVisible(item, scene));
 
-  // Phase 7a bootstrap — if the persisted auth state predates Phase 7, it may
-  // be missing `currentOrgTier`. On first mount after login, pull it from
-  // `/subscription` and hydrate the store. Idempotent: only fires when tier
-  // is null but we already have an orgId + role.
-  React.useEffect(() => {
-    if (currentOrgId && currentRole && !currentOrgTier) {
-      api
-        .get<{ tier: string }>(`/orgs/${currentOrgId}/subscription`)
-        .then((res) => {
-          // Dynamic import keeps the bundle split clean
-          import('@psynote/shared').then(({ planToTier }) => {
-            // `tier` here is already a mapped OrgTier, not a raw plan string
-            const t = res.tier as any;
-            setOrg(currentOrgId, currentRole, t ?? planToTier(null));
-          });
-        })
-        .catch(() => {
-          // Silent fallback: keep tier null → useFeature defaults to 'solo'
-        });
-    }
-  }, [currentOrgId, currentRole, currentOrgTier, setOrg]);
-
-  // Hydrate orgType if missing (e.g. persisted state from before orgType was added)
-  React.useEffect(() => {
-    if (currentOrgId && currentRole && !currentOrgType) {
-      api
-        .get<{ settings?: { orgType?: string } }>(`/orgs/${currentOrgId}`)
-        .then((res) => {
-          const orgType = res.settings?.orgType || 'counseling';
-          setOrg(currentOrgId, currentRole, currentOrgTier ?? undefined, undefined, orgType as any);
-        })
-        .catch(() => {});
-    }
-  }, [currentOrgId, currentRole, currentOrgType, currentOrgTier, setOrg]);
+  // NOTE: Legacy defensive useEffects that re-fetched tier/orgType when the
+  // store was missing them have been removed. Those were masking the real bug
+  // of `setOrg()` callers omitting required fields. The fix is now upstream:
+  //   - `setOrg` signature requires all 5 fields (TS-enforced)
+  //   - authStore persist migration v1→v2 nulls out currentOrgId when
+  //     currentOrgType is missing, forcing the user back through /select-org
+  // If you arrive at AppShell with a null currentOrgType, it's a contract
+  // violation from upstream state population, not a hydration race.
 
   // Phase 7b — if the org has branding tier + a logo set, swap the "Psynote"
   // wordmark in the sidebar header for the org's custom logo. Otherwise this
@@ -458,20 +419,6 @@ function NotificationBadge() {
       )}
     </div>
   );
-}
-
-/** Render different home pages based on org role and orgType */
-function RoleBasedHome() {
-  const role = useAuthStore((s) => s.currentRole);
-  const orgType = useAuthStore((s) => s.currentOrgType);
-  // Solo: always personal workstation, no org metrics
-  if (orgType === 'solo') return <DashboardHome />;
-  // School: school-specific dashboard
-  if (orgType === 'school' && role === 'org_admin') return <SchoolDashboard />;
-  // Enterprise: EAP-specific dashboard (risk分布 / 部门矩阵 / 服务趋势 / HR 待办)
-  if (orgType === 'enterprise' && role === 'org_admin') return <EnterpriseDashboard />;
-  if (role === 'org_admin') return <OrgAdminDashboard />;
-  return <DashboardHome />;
 }
 
 export function App() {

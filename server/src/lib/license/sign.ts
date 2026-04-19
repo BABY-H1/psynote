@@ -55,7 +55,7 @@ export interface SignLicenseWithExpiryParams {
 export async function signLicenseWithExpiry(params: SignLicenseWithExpiryParams): Promise<SignLicenseResult> {
   const privateKey = await getPrivateKey();
   const now = new Date();
-  const features = Array.from(TIER_FEATURES[params.tier] ?? TIER_FEATURES.solo);
+  const features = Array.from(TIER_FEATURES[params.tier] ?? TIER_FEATURES.starter);
 
   const token = await new SignJWT({
     sub: params.orgId,
@@ -89,7 +89,7 @@ export async function signLicense(params: SignLicenseParams): Promise<SignLicens
   const expiresAt = new Date(now);
   expiresAt.setMonth(expiresAt.getMonth() + params.months);
 
-  const features = Array.from(TIER_FEATURES[params.tier] ?? TIER_FEATURES.solo);
+  const features = Array.from(TIER_FEATURES[params.tier] ?? TIER_FEATURES.starter);
 
   const token = await new SignJWT({
     sub: params.orgId,

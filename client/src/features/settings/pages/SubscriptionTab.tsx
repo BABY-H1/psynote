@@ -13,14 +13,14 @@
  *   - /orgs/:id/ai-usage      → { monthlyLimit, monthlyUsed, remaining, unlimited, callCount }
  */
 import React, { useState } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import {
   Key, Users, Calendar, Brain, Sparkles, Lock, Check,
   ShieldCheck, ShieldAlert, ShieldX, Shield, Mail, RefreshCw,
 } from 'lucide-react';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
-import { useToast } from '../../../shared/components';
+import { useLicenseActivation } from '../hooks/useLicenseActivation';
 import {
   TIER_LABELS,
   TIER_FEATURES,
@@ -84,10 +84,6 @@ const UPGRADE_CONTACT = 'sales@psynote.com';
 export function SubscriptionTab() {
   const orgId = useAuthStore((s) => s.currentOrgId);
   const currentOrgType = useAuthStore((s) => s.currentOrgType);
-  const setOrg = useAuthStore((s) => s.setOrg);
-  const currentRole = useAuthStore((s) => s.currentRole);
-  const { toast } = useToast();
-  const qc = useQueryClient();
   const [licenseInput, setLicenseInput] = useState('');
   const [showLicenseInput, setShowLicenseInput] = useState(false);
 
@@ -104,26 +100,9 @@ export function SubscriptionTab() {
     refetchInterval: 120_000, // refresh every 2 min
   });
 
-  const activateMutation = useMutation({
-    mutationFn: (licenseKey: string) =>
-      api.post<{ success: boolean; tier: string; label: string; maxSeats: number; expiresAt: string }>(
-        `/orgs/${orgId}/license`,
-        { licenseKey },
-      ),
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ['subscription'] });
-      if (orgId && currentRole) {
-        setOrg(orgId, currentRole, data.tier as OrgTier, {
-          status: 'active',
-          maxSeats: data.maxSeats,
-          expiresAt: data.expiresAt,
-        });
-      }
-      setLicenseInput('');
-      setShowLicenseInput(false);
-      toast(`许可证已激活 — ${data.label}`, 'success');
-    },
-    onError: (err: any) => toast(err?.message || '许可证激活失败', 'error'),
+  const activateMutation = useLicenseActivation(() => {
+    setLicenseInput('');
+    setShowLicenseInput(false);
   });
 
   if (subLoading || !sub) {

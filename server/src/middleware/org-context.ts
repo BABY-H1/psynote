@@ -54,9 +54,11 @@ async function resolveTier(
   }
 
   if (result.status === 'expired' && result.payload) {
-    // Expired license → degrade to solo, but still expose expiry info
+    // Expired license → degrade to the most restrictive tier (starter) so the
+    // org loses premium features, but still expose expiry info in the payload
+    // so the UI can prompt renewal.
     return {
-      tier: 'solo',
+      tier: 'starter',
       license: {
         status: 'expired',
         maxSeats: result.payload.maxSeats,
@@ -169,7 +171,7 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
   // Note: enterprise org_admin is aggregate-only so doesn't need supervisees;
   // the role gate below naturally excludes enterprise admins from loading them.
   let superviseeUserIds: string[] = [];
-  if (member.role === 'counselor' || member.role === 'org_admin' || member.role === 'admin_staff') {
+  if (member.role === 'counselor' || member.role === 'org_admin') {
     const supervisees = await db
       .select({ userId: orgMembers.userId })
       .from(orgMembers)

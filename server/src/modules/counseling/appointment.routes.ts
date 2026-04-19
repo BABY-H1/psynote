@@ -39,7 +39,7 @@ export async function appointmentRoutes(app: FastifyInstance) {
 
   /** Create appointment */
   app.post('/', {
-    preHandler: [requireRole('org_admin', 'counselor', 'admin_staff')],
+    preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request, reply) => {
     const body = request.body as {
       careEpisodeId?: string;
@@ -73,7 +73,7 @@ export async function appointmentRoutes(app: FastifyInstance) {
 
   /** Update appointment status */
   app.patch('/:appointmentId/status', {
-    preHandler: [requireRole('org_admin', 'counselor', 'admin_staff')],
+    preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request) => {
     const { appointmentId } = request.params as { appointmentId: string };
     const body = request.body as { status: string };

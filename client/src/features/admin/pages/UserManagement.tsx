@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { api } from '../../../api/client';
 import { Search, UserPlus, Shield, ShieldOff, KeyRound, Ban, CheckCircle, ChevronRight, X } from 'lucide-react';
+import { getRoleLabel, getRoleBadgeColor } from '../../../shared/constants/roles';
 
 interface UserRow {
   id: string;
@@ -28,12 +29,6 @@ interface UserDetail {
   }[];
 }
 
-const ROLE_LABELS: Record<string, string> = {
-  org_admin: '机构管理员',
-  counselor: '咨询师',
-  admin_staff: '行政人员',
-  client: '来访者',
-};
 
 export function UserManagement() {
   const [userList, setUserList] = useState<UserRow[]>([]);
@@ -316,13 +311,8 @@ export function UserManagement() {
                           <div className="text-sm text-slate-700 truncate">{m.orgName}</div>
                           <div className="text-xs text-slate-400">{m.orgSlug}</div>
                         </div>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${
-                          m.role === 'org_admin' ? 'bg-blue-100 text-blue-700' :
-                          m.role === 'counselor' ? 'bg-green-100 text-green-700' :
-                          m.role === 'admin_staff' ? 'bg-orange-100 text-orange-700' :
-                          'bg-slate-100 text-slate-600'
-                        }`}>
-                          {ROLE_LABELS[m.role] || m.role}
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${getRoleBadgeColor(m.role)}`}>
+                          {getRoleLabel(m.role)}
                         </span>
                         <span className={`text-xs ${m.status === 'active' ? 'text-green-500' : 'text-red-400'}`}>
                           {m.status === 'active' ? '活跃' : '已禁用'}

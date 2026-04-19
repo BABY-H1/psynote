@@ -5,6 +5,7 @@ import { Building2, Users, UserCheck, ChevronRight, Shield, Search, Settings, Ke
 import { UserManagement } from './UserManagement';
 import { SystemConfig } from './SystemConfig';
 import { LicenseManagement } from './LicenseManagement';
+import { getRoleLabel, getRoleBadgeColor } from '../../../shared/constants/roles';
 
 type AdminTab = 'orgs' | 'users' | 'config' | 'licenses';
 
@@ -50,12 +51,6 @@ const PLAN_LABELS: Record<string, { label: string; color: string }> = {
   enterprise: { label: '企业版', color: 'bg-purple-100 text-purple-700' },
 };
 
-const ROLE_LABELS: Record<string, string> = {
-  org_admin: '机构管理员',
-  counselor: '咨询师',
-  admin_staff: '行政人员',
-  client: '来访者',
-};
 
 export function AdminDashboard() {
   const { user, logout } = useAuthStore();
@@ -357,13 +352,8 @@ export function AdminDashboard() {
                               <div className="text-sm text-slate-700 truncate">{m.userName}</div>
                               <div className="text-xs text-slate-400 truncate">{m.userEmail}</div>
                             </div>
-                            <span className={`text-xs px-2 py-0.5 rounded-full ${
-                              m.role === 'org_admin' ? 'bg-blue-100 text-blue-700' :
-                              m.role === 'counselor' ? 'bg-green-100 text-green-700' :
-                              m.role === 'admin_staff' ? 'bg-orange-100 text-orange-700' :
-                              'bg-slate-100 text-slate-600'
-                            }`}>
-                              {ROLE_LABELS[m.role] || m.role}
+                            <span className={`text-xs px-2 py-0.5 rounded-full ${getRoleBadgeColor(m.role)}`}>
+                              {getRoleLabel(m.role)}
                             </span>
                             <span className={`text-xs ${m.status === 'active' ? 'text-green-500' : 'text-slate-400'}`}>
                               {m.status === 'active' ? '活跃' : m.status}

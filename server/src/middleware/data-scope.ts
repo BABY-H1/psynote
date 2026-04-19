@@ -4,8 +4,8 @@ import { db } from '../config/database.js';
 import { clientAssignments, clientAccessGrants } from '../db/schema.js';
 
 export interface DataScope {
-  /** 'all' = unrestricted, 'assigned' = only listed clients, 'basic_only' = admin_staff (names/schedule), 'aggregate_only' = HR/enterprise admin (only eap_usage_events aggregates), 'none' = client portal self-only */
-  type: 'all' | 'assigned' | 'basic_only' | 'aggregate_only' | 'none';
+  /** 'all' = unrestricted, 'assigned' = only listed clients, 'aggregate_only' = HR/enterprise admin (only eap_usage_events aggregates), 'none' = client portal self-only */
+  type: 'all' | 'assigned' | 'aggregate_only' | 'none';
   /** Populated for 'assigned' type — union of own clients, granted clients, and supervisees' clients */
   allowedClientIds?: string[];
 }
@@ -97,12 +97,6 @@ export async function dataScopeGuard(request: FastifyRequest, _reply: FastifyRep
       type: 'assigned',
       allowedClientIds: [...allClientIds],
     };
-    return;
-  }
-
-  // admin_staff → basic info only (names, schedule)
-  if (org.role === 'admin_staff') {
-    request.dataScope = { type: 'basic_only' };
     return;
   }
 

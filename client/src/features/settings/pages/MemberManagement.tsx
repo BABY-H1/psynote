@@ -8,14 +8,12 @@ import { useFeature } from '../../../shared/hooks/useFeature';
 const roleLabels: Record<string, string> = {
   org_admin: '管理员',
   counselor: '咨询师',
-  admin_staff: '行政人员',
   client: '来访者',
 };
 
 const roleBadgeVariant: Record<string, 'purple' | 'blue' | 'green' | 'yellow'> = {
   org_admin: 'purple',
   counselor: 'blue',
-  admin_staff: 'yellow',
   client: 'green',
 };
 
@@ -31,7 +29,7 @@ const statusVariant: Record<string, 'green' | 'yellow' | 'slate'> = {
   disabled: 'slate',
 };
 
-type FilterTab = 'all' | 'counselor' | 'client' | 'org_admin' | 'admin_staff';
+type FilterTab = 'all' | 'counselor' | 'client' | 'org_admin';
 
 export function MemberManagement() {
   const { data: members, isLoading } = useOrgMembers();
@@ -52,14 +50,12 @@ export function MemberManagement() {
     counselor: members?.filter((m) => m.role === 'counselor').length || 0,
     client: members?.filter((m) => m.role === 'client').length || 0,
     org_admin: members?.filter((m) => m.role === 'org_admin').length || 0,
-    admin_staff: members?.filter((m) => m.role === 'admin_staff').length || 0,
   };
 
   const tabs: { key: FilterTab; label: string }[] = [
     { key: 'all', label: `全部 (${counts.all})` },
     { key: 'client', label: `来访者 (${counts.client})` },
     { key: 'counselor', label: `咨询师 (${counts.counselor})` },
-    { key: 'admin_staff', label: `行政人员 (${counts.admin_staff})` },
     { key: 'org_admin', label: `管理员 (${counts.org_admin})` },
   ];
 
@@ -311,7 +307,6 @@ function MemberDrawer({
             >
               <option value="client">来访者</option>
               <option value="counselor">咨询师</option>
-              <option value="admin_staff">行政人员</option>
               <option value="org_admin">管理员</option>
             </select>
           </div>
@@ -347,8 +342,8 @@ function MemberDrawer({
             </div>
           )}
 
-          {/* Full practice access (counselor / admin_staff only) */}
-          {(role === 'counselor' || role === 'admin_staff') && (
+          {/* Full practice access (counselor only) */}
+          {role === 'counselor' && (
             <div>
               <label className="flex items-start gap-3 cursor-pointer">
                 <input
@@ -519,7 +514,6 @@ function InviteForm({ onDone }: { onDone: () => void }) {
             >
               <option value="client">来访者</option>
               <option value="counselor">咨询师</option>
-              <option value="admin_staff">行政人员</option>
               <option value="org_admin">管理员</option>
             </select>
           </div>
@@ -554,7 +548,7 @@ function InviteForm({ onDone }: { onDone: () => void }) {
           </div>
         )}
         {/* Full practice access toggle - only visible to org_admin */}
-        {currentRole === 'org_admin' && (role === 'counselor' || role === 'admin_staff') && (
+        {currentRole === 'org_admin' && role === 'counselor' && (
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"

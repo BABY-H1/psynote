@@ -63,6 +63,8 @@ export function useUpdateAssessment() {
       resultDisplay: { mode: string; show: string[] };
       isActive: boolean;
       scaleIds: string[];
+      // Lifecycle status (draft → active → paused → archived).
+      status: 'draft' | 'active' | 'paused' | 'archived';
     }>) => api.patch<Assessment>(`${orgPrefix()}/assessments/${assessmentId}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['assessments'] });

@@ -18,7 +18,29 @@ interface AuthState {
   isSystemAdmin: boolean;
   _hydrated: boolean;
   setAuth: (user: User, accessToken: string, refreshToken: string, isSystemAdmin?: boolean) => void;
-  setOrg: (orgId: string, role: OrgRole, tier?: OrgTier, license?: LicenseInfo, orgType?: OrgType) => void;
+  /**
+   * Switch to an org. All five org-scope fields are REQUIRED — the compiler
+   * enforces that callers always supply a complete org context. For partial
+   * updates to the CURRENT org (e.g. license activation swapping tier), use
+   * `updateCurrentOrg` instead.
+   */
+  setOrg: (
+    orgId: string,
+    role: OrgRole,
+    tier: OrgTier,
+    license: LicenseInfo | null,
+    orgType: OrgType,
+  ) => void;
+  /**
+   * Patch fields on the CURRENT org without switching. Used by license
+   * activation, lazy tier/orgType hydration, etc. Any field omitted from the
+   * patch is preserved.
+   */
+  updateCurrentOrg: (patch: Partial<{
+    tier: OrgTier;
+    orgType: OrgType;
+    license: LicenseInfo | null;
+  }>) => void;
   updateTokens: (accessToken: string, refreshToken: string) => void;
   logout: () => void;
 }
@@ -57,9 +79,32 @@ export const useAuthStore = create<AuthState>()(
         set({
           currentOrgId: orgId,
           currentRole: role,
-          currentOrgTier: tier ?? null,
-          currentOrgType: (orgType as OrgType) ?? null,
-          licenseInfo: license ?? null,
+          currentOrgTier: tier,
+          currentOrgType: orgType,
+          licenseInfo: license,
+        });
+      },
+
+      updateCurrentOrg: (patch) => {
+        set((state) => {
+          const nextTier = patch.tier !== undefined ? patch.tier : state.currentOrgTier;
+          const nextType = patch.orgType !== undefined ? patch.orgType : state.currentOrgType;
+          const nextLicense = patch.license !== undefined ? patch.license : state.licenseInfo;
+          // Short-circuit if nothing actually changed — prevents unnecessary
+          // re-renders of every AppShell / OrgSettingsPage subscriber when a
+          // caller (e.g. SubscriptionTab polling) fires the same payload.
+          if (
+            nextTier === state.currentOrgTier
+            && nextType === state.currentOrgType
+            && nextLicense === state.licenseInfo
+          ) {
+            return state;
+          }
+          return {
+            currentOrgTier: nextTier,
+            currentOrgType: nextType,
+            licenseInfo: nextLicense,
+          };
         });
       },
 
@@ -85,6 +130,28 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'psynote-auth',
+      version: 2,
+      /**
+       * v1 → v2 migration: earlier schema did not have `currentOrgType`. Any
+       * persisted state with an `orgId` but no `orgType` is stale — we null
+       * out the org selection so the user is routed back through
+       * `/select-org`, which calls `setOrg(...)` with a full 5-tuple. This
+       * replaces the previous defensive `GET /orgs/:id` useEffects in
+       * AppShell, which silently masked the underlying inconsistency.
+       */
+      migrate: (persisted: unknown, fromVersion: number) => {
+        const s = (persisted ?? {}) as Partial<AuthState>;
+        if (fromVersion < 2 && s.currentOrgId && !s.currentOrgType) {
+          return {
+            ...s,
+            currentOrgId: null,
+            currentRole: null,
+            currentOrgTier: null,
+            licenseInfo: null,
+          } as AuthState;
+        }
+        return s as AuthState;
+      },
       partialize: (state) => ({
         user: state.user,
         accessToken: state.accessToken,
@@ -107,4 +174,3 @@ export const useAuthStore = create<AuthState>()(
     },
   ),
 );
-
