@@ -1,4 +1,4 @@
-import Fastify from 'fastify';
+import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import fastifyMultipart from '@fastify/multipart';
@@ -93,189 +93,181 @@ import { portalChildrenRoutes } from './modules/parent-binding/portal-children.r
 import { eapAnalyticsRoutes } from './modules/eap/eap-analytics.routes.js';
 import { initConfigService, getBootValue } from './lib/config-service.js';
 
-const app = Fastify({
-  logger: {
-    level: env.NODE_ENV === 'production' ? 'info' : 'debug',
-    transport: env.NODE_ENV === 'development'
-      ? { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss' } }
-      : undefined,
-  },
-});
+/**
+ * Factory that wires up a fully-registered Fastify instance without
+ * calling listen(). The server entry point (`server.ts`) is the only
+ * place that binds the port and starts background workers — keeping
+ * this file side-effect-free means:
+ *   1. Tests can call `buildApp()` to get a real app instance and drive
+ *      it via `inject()` without running a listener or port races.
+ *   2. Alternate entry points (e.g. a future worker-only process) can
+ *      import the same wiring without hauling in the HTTP listener.
+ *   3. Module-load order is predictable — `initConfigService()` only
+ *      touches the DB when someone actively calls `buildApp()`.
+ *
+ * Intentionally does NOT accept a `db` option: the Postgres pool is a
+ * module-level singleton in `config/database.ts` used by every service.
+ * Injecting it would be an 80-file refactor. Tests that need a mock DB
+ * keep using `vi.mock('../../config/database.js')`.
+ */
+export async function buildApp(): Promise<FastifyInstance> {
+  const app = Fastify({
+    logger: {
+      level: env.NODE_ENV === 'production' ? 'info' : 'debug',
+      transport: env.NODE_ENV === 'development'
+        ? { target: 'pino-pretty', options: { translateTime: 'HH:MM:ss' } }
+        : undefined,
+    },
+  });
 
-// Load system config from DB before plugin registration
-await initConfigService();
-const rateLimitMax = getBootValue('limits', 'rateLimitMax', 100);
-const fileUploadMaxMB = getBootValue('limits', 'fileUploadMaxMB', 200);
+  // Load system config from DB before plugin registration — rate-limit
+  // + multipart pull their limits from boot config.
+  await initConfigService();
+  const rateLimitMax = getBootValue('limits', 'rateLimitMax', 100);
+  const fileUploadMaxMB = getBootValue('limits', 'fileUploadMaxMB', 200);
 
-// Plugins
-await app.register(cors, { origin: env.CLIENT_URL, credentials: true });
-await app.register(rateLimit, { max: rateLimitMax, timeWindow: '1 minute' });
-await app.register(fastifyMultipart, { limits: { fileSize: fileUploadMaxMB * 1024 * 1024 } });
-await app.register(fastifyStatic, { root: join(process.cwd(), 'uploads'), prefix: '/uploads/', decorateReply: false });
+  // Plugins
+  await app.register(cors, { origin: env.CLIENT_URL, credentials: true });
+  await app.register(rateLimit, { max: rateLimitMax, timeWindow: '1 minute' });
+  await app.register(fastifyMultipart, { limits: { fileSize: fileUploadMaxMB * 1024 * 1024 } });
+  await app.register(fastifyStatic, { root: join(process.cwd(), 'uploads'), prefix: '/uploads/', decorateReply: false });
 
-// Error handler
-app.setErrorHandler(errorHandler);
+  // Error handler
+  app.setErrorHandler(errorHandler);
 
-// Health check
-app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
+  // Health check
+  app.get('/api/health', async () => ({ status: 'ok', timestamp: new Date().toISOString() }));
 
-// Routes
-await app.register(authRoutes, { prefix: '/api/auth' });
-// Phase 14f — self-service user endpoints (/me)
-await app.register(userRoutes, { prefix: '/api/users' });
-await app.register(orgRoutes, { prefix: '/api/orgs' });
+  // Routes
+  await app.register(authRoutes, { prefix: '/api/auth' });
+  // Phase 14f — self-service user endpoints (/me)
+  await app.register(userRoutes, { prefix: '/api/users' });
+  await app.register(orgRoutes, { prefix: '/api/orgs' });
 
-// Assessment domain (nested under org context)
-await app.register(scaleRoutes, { prefix: '/api/orgs/:orgId/scales' });
-await app.register(assessmentRoutes, { prefix: '/api/orgs/:orgId/assessments' });
-await app.register(resultRoutes, { prefix: '/api/orgs/:orgId/results' });
-await app.register(batchRoutes, { prefix: '/api/orgs/:orgId/assessment-batches' });
-await app.register(reportRoutes, { prefix: '/api/orgs/:orgId/reports' });
-await app.register(distributionRoutes, { prefix: '/api/orgs/:orgId/assessments/:assessmentId/distributions' });
+  // Assessment domain (nested under org context)
+  await app.register(scaleRoutes, { prefix: '/api/orgs/:orgId/scales' });
+  await app.register(assessmentRoutes, { prefix: '/api/orgs/:orgId/assessments' });
+  await app.register(resultRoutes, { prefix: '/api/orgs/:orgId/results' });
+  await app.register(batchRoutes, { prefix: '/api/orgs/:orgId/assessment-batches' });
+  await app.register(reportRoutes, { prefix: '/api/orgs/:orgId/reports' });
+  await app.register(distributionRoutes, { prefix: '/api/orgs/:orgId/assessments/:assessmentId/distributions' });
 
-// Public assessment submission (no auth)
-await app.register(publicResultRoutes, { prefix: '/api/public/assessments' });
+  // Public assessment submission (no auth)
+  await app.register(publicResultRoutes, { prefix: '/api/public/assessments' });
 
-// Counseling domain
-await app.register(episodeRoutes, { prefix: '/api/orgs/:orgId/episodes' });
-await app.register(appointmentRoutes, { prefix: '/api/orgs/:orgId/appointments' });
-await app.register(availabilityRoutes, { prefix: '/api/orgs/:orgId/availability' });
-await app.register(sessionNoteRoutes, { prefix: '/api/orgs/:orgId/session-notes' });
-await app.register(noteTemplateRoutes, { prefix: '/api/orgs/:orgId/note-templates' });
-await app.register(goalLibraryRoutes, { prefix: '/api/orgs/:orgId/goal-library' });
-await app.register(clientProfileRoutes, { prefix: '/api/orgs/:orgId/clients' });
-await app.register(treatmentPlanRoutes, { prefix: '/api/orgs/:orgId/treatment-plans' });
-await app.register(aiConversationRoutes, { prefix: '/api/orgs/:orgId/ai-conversations' });
-await app.register(referralRoutes, { prefix: '/api/orgs/:orgId/referrals' });
-await app.register(followUpRoutes, { prefix: '/api/orgs/:orgId/follow-up' });
+  // Counseling domain
+  await app.register(episodeRoutes, { prefix: '/api/orgs/:orgId/episodes' });
+  await app.register(appointmentRoutes, { prefix: '/api/orgs/:orgId/appointments' });
+  await app.register(availabilityRoutes, { prefix: '/api/orgs/:orgId/availability' });
+  await app.register(sessionNoteRoutes, { prefix: '/api/orgs/:orgId/session-notes' });
+  await app.register(noteTemplateRoutes, { prefix: '/api/orgs/:orgId/note-templates' });
+  await app.register(goalLibraryRoutes, { prefix: '/api/orgs/:orgId/goal-library' });
+  await app.register(clientProfileRoutes, { prefix: '/api/orgs/:orgId/clients' });
+  await app.register(treatmentPlanRoutes, { prefix: '/api/orgs/:orgId/treatment-plans' });
+  await app.register(aiConversationRoutes, { prefix: '/api/orgs/:orgId/ai-conversations' });
+  await app.register(referralRoutes, { prefix: '/api/orgs/:orgId/referrals' });
+  await app.register(followUpRoutes, { prefix: '/api/orgs/:orgId/follow-up' });
 
-// AI services
-await app.register(aiRoutes, { prefix: '/api/orgs/:orgId/ai' });
+  // AI services
+  await app.register(aiRoutes, { prefix: '/api/orgs/:orgId/ai' });
 
-// Group domain
-await app.register(schemeRoutes, { prefix: '/api/orgs/:orgId/group-schemes' });
-await app.register(instanceRoutes, { prefix: '/api/orgs/:orgId/group-instances' });
-await app.register(enrollmentRoutes, { prefix: '/api/orgs/:orgId/group-instances' });
-await app.register(sessionRoutes, { prefix: '/api/orgs/:orgId/group-instances' });
+  // Group domain
+  await app.register(schemeRoutes, { prefix: '/api/orgs/:orgId/group-schemes' });
+  await app.register(instanceRoutes, { prefix: '/api/orgs/:orgId/group-instances' });
+  await app.register(enrollmentRoutes, { prefix: '/api/orgs/:orgId/group-instances' });
+  await app.register(sessionRoutes, { prefix: '/api/orgs/:orgId/group-instances' });
 
-// Course domain
-await app.register(courseRoutes, { prefix: '/api/orgs/:orgId/courses' });
-await app.register(courseInstanceRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
-await app.register(courseEnrollmentRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
-await app.register(courseFeedbackRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
-await app.register(courseHomeworkRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
+  // Course domain
+  await app.register(courseRoutes, { prefix: '/api/orgs/:orgId/courses' });
+  await app.register(courseInstanceRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
+  await app.register(courseEnrollmentRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
+  await app.register(courseFeedbackRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
+  await app.register(courseHomeworkRoutes, { prefix: '/api/orgs/:orgId/course-instances' });
 
-// Delivery aggregation (Phase 5b) — exposes GET /api/orgs/:orgId/services
-await app.register(deliveryRoutes, { prefix: '/api/orgs/:orgId' });
-// Person archive (Phase 6) — exposes GET /api/orgs/:orgId/people[/:userId/archive]
-await app.register(personArchiveRoutes, { prefix: '/api/orgs/:orgId' });
+  // Delivery aggregation (Phase 5b) — exposes GET /api/orgs/:orgId/services
+  await app.register(deliveryRoutes, { prefix: '/api/orgs/:orgId' });
+  // Person archive (Phase 6) — exposes GET /api/orgs/:orgId/people[/:userId/archive]
+  await app.register(personArchiveRoutes, { prefix: '/api/orgs/:orgId' });
 
-// Org branding (Phase 7b) — exposes GET/PATCH /api/orgs/:orgId/branding
-await app.register(brandingRoutes, { prefix: '/api/orgs/:orgId' });
-// Subscription info (Phase 7c) — exposes GET /api/orgs/:orgId/subscription
-await app.register(subscriptionRoutes, { prefix: '/api/orgs/:orgId' });
-// License management — exposes POST/DELETE /api/orgs/:orgId/license
-await app.register(licenseRoutes, { prefix: '/api/orgs/:orgId' });
-// Phase 10 — dashboard stats
-await app.register(dashboardRoutes, { prefix: '/api/orgs/:orgId' });
-// Phase 10 — service intakes (authenticated)
-await app.register(serviceIntakeRoutes, { prefix: '/api/orgs/:orgId/service-intakes' });
-// Phase 10 — public services & intake (no auth, registered at root)
-await app.register(publicServiceRoutes);
+  // Org branding (Phase 7b) — exposes GET/PATCH /api/orgs/:orgId/branding
+  await app.register(brandingRoutes, { prefix: '/api/orgs/:orgId' });
+  // Subscription info (Phase 7c) — exposes GET /api/orgs/:orgId/subscription
+  await app.register(subscriptionRoutes, { prefix: '/api/orgs/:orgId' });
+  // License management — exposes POST/DELETE /api/orgs/:orgId/license
+  await app.register(licenseRoutes, { prefix: '/api/orgs/:orgId' });
+  // Phase 10 — dashboard stats
+  await app.register(dashboardRoutes, { prefix: '/api/orgs/:orgId' });
+  // Phase 10 — service intakes (authenticated)
+  await app.register(serviceIntakeRoutes, { prefix: '/api/orgs/:orgId/service-intakes' });
+  // Phase 10 — public services & intake (no auth, registered at root)
+  await app.register(publicServiceRoutes);
 
-// File upload
-await app.register(uploadRoutes, { prefix: '/api/orgs/:orgId/upload' });
+  // File upload
+  await app.register(uploadRoutes, { prefix: '/api/orgs/:orgId/upload' });
 
-// Compliance
-await app.register(consentRoutes, { prefix: '/api/orgs/:orgId/compliance' });
-await app.register(complianceReviewRoutes, { prefix: '/api/orgs/:orgId/compliance' });
+  // Compliance
+  await app.register(consentRoutes, { prefix: '/api/orgs/:orgId/compliance' });
+  await app.register(complianceReviewRoutes, { prefix: '/api/orgs/:orgId/compliance' });
 
-// Notifications
-await app.register(notificationRoutes, { prefix: '/api/orgs/:orgId/notifications' });
+  // Notifications
+  await app.register(notificationRoutes, { prefix: '/api/orgs/:orgId/notifications' });
 
-// Reminder settings
-await app.register(reminderSettingsRoutes, { prefix: '/api/orgs/:orgId/reminder-settings' });
+  // Reminder settings
+  await app.register(reminderSettingsRoutes, { prefix: '/api/orgs/:orgId/reminder-settings' });
 
-// Public appointment confirm/cancel (no auth)
-await app.register(publicAppointmentRoutes, { prefix: '/api/public/appointments' });
+  // Public appointment confirm/cancel (no auth)
+  await app.register(publicAppointmentRoutes, { prefix: '/api/public/appointments' });
 
-// Public group enrollment (no auth)
-await app.register(publicEnrollRoutes, { prefix: '/api/public/groups' });
+  // Public group enrollment (no auth)
+  await app.register(publicEnrollRoutes, { prefix: '/api/public/groups' });
 
-// Public course enrollment (no auth)
-await app.register(publicCourseEnrollRoutes, { prefix: '/api/public/courses' });
+  // Public course enrollment (no auth)
+  await app.register(publicCourseEnrollRoutes, { prefix: '/api/public/courses' });
 
-// Client self-service portal
-await app.register(clientPortalRoutes, { prefix: '/api/orgs/:orgId/client' });
+  // Client self-service portal
+  await app.register(clientPortalRoutes, { prefix: '/api/orgs/:orgId/client' });
 
-// System admin
-await app.register(adminRoutes, { prefix: '/api/admin' });
-await app.register(adminLicenseRoutes, { prefix: '/api/admin/licenses' });
-await app.register(adminTenantRoutes, { prefix: '/api/admin/tenants' });
-await app.register(adminDashboardRoutes, { prefix: '/api/admin/dashboard' });
-await app.register(adminLibraryRoutes, { prefix: '/api/admin/library' });
+  // System admin
+  await app.register(adminRoutes, { prefix: '/api/admin' });
+  await app.register(adminLicenseRoutes, { prefix: '/api/admin/licenses' });
+  await app.register(adminTenantRoutes, { prefix: '/api/admin/tenants' });
+  await app.register(adminDashboardRoutes, { prefix: '/api/admin/dashboard' });
+  await app.register(adminLibraryRoutes, { prefix: '/api/admin/library' });
 
-// Client assignment & access grants
-await app.register(clientAssignmentRoutes, { prefix: '/api/orgs/:orgId/client-assignments' });
-await app.register(clientAccessGrantRoutes, { prefix: '/api/orgs/:orgId/client-access-grants' });
+  // Client assignment & access grants
+  await app.register(clientAssignmentRoutes, { prefix: '/api/orgs/:orgId/client-assignments' });
+  await app.register(clientAccessGrantRoutes, { prefix: '/api/orgs/:orgId/client-access-grants' });
 
-// Phase 9α — Content blocks & enrollment responses
-await app.register(contentBlockRoutes, { prefix: '/api/orgs/:orgId/content-blocks' });
-await app.register(enrollmentResponseRoutes, { prefix: '/api/orgs/:orgId/enrollment-responses' });
-await app.register(clientEnrollmentResponseRoutes, { prefix: '/api/orgs/:orgId/client/enrollment-responses' });
+  // Phase 9α — Content blocks & enrollment responses
+  await app.register(contentBlockRoutes, { prefix: '/api/orgs/:orgId/content-blocks' });
+  await app.register(enrollmentResponseRoutes, { prefix: '/api/orgs/:orgId/enrollment-responses' });
+  await app.register(clientEnrollmentResponseRoutes, { prefix: '/api/orgs/:orgId/client/enrollment-responses' });
 
-// Phase 9δ — Public referral download (no auth)
-await app.register(publicReferralRoutes, { prefix: '/api/public/referrals' });
+  // Phase 9δ — Public referral download (no auth)
+  await app.register(publicReferralRoutes, { prefix: '/api/public/referrals' });
 
-// Phase 9ε — Org-internal collaboration
-await app.register(collaborationRoutes, { prefix: '/api/orgs/:orgId/collaboration' });
-await app.register(workflowRoutes, { prefix: '/api/orgs/:orgId/workflow' });
-await app.register(crisisRoutes, { prefix: '/api/orgs/:orgId/crisis' });
+  // Phase 9ε — Org-internal collaboration
+  await app.register(collaborationRoutes, { prefix: '/api/orgs/:orgId/collaboration' });
+  await app.register(workflowRoutes, { prefix: '/api/orgs/:orgId/workflow' });
+  await app.register(crisisRoutes, { prefix: '/api/orgs/:orgId/crisis' });
 
-// EAP Enterprise — partnerships + assignments + analytics + public registration.
-// Phase 14h: /eap/employees and /eap/crisis HTTP routes deleted (zero clients
-// after the HR shell removal); the underlying tables and analytics queries remain.
-await app.register(eapPartnershipRoutes, { prefix: '/api/orgs/:orgId/eap/partnerships' });
-await app.register(eapAssignmentRoutes, { prefix: '/api/orgs/:orgId/eap/assignments' });
-await app.register(eapAnalyticsRoutes, { prefix: '/api/orgs/:orgId/eap/analytics' });
-await app.register(eapPublicRoutes, { prefix: '/api/public/eap' });
+  // EAP Enterprise — partnerships + assignments + analytics + public registration.
+  // Phase 14h: /eap/employees and /eap/crisis HTTP routes deleted (zero clients
+  // after the HR shell removal); the underlying tables and analytics queries remain.
+  await app.register(eapPartnershipRoutes, { prefix: '/api/orgs/:orgId/eap/partnerships' });
+  await app.register(eapAssignmentRoutes, { prefix: '/api/orgs/:orgId/eap/assignments' });
+  await app.register(eapAnalyticsRoutes, { prefix: '/api/orgs/:orgId/eap/analytics' });
+  await app.register(eapPublicRoutes, { prefix: '/api/public/eap' });
 
-// School — class & student management
-await app.register(schoolClassRoutes, { prefix: '/api/orgs/:orgId/school/classes' });
-await app.register(schoolStudentRoutes, { prefix: '/api/orgs/:orgId/school/students' });
-await app.register(schoolAnalyticsRoutes, { prefix: '/api/orgs/:orgId/school/analytics' });
+  // School — class & student management
+  await app.register(schoolClassRoutes, { prefix: '/api/orgs/:orgId/school/classes' });
+  await app.register(schoolStudentRoutes, { prefix: '/api/orgs/:orgId/school/students' });
+  await app.register(schoolAnalyticsRoutes, { prefix: '/api/orgs/:orgId/school/analytics' });
 
-// Phase 14 — Parent self-binding (class invite tokens + portal landing)
-await app.register(parentInvitationRoutes, { prefix: '/api/orgs/:orgId/school/classes/:classId/parent-invite-tokens' });
-await app.register(portalChildrenRoutes, { prefix: '/api/orgs/:orgId/client/children' });
-await app.register(publicParentBindingRoutes, { prefix: '/api/public/parent-bind' });
+  // Phase 14 — Parent self-binding (class invite tokens + portal landing)
+  await app.register(parentInvitationRoutes, { prefix: '/api/orgs/:orgId/school/classes/:classId/parent-invite-tokens' });
+  await app.register(portalChildrenRoutes, { prefix: '/api/orgs/:orgId/client/children' });
+  await app.register(publicParentBindingRoutes, { prefix: '/api/public/parent-bind' });
 
-// Start
-try {
-  await app.listen({ port: env.PORT, host: env.HOST });
-  app.log.info(`Server running on http://${env.HOST}:${env.PORT}`);
-
-  // Start follow-up worker — requires Redis. Probe first with a tight
-  // timeout; skip worker init entirely when Redis is down so BullMQ's
-  // background reconnect loop doesn't saturate the event loop and take
-  // the dev server with it.
-  const { isRedisReachable } = await import('./lib/redis-health.js');
-  const redisUp = await isRedisReachable(env.REDIS_URL);
-  if (!redisUp) {
-    app.log.warn(`Follow-up worker skipped: Redis unreachable at ${env.REDIS_URL}`);
-  } else {
-    try {
-      const { startFollowUpWorker, scheduleDailyFollowUpScan } = await import('./jobs/follow-up.worker.js');
-      startFollowUpWorker();
-      await scheduleDailyFollowUpScan();
-      app.log.info('Follow-up worker started');
-    } catch (workerErr: any) {
-      app.log.warn(`Follow-up worker failed to start: ${workerErr.message}`);
-    }
-  }
-} catch (err) {
-  app.log.error(err);
-  process.exit(1);
+  return app;
 }
-
-export default app;

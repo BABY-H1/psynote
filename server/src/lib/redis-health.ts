@@ -4,7 +4,7 @@ import Redis from 'ioredis';
  * One-shot Redis reachability probe.
  *
  * Used at server boot to decide whether to initialize the BullMQ worker
- * (`server/src/app.ts`). Without this probe, BullMQ's own Queue/Worker
+ * (`server/src/server.ts`). Without this probe, BullMQ's own Queue/Worker
  * constructors spray `AggregateError [ECONNREFUSED]` retries onto the
  * event loop indefinitely when Redis is down, which eventually kills
  * the dev server via unhandledRejection.

@@ -130,7 +130,7 @@ jobs:
         # log noise + a second process tree to clean up.
         run: |
           cd server
-          nohup npx tsx src/app.ts > ../server.log 2>&1 &
+          nohup npx tsx src/server.ts > ../server.log 2>&1 &
           echo $! > ../server.pid
 
       - name: Start client (background)
