@@ -3,8 +3,10 @@ import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { dataScopeGuard } from '../../middleware/data-scope.js';
+import { assertLibraryItemOwnedByOrg } from '../../middleware/library-ownership.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
+import { consentTemplates } from '../../db/schema.js';
 import * as consentService from './consent.service.js';
 
 export async function consentRoutes(app: FastifyInstance) {
@@ -45,6 +47,7 @@ export async function consentRoutes(app: FastifyInstance) {
     { preHandler: [requireRole('org_admin', 'counselor')] },
     async (request) => {
       const { templateId } = request.params as { templateId: string };
+      await assertLibraryItemOwnedByOrg(consentTemplates, templateId, request.org!.orgId);
       const body = request.body as Record<string, unknown>;
       const updated = await consentService.updateTemplate(templateId, body);
       await logAudit(request, 'update', 'consent_templates', templateId);
@@ -57,6 +60,7 @@ export async function consentRoutes(app: FastifyInstance) {
     { preHandler: [requireRole('org_admin', 'counselor')] },
     async (request) => {
       const { templateId } = request.params as { templateId: string };
+      await assertLibraryItemOwnedByOrg(consentTemplates, templateId, request.org!.orgId);
       await consentService.deleteTemplate(templateId);
       await logAudit(request, 'delete', 'consent_templates', templateId);
       return { success: true };

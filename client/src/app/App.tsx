@@ -46,11 +46,7 @@ import { TenantList } from '../features/admin/pages/TenantList';
 import { TenantWizard } from '../features/admin/pages/TenantWizard';
 import { TenantDetail } from '../features/admin/pages/TenantDetail';
 import { AdminLibrary } from '../features/admin/pages/AdminLibrary';
-import { AdminLibraryScales } from '../features/admin/pages/AdminLibraryScales';
-import { AdminLibraryCourses } from '../features/admin/pages/AdminLibraryCourses';
-import { AdminLibrarySchemes } from '../features/admin/pages/AdminLibrarySchemes';
-import { AdminLibraryTemplates } from '../features/admin/pages/AdminLibraryTemplates';
-import { AdminLibraryGoals } from '../features/admin/pages/AdminLibraryGoals';
+import { SystemLibraryScopeProvider } from '../shared/api/libraryScope';
 import { UserManagement } from '../features/admin/pages/UserManagement';
 import { SystemConfig } from '../features/admin/pages/SystemConfig';
 import { PublicCourseEnrollment } from '../features/courses/pages/PublicCourseEnrollment';
@@ -98,12 +94,25 @@ function AppRoutes() {
             <Route path="tenants" element={<TenantList />} />
             <Route path="tenants/new" element={<TenantWizard />} />
             <Route path="tenants/:orgId" element={<TenantDetail />} />
-            <Route path="library" element={<AdminLibrary />}>
-              <Route path="scales" element={<AdminLibraryScales />} />
-              <Route path="courses" element={<AdminLibraryCourses />} />
-              <Route path="schemes" element={<AdminLibrarySchemes />} />
-              <Route path="templates" element={<AdminLibraryTemplates />} />
-              <Route path="goals" element={<AdminLibraryGoals />} />
+            {/* Admin library mounts the same 6 org-side library components.
+                SystemLibraryScopeProvider forces scope='system' so hooks
+                resolve to `/admin/library/*` even when the sysadmin also
+                belongs to an org (an edge case; here the first block is
+                for sysadmin WITHOUT an org, so this is mostly paranoia). */}
+            <Route
+              path="library"
+              element={
+                <SystemLibraryScopeProvider>
+                  <AdminLibrary />
+                </SystemLibraryScopeProvider>
+              }
+            >
+              <Route path="scales" element={<ScaleLibrary />} />
+              <Route path="goals" element={<GoalLibrary />} />
+              <Route path="agreements" element={<AgreementLibrary />} />
+              <Route path="schemes" element={<SchemeLibrary />} />
+              <Route path="courses" element={<CoursesTab />} />
+              <Route path="templates" element={<NoteTemplateLibrary />} />
             </Route>
             <Route path="users" element={<UserManagement />} />
             <Route path="settings" element={<SystemConfig />} />
@@ -179,12 +188,20 @@ function AppRoutes() {
               <Route path="tenants" element={<TenantList />} />
               <Route path="tenants/new" element={<TenantWizard />} />
               <Route path="tenants/:orgId" element={<TenantDetail />} />
-              <Route path="library" element={<AdminLibrary />}>
-                <Route path="scales" element={<AdminLibraryScales />} />
-                <Route path="courses" element={<AdminLibraryCourses />} />
-                <Route path="schemes" element={<AdminLibrarySchemes />} />
-                <Route path="templates" element={<AdminLibraryTemplates />} />
-                <Route path="goals" element={<AdminLibraryGoals />} />
+              <Route
+                path="library"
+                element={
+                  <SystemLibraryScopeProvider>
+                    <AdminLibrary />
+                  </SystemLibraryScopeProvider>
+                }
+              >
+                <Route path="scales" element={<ScaleLibrary />} />
+                <Route path="goals" element={<GoalLibrary />} />
+                <Route path="agreements" element={<AgreementLibrary />} />
+                <Route path="schemes" element={<SchemeLibrary />} />
+                <Route path="courses" element={<CoursesTab />} />
+                <Route path="templates" element={<NoteTemplateLibrary />} />
               </Route>
               <Route path="users" element={<UserManagement />} />
               <Route path="settings" element={<SystemConfig />} />

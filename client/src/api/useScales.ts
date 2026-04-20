@@ -2,29 +2,27 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Scale } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
-
-function orgPrefix() {
-  const orgId = useAuthStore.getState().currentOrgId;
-  return `/orgs/${orgId}`;
-}
+import { libraryApi, libraryScopeKey } from '../shared/api/libraryScope';
 
 export type ScaleListItem = Scale & { dimensionCount?: number; itemCount?: number };
 
 export function useScales() {
   const orgId = useAuthStore((s) => s.currentOrgId);
+  const isSystemAdmin = useAuthStore((s) => s.isSystemAdmin);
   return useQuery({
-    queryKey: ['scales', orgId],
-    queryFn: () => api.get<ScaleListItem[]>(`${orgPrefix()}/scales`),
-    enabled: !!orgId,
+    queryKey: ['scales', libraryScopeKey()],
+    queryFn: () => api.get<ScaleListItem[]>(libraryApi('scales')),
+    enabled: !!orgId || isSystemAdmin,
   });
 }
 
 export function useScale(scaleId: string | undefined) {
   const orgId = useAuthStore((s) => s.currentOrgId);
+  const isSystemAdmin = useAuthStore((s) => s.isSystemAdmin);
   return useQuery({
-    queryKey: ['scales', orgId, scaleId],
-    queryFn: () => api.get<Scale>(`${orgPrefix()}/scales/${scaleId}`),
-    enabled: !!orgId && !!scaleId,
+    queryKey: ['scales', libraryScopeKey(), scaleId],
+    queryFn: () => api.get<Scale>(`${libraryApi('scales')}/${scaleId}`),
+    enabled: (!!orgId || isSystemAdmin) && !!scaleId,
   });
 }
 
@@ -58,7 +56,7 @@ export function useCreateScale() {
         options: { label: string; value: number }[];
         sortOrder?: number;
       }[];
-    }) => api.post<Scale>(`${orgPrefix()}/scales`, data),
+    }) => api.post<Scale>(libraryApi('scales'), data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scales'] });
     },
@@ -99,7 +97,7 @@ export function useUpdateScale() {
       isPublic: boolean;
       dimensions: UpdateScaleDimensionInput[];
       items: UpdateScaleItemInput[];
-    }>) => api.patch<Scale>(`${orgPrefix()}/scales/${scaleId}`, data),
+    }>) => api.patch<Scale>(`${libraryApi('scales')}/${scaleId}`, data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scales'] });
     },
@@ -109,7 +107,7 @@ export function useUpdateScale() {
 export function useDeleteScale() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (scaleId: string) => api.delete(`${orgPrefix()}/scales/${scaleId}`),
+    mutationFn: (scaleId: string) => api.delete(`${libraryApi('scales')}/${scaleId}`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['scales'] });
     },

@@ -132,22 +132,10 @@ export function TenantList() {
 
   return (
     <div className="p-6 max-w-7xl mx-auto">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-xl font-bold text-slate-900">租户管理</h1>
-          <p className="text-sm text-slate-500 mt-1">管理平台机构、套餐与成员</p>
-        </div>
-        <button
-          onClick={() => navigate('/admin/tenants/new')}
-          className="flex items-center gap-1.5 bg-blue-500 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-600 transition"
-        >
-          <Plus className="w-4 h-4" />
-          新建租户
-        </button>
-      </div>
-
-      {/* Filters */}
+      {/* Filters + primary action on one row. Page title removed — the
+          left sidebar nav already labels the page "租户管理", and
+          duplicating it at the top crowds the viewport. */}
+      <p className="text-sm text-slate-500 mb-3">管理平台机构、套餐与成员</p>
       <div className="flex items-center gap-3 mb-4 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -188,6 +176,17 @@ export function TenantList() {
           <option value="expired">已过期</option>
           <option value="none">未签发</option>
         </select>
+        {/* `ml-auto` keeps the primary action on the right — works both when
+            everything fits one row AND when flex-wrap kicks in at narrow
+            widths (the wrapped row containing only this button still sticks
+            right, instead of defaulting to left-aligned). */}
+        <button
+          onClick={() => navigate('/admin/tenants/new')}
+          className="ml-auto flex items-center gap-1.5 bg-blue-500 text-white text-sm px-4 py-2 rounded-lg hover:bg-blue-600 transition"
+        >
+          <Plus className="w-4 h-4" />
+          新建租户
+        </button>
       </div>
 
       {/* Table */}

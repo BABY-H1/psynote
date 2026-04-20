@@ -323,6 +323,10 @@ export const noteTemplates = pgTable('note_templates', {
   fieldDefinitions: jsonb('field_definitions').notNull().default([]), // [{key, label, placeholder, required, order}]
   isDefault: boolean('is_default').notNull().default(false),
   visibility: text('visibility').notNull().default('personal'), // personal | organization | public
+  // Distribution scope for platform-level templates (orgId IS NULL). Empty
+  // array = visible to all orgs; non-empty = restricted to listed orgs.
+  // Irrelevant for org-owned rows.
+  allowedOrgIds: jsonb('allowed_org_ids').default([]),
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
@@ -963,10 +967,15 @@ export const phiAccessLogs = pgTable('phi_access_logs', {
 
 export const consentTemplates = pgTable('consent_templates', {
   id: uuid('id').primaryKey().defaultRandom(),
-  orgId: uuid('org_id').notNull().references(() => organizations.id),
+  // Nullable: platform-level templates owned by the system admin have
+  // orgId IS NULL. Set in migration 023.
+  orgId: uuid('org_id').references(() => organizations.id),
   title: text('title').notNull(),
   consentType: text('consent_type').notNull(), // treatment | data_collection | ai_processing | data_sharing | research
   content: text('content').notNull(), // full text of the consent document
+  visibility: text('visibility').notNull().default('personal'), // personal | organization | public
+  // Distribution scope — see noteTemplates.allowedOrgIds for semantics.
+  allowedOrgIds: jsonb('allowed_org_ids').default([]),
   createdBy: uuid('created_by').references(() => users.id),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),

@@ -2,8 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { assertLibraryItemOwnedByOrg } from '../../middleware/library-ownership.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
+import { scales } from '../../db/schema.js';
 import * as scaleService from './scale.service.js';
 
 export async function scaleRoutes(app: FastifyInstance) {
@@ -77,6 +79,7 @@ export async function scaleRoutes(app: FastifyInstance) {
     preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request) => {
     const { scaleId } = request.params as { scaleId: string };
+    await assertLibraryItemOwnedByOrg(scales, scaleId, request.org!.orgId);
     const body = request.body as Partial<{
       title: string;
       description: string;
@@ -116,6 +119,7 @@ export async function scaleRoutes(app: FastifyInstance) {
     preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request, reply) => {
     const { scaleId } = request.params as { scaleId: string };
+    await assertLibraryItemOwnedByOrg(scales, scaleId, request.org!.orgId);
     await scaleService.deleteScale(scaleId);
     await logAudit(request, 'delete', 'scales', scaleId);
     return reply.status(204).send();

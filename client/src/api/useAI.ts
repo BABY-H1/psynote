@@ -2,9 +2,17 @@ import { useMutation } from '@tanstack/react-query';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
 
+/**
+ * AI endpoint prefix. System admins have no current org, so we route them
+ * to `/admin/ai/...` which mounts only the library-authoring sub-modules
+ * (see `adminAiRoutes` in the server). Org users (counselor / org_admin)
+ * stay on `/orgs/:orgId/ai/...`, which has the full clinical + authoring
+ * surface.
+ */
 function orgPrefix() {
-  const orgId = useAuthStore.getState().currentOrgId;
-  return `/orgs/${orgId}/ai`;
+  const { currentOrgId, isSystemAdmin } = useAuthStore.getState();
+  if (!currentOrgId && isSystemAdmin) return '/admin/ai';
+  return `/orgs/${currentOrgId}/ai`;
 }
 
 /** Interpret assessment results */
@@ -463,6 +471,36 @@ export function useCreateNoteTemplateChat() {
         | { type: 'message'; content: string }
         | { type: 'template'; template: { title: string; format: string; fieldDefinitions: { key: string; label: string; placeholder: string; required: boolean; order: number }[] }; summary: string }
       >(`${orgPrefix()}/create-note-template-chat`, data),
+  });
+}
+
+// ─── Treatment Goal AI ─────────────────────────────────────────
+
+export interface ExtractedGoal {
+  title: string;
+  description: string;
+  problemArea: string;
+  category: 'short_term' | 'long_term';
+  objectivesTemplate: string[];
+  interventionSuggestions: string[];
+}
+
+/** Extract treatment goal from text */
+export function useExtractGoal() {
+  return useMutation({
+    mutationFn: (data: { content: string }) =>
+      api.post<ExtractedGoal>(`${orgPrefix()}/extract-goal`, data),
+  });
+}
+
+/** AI-guided treatment goal creation chat */
+export function useCreateGoalChat() {
+  return useMutation({
+    mutationFn: (data: { messages: { role: 'user' | 'assistant'; content: string }[] }) =>
+      api.post<
+        | { type: 'message'; content: string }
+        | { type: 'goal'; goal: ExtractedGoal; summary: string }
+      >(`${orgPrefix()}/create-goal-chat`, data),
   });
 }
 

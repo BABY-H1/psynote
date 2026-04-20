@@ -2,8 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { assertLibraryItemOwnedByOrg } from '../../middleware/library-ownership.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
+import { groupSchemes } from '../../db/schema.js';
 import * as schemeService from './scheme.service.js';
 
 export async function schemeRoutes(app: FastifyInstance) {
@@ -39,6 +41,7 @@ export async function schemeRoutes(app: FastifyInstance) {
     preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request) => {
     const { schemeId } = request.params as { schemeId: string };
+    await assertLibraryItemOwnedByOrg(groupSchemes, schemeId, request.org!.orgId);
     const { sessions, ...schemeUpdates } = request.body as any;
 
     const updated = await schemeService.updateScheme(schemeId, schemeUpdates, sessions);
@@ -50,6 +53,7 @@ export async function schemeRoutes(app: FastifyInstance) {
     preHandler: [requireRole('org_admin')],
   }, async (request, reply) => {
     const { schemeId } = request.params as { schemeId: string };
+    await assertLibraryItemOwnedByOrg(groupSchemes, schemeId, request.org!.orgId);
     await schemeService.deleteScheme(schemeId);
     await logAudit(request, 'delete', 'group_schemes', schemeId);
     return reply.status(204).send();

@@ -2,29 +2,32 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { GroupScheme, GroupInstance, GroupEnrollment, GroupSessionRecord, AssessmentConfig } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
+import { libraryApi, libraryScopeKey } from '../shared/api/libraryScope';
 
 function orgPrefix() {
   const orgId = useAuthStore.getState().currentOrgId;
   return `/orgs/${orgId}`;
 }
 
-// ─── Schemes ─────────────────────────────────────────────────────
+// ─── Schemes (shared library — routes via libraryApi) ────────────
 
 export function useGroupSchemes() {
   const orgId = useAuthStore((s) => s.currentOrgId);
+  const isSystemAdmin = useAuthStore((s) => s.isSystemAdmin);
   return useQuery({
-    queryKey: ['groupSchemes', orgId],
-    queryFn: () => api.get<GroupScheme[]>(`${orgPrefix()}/group-schemes`),
-    enabled: !!orgId,
+    queryKey: ['groupSchemes', libraryScopeKey()],
+    queryFn: () => api.get<GroupScheme[]>(libraryApi('schemes')),
+    enabled: !!orgId || isSystemAdmin,
   });
 }
 
 export function useGroupScheme(schemeId: string | undefined) {
   const orgId = useAuthStore((s) => s.currentOrgId);
+  const isSystemAdmin = useAuthStore((s) => s.isSystemAdmin);
   return useQuery({
-    queryKey: ['groupSchemes', orgId, schemeId],
-    queryFn: () => api.get<GroupScheme>(`${orgPrefix()}/group-schemes/${schemeId}`),
-    enabled: !!orgId && !!schemeId,
+    queryKey: ['groupSchemes', libraryScopeKey(), schemeId],
+    queryFn: () => api.get<GroupScheme>(`${libraryApi('schemes')}/${schemeId}`),
+    enabled: (!!orgId || isSystemAdmin) && !!schemeId,
   });
 }
 
@@ -32,7 +35,7 @@ export function useCreateGroupScheme() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: Record<string, unknown>) =>
-      api.post<GroupScheme>(`${orgPrefix()}/group-schemes`, data),
+      api.post<GroupScheme>(libraryApi('schemes'), data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupSchemes'] }); },
   });
 }
@@ -41,7 +44,7 @@ export function useUpdateGroupScheme() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ schemeId, ...data }: { schemeId: string } & Record<string, unknown>) =>
-      api.patch<GroupScheme>(`${orgPrefix()}/group-schemes/${schemeId}`, data),
+      api.patch<GroupScheme>(`${libraryApi('schemes')}/${schemeId}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupSchemes'] }); },
   });
 }
@@ -49,7 +52,7 @@ export function useUpdateGroupScheme() {
 export function useDeleteGroupScheme() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (schemeId: string) => api.delete(`${orgPrefix()}/group-schemes/${schemeId}`),
+    mutationFn: (schemeId: string) => api.delete(`${libraryApi('schemes')}/${schemeId}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['groupSchemes'] }); },
   });
 }

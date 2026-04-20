@@ -2,13 +2,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Course, CourseEnrollment, CourseTemplateTag, CourseLessonBlock } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
+import { libraryApi, libraryScopeKey } from '../shared/api/libraryScope';
 
 function orgPrefix() {
   const orgId = useAuthStore.getState().currentOrgId;
   return `/orgs/${orgId}`;
 }
 
-// ─── Course Queries ─────────────────────────────────────────────
+// ─── Course Queries (library — routes via libraryApi) ───────────
+// Course-instance operations (publish/enroll/blocks/tags/etc.) below keep
+// using orgPrefix since instances are always org-scoped. Only the template
+// CRUD (list/detail/create/update/delete) routes through libraryApi so
+// the system admin can manage platform-level course templates.
 
 export function useCourses(filters?: {
   status?: string;
@@ -17,6 +22,7 @@ export function useCourses(filters?: {
   search?: string;
 }) {
   const orgId = useAuthStore((s) => s.currentOrgId);
+  const isSystemAdmin = useAuthStore((s) => s.isSystemAdmin);
   const params = new URLSearchParams();
   if (filters?.status) params.set('status', filters.status);
   if (filters?.courseType) params.set('courseType', filters.courseType);
@@ -25,18 +31,19 @@ export function useCourses(filters?: {
   const qs = params.toString();
 
   return useQuery({
-    queryKey: ['courses', orgId, filters],
-    queryFn: () => api.get<Course[]>(`${orgPrefix()}/courses${qs ? `?${qs}` : ''}`),
-    enabled: !!orgId,
+    queryKey: ['courses', libraryScopeKey(), filters],
+    queryFn: () => api.get<Course[]>(`${libraryApi('courses')}${qs ? `?${qs}` : ''}`),
+    enabled: !!orgId || isSystemAdmin,
   });
 }
 
 export function useCourse(courseId: string | undefined) {
   const orgId = useAuthStore((s) => s.currentOrgId);
+  const isSystemAdmin = useAuthStore((s) => s.isSystemAdmin);
   return useQuery({
-    queryKey: ['courses', orgId, courseId],
-    queryFn: () => api.get<Course>(`${orgPrefix()}/courses/${courseId}`),
-    enabled: !!orgId && !!courseId,
+    queryKey: ['courses', libraryScopeKey(), courseId],
+    queryFn: () => api.get<Course>(`${libraryApi('courses')}/${courseId}`),
+    enabled: (!!orgId || isSystemAdmin) && !!courseId,
   });
 }
 
@@ -46,7 +53,7 @@ export function useCreateCourse() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: Partial<Course> & { title: string }) =>
-      api.post<Course>(`${orgPrefix()}/courses`, data),
+      api.post<Course>(libraryApi('courses'), data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['courses'] }); },
   });
 }
@@ -55,7 +62,7 @@ export function useUpdateCourse() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ courseId, ...data }: { courseId: string } & Partial<Course>) =>
-      api.patch<Course>(`${orgPrefix()}/courses/${courseId}`, data),
+      api.patch<Course>(`${libraryApi('courses')}/${courseId}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['courses'] }); },
   });
 }
@@ -63,7 +70,7 @@ export function useUpdateCourse() {
 export function useDeleteCourse() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (courseId: string) => api.delete(`${orgPrefix()}/courses/${courseId}`),
+    mutationFn: (courseId: string) => api.delete(`${libraryApi('courses')}/${courseId}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['courses'] }); },
   });
 }

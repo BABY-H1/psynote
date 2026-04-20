@@ -19,3 +19,6 @@ test-results/
 # TypeScript incremental build cache
 *.tsbuildinfo
 
+# Local upload storage (user-generated content)
+server/uploads/
+

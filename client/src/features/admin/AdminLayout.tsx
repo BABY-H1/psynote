@@ -28,9 +28,14 @@ export function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
-      {/* Sidebar */}
-      <aside className="w-60 bg-white border-r border-slate-200 flex flex-col shrink-0">
+    // Match AppShell: lock outer to viewport height so the sidebar stays
+    // fixed and only <main> scrolls. Without this the whole page would
+    // scroll together and any `sticky` inside sub-pages would lose its
+    // frame of reference.
+    <div className="h-screen bg-slate-50 flex overflow-hidden">
+      {/* Sidebar — flex-shrink-0 keeps the 240px width; inner overflow-y-auto
+          lets a very long nav list scroll independently too. */}
+      <aside className="w-60 bg-white border-r border-slate-200 flex flex-col flex-shrink-0 overflow-y-auto">
         <div className="px-5 py-5 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-red-500 rounded-lg flex items-center justify-center">

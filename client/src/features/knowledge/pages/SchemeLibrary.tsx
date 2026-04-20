@@ -1,19 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useGroupSchemes, useCreateGroupScheme, useDeleteGroupScheme,
 } from '../../../api/useGroups';
 import { useExtractScheme, useCreateSchemeChat } from '../../../api/useAI';
 import { PageLoading, useToast } from '../../../shared/components';
+import { DistributionControl } from '../../../shared/components/DistributionControl';
+import { useIsSystemLibraryScope } from '../../../shared/api/libraryScope';
 import {
   BookOpen, Upload, Sparkles, Loader2, Send, ArrowLeft, Eye, Edit3, Trash2,
 } from 'lucide-react';
 import { SchemeDetail } from '../components/SchemeDetail';
-
-const visibilityLabels: Record<string, string> = {
-  personal: '仅自己',
-  organization: '本机构',
-  public: '公开',
-};
 
 type ViewMode = 'list' | 'detail' | 'import' | 'ai';
 
@@ -21,6 +18,8 @@ export function SchemeLibrary() {
   const { data: schemes, isLoading } = useGroupSchemes();
   const deleteScheme = useDeleteGroupScheme();
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const isSystemScope = useIsSystemLibraryScope();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedSchemeId, setSelectedSchemeId] = useState<string | null>(null);
   const [detailEditing, setDetailEditing] = useState(false);
@@ -80,7 +79,7 @@ export function SchemeLibrary() {
             <div key={s.id} className="bg-white rounded-xl border border-slate-200 p-4">
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <BookOpen className="w-4 h-4 text-violet-500 flex-shrink-0" />
                     <span className="text-sm font-semibold text-slate-900">{s.title}</span>
                     {s.targetAudience && (
@@ -88,11 +87,15 @@ export function SchemeLibrary() {
                         {s.targetAudience}
                       </span>
                     )}
-                    <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
-                      {visibilityLabels[s.visibility] || s.visibility}
-                    </span>
+                    <DistributionControl
+                      resource="schemes"
+                      item={s}
+                      onSaved={() => qc.invalidateQueries({ queryKey: ['groupSchemes'] })}
+                    />
                     {s.sessions && s.sessions.length > 0 && (
-                      <span className="text-xs text-slate-400">{s.sessions.length} 次活动</span>
+                      <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full">
+                        {s.sessions.length} 次活动
+                      </span>
                     )}
                   </div>
                   {s.description && (
@@ -108,7 +111,13 @@ export function SchemeLibrary() {
                     <Eye className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => goToDetail(s.id, true)}
+                    onClick={() => {
+                      if (!s.orgId && !isSystemScope) {
+                        toast('无权修改：平台级内容仅系统管理员可管理', 'error');
+                        return;
+                      }
+                      goToDetail(s.id, true);
+                    }}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
                     title="编辑"
                   >
@@ -116,6 +125,10 @@ export function SchemeLibrary() {
                   </button>
                   <button
                     onClick={async () => {
+                      if (!s.orgId && !isSystemScope) {
+                        toast('无权删除：平台级内容仅系统管理员可管理', 'error');
+                        return;
+                      }
                       if (confirm(`确定删除"${s.title}"？`)) {
                         try { await deleteScheme.mutateAsync(s.id); toast('已删除', 'success'); }
                         catch { toast('删除失败', 'error'); }

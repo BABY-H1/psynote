@@ -79,11 +79,13 @@ export async function adminLicenseRoutes(app: FastifyInstance) {
 
   /** Issue a new license for an org */
   app.post('/issue', async (request) => {
-    const { orgId, tier, maxSeats, months } = request.body as {
+    const { orgId, tier, maxSeats, months, validFrom } = request.body as {
       orgId?: string;
       tier?: string;
       maxSeats?: number;
       months?: number;
+      /** ISO date string; optional, defaults to now. */
+      validFrom?: string;
     };
 
     if (!orgId) throw new ValidationError('orgId is required');
@@ -92,6 +94,14 @@ export async function adminLicenseRoutes(app: FastifyInstance) {
     }
     if (!maxSeats || maxSeats < 1) throw new ValidationError('maxSeats must be >= 1');
     if (!months || months < 1 || months > 120) throw new ValidationError('months must be 1-120');
+
+    let validFromDate: Date | undefined;
+    if (validFrom) {
+      validFromDate = new Date(validFrom);
+      if (Number.isNaN(validFromDate.getTime())) {
+        throw new ValidationError('validFrom must be a valid ISO date');
+      }
+    }
 
     // Verify org exists
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
@@ -103,6 +113,7 @@ export async function adminLicenseRoutes(app: FastifyInstance) {
       tier: tier as any,
       maxSeats,
       months,
+      validFrom: validFromDate,
     });
 
     // Persist license key to org

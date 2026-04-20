@@ -88,9 +88,10 @@ export function SystemConfig() {
         </div>
       )}
 
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-slate-900">系统配置</h2>
-        <button onClick={loadConfig} className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700">
+      {/* Title "系统配置" removed — the sidebar already labels this page
+          "系统设置". Refresh control stays, right-aligned. */}
+      <div className="flex items-center">
+        <button onClick={loadConfig} className="ml-auto flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700">
           <RefreshCw className="w-3.5 h-3.5" /> 刷新
         </button>
       </div>

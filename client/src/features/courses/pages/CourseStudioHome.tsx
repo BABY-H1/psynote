@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { BookOpen, Edit3, Eye, Sparkles, Trash2, Upload } from 'lucide-react';
 import { useCourses, useDeleteCourse } from '../../../api/useCourses';
 import { AICourseCreator } from '../components/AICourseCreator';
 import { CourseImporter } from './CourseImporter';
 import { CourseDetail } from './CourseDetail';
 import { PageLoading, useToast } from '../../../shared/components';
+import { DistributionControl } from '../../../shared/components/DistributionControl';
+import { useIsSystemLibraryScope } from '../../../shared/api/libraryScope';
 
 type ViewMode =
   | { type: 'list' }
@@ -39,6 +42,8 @@ export function CourseStudioHome() {
   const { data: courses, isLoading } = useCourses();
   const deleteCourse = useDeleteCourse();
   const [view, setView] = useState<ViewMode>({ type: 'list' });
+  const qc = useQueryClient();
+  const isSystemScope = useIsSystemLibraryScope();
 
   if (view.type === 'import') {
     return (
@@ -125,6 +130,11 @@ export function CourseStudioHome() {
                         模板
                       </span>
                     )}
+                    <DistributionControl
+                      resource="courses"
+                      item={course}
+                      onSaved={() => qc.invalidateQueries({ queryKey: ['courses'] })}
+                    />
                   </div>
                   {course.description && (
                     <p className="text-xs text-slate-500 mt-1 line-clamp-2">{course.description}</p>
@@ -142,30 +152,36 @@ export function CourseStudioHome() {
                     <Eye className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() =>
-                      setView({ type: 'detail', courseId: course.id, editing: true })
-                    }
+                    onClick={() => {
+                      if (!course.orgId && !isSystemScope) {
+                        toast('无权修改：平台级内容仅系统管理员可管理', 'error');
+                        return;
+                      }
+                      setView({ type: 'detail', courseId: course.id, editing: true });
+                    }}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
                     title="编辑"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
-                  {course.orgId && (
-                    <button
-                      onClick={() => {
-                        if (confirm(`确定删除"${course.title}"？此操作不可恢复。`)) {
-                          deleteCourse.mutate(course.id, {
-                            onSuccess: () => toast('课程已删除', 'success'),
-                            onError: (error) => toast(error.message || '删除失败', 'error'),
-                          });
-                        }
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-red-500 rounded"
-                      title="删除"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => {
+                      if (!course.orgId && !isSystemScope) {
+                        toast('无权删除：平台级内容仅系统管理员可管理', 'error');
+                        return;
+                      }
+                      if (confirm(`确定删除"${course.title}"？此操作不可恢复。`)) {
+                        deleteCourse.mutate(course.id, {
+                          onSuccess: () => toast('课程已删除', 'success'),
+                          onError: (error) => toast(error.message || '删除失败', 'error'),
+                        });
+                      }
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-red-500 rounded"
+                    title="删除"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             </div>

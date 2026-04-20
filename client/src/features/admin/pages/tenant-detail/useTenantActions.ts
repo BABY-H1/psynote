@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { OrgTier } from '@psynote/shared';
 import { api } from '../../../../api/client';
-import type { ServiceConfig } from './types';
+import type { BasicInfoDraft, ServiceConfig } from './types';
 
 /**
  * All API-driven actions for TenantDetail collected into one hook, so
@@ -48,13 +48,16 @@ export function useTenantActions(opts: {
 
   const issueLicense = useCallback(
     async (
-      form: { tier: OrgTier; maxSeats: number; months: number },
+      form: { tier: OrgTier; maxSeats: number; months: number; validFrom?: string },
       setError: (msg: string) => void,
       onSuccess: () => void,
     ) => {
       if (!orgId) return;
       setError('');
       try {
+        // Server accepts `validFrom` as an ISO string — forward the YYYY-MM-DD
+        // from the date input as-is; JS's new Date('YYYY-MM-DD') parses it as
+        // UTC midnight, which is the right anchor for the expiry countdown.
         await api.post('/admin/licenses/issue', { orgId, ...form });
         onSuccess();
         await reloadTenant();
@@ -92,16 +95,58 @@ export function useTenantActions(opts: {
     [orgId, reloadTenant],
   );
 
-  const saveServices = useCallback(
-    async (serviceConfig: ServiceConfig | null, setSaving: (s: boolean) => void, onDone: () => void) => {
-      if (!orgId || !serviceConfig) return;
-      setSaving(true);
+  /**
+   * Per-card saves for the basic-info tab. Each card manages its own edit
+   * state and only PATCHes the fields it owns — no cross-card
+   * entanglement, and saving one card doesn't risk clobbering another's
+   * pending edits.
+   *
+   * `saveAiConfig` and `saveEmailConfig` both hit the same
+   * `/admin/tenants/:id/services` endpoint but send only their slice of
+   * the payload; the server merges into `settings.{aiConfig,emailConfig}`
+   * so untouched keys survive.
+   */
+  const saveTenantMetadata = useCallback(
+    async (draft: BasicInfoDraft): Promise<void> => {
+      if (!orgId) return;
       try {
-        await api.patch(`/admin/tenants/${orgId}/services`, serviceConfig);
-        onDone();
+        await api.patch(`/admin/tenants/${orgId}`, {
+          name: draft.name,
+          orgType: draft.orgType,
+        });
+        await reloadTenant();
+      } catch (err: any) {
+        alert(err?.message || '保存失败');
+        throw err;
+      }
+    },
+    [orgId, reloadTenant],
+  );
+
+  const saveAiConfig = useCallback(
+    async (aiConfig: ServiceConfig['aiConfig']): Promise<void> => {
+      if (!orgId) return;
+      try {
+        await api.patch(`/admin/tenants/${orgId}/services`, { aiConfig });
         await reloadServices();
-      } catch (err: any) { alert(err?.message || '保存失败'); }
-      finally { setSaving(false); }
+      } catch (err: any) {
+        alert(err?.message || '保存失败');
+        throw err;
+      }
+    },
+    [orgId, reloadServices],
+  );
+
+  const saveEmailConfig = useCallback(
+    async (emailConfig: ServiceConfig['emailConfig']): Promise<void> => {
+      if (!orgId) return;
+      try {
+        await api.patch(`/admin/tenants/${orgId}/services`, { emailConfig });
+        await reloadServices();
+      } catch (err: any) {
+        alert(err?.message || '保存失败');
+        throw err;
+      }
     },
     [orgId, reloadServices],
   );
@@ -114,6 +159,8 @@ export function useTenantActions(opts: {
     renewLicense,
     revokeLicense,
     modifyLicense,
-    saveServices,
+    saveTenantMetadata,
+    saveAiConfig,
+    saveEmailConfig,
   };
 }

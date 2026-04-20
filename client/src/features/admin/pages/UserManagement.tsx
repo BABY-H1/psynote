@@ -138,15 +138,13 @@ export function UserManagement() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900">账号管理</h2>
-          <p className="text-sm text-slate-500 mt-0.5">管理平台账号：创建系统管理员、重置密码、跨机构禁用用户</p>
-        </div>
+      {/* Title removed — sidebar already says "账号管理". Subtitle kept
+          as a thin helper line; 创建用户 button sticks right via ml-auto. */}
+      <div className="flex items-center mb-4">
+        <p className="text-sm text-slate-500">管理平台账号：创建系统管理员、重置密码、跨机构禁用用户</p>
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition"
+          className="ml-auto flex items-center gap-1.5 px-3 py-1.5 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600 transition"
         >
           <UserPlus className="w-4 h-4" /> 创建用户
         </button>

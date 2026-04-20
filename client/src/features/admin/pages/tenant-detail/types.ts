@@ -46,7 +46,18 @@ export interface ServiceConfig {
   };
 }
 
-export type Tab = 'overview' | 'members' | 'subscription' | 'services';
+/**
+ * Tab values after the 2026-04 consolidation: `overview` + `subscription`
+ * + `services` merged into a single `basic` tab with unified edit mode;
+ * `members` stays its own tab because it has its own mutation flows.
+ */
+export type Tab = 'basic' | 'members';
+
+/** Fields edited inline at the top of the basic-info tab. */
+export interface BasicInfoDraft {
+  name: string;
+  orgType: string;
+}
 
 export const ROLE_OPTIONS = ['org_admin', 'counselor', 'client'] as const;
 

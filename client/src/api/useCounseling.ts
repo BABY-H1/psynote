@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { CareEpisode, CareTimelineEvent, Appointment, SessionNote, Referral, FollowUpPlan, FollowUpReview, NoteTemplate, NoteAttachment } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
+import { libraryApi, libraryScopeKey } from '../shared/api/libraryScope';
 
 function orgPrefix() {
   const orgId = useAuthStore.getState().currentOrgId;
@@ -243,14 +244,15 @@ export function useUpdateSessionNote() {
   });
 }
 
-// ─── Note Templates ─────────────────────────────────────────────
+// ─── Note Templates (shared library — routes via libraryApi) ────
 
 export function useNoteTemplates() {
   const orgId = useAuthStore((s) => s.currentOrgId);
+  const isSystemAdmin = useAuthStore((s) => s.isSystemAdmin);
   return useQuery({
-    queryKey: ['noteTemplates', orgId],
-    queryFn: () => api.get<NoteTemplate[]>(`${orgPrefix()}/note-templates`),
-    enabled: !!orgId,
+    queryKey: ['noteTemplates', libraryScopeKey()],
+    queryFn: () => api.get<NoteTemplate[]>(libraryApi('templates')),
+    enabled: !!orgId || isSystemAdmin,
   });
 }
 
@@ -258,7 +260,7 @@ export function useCreateNoteTemplate() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { title: string; format: string; fieldDefinitions: unknown[]; visibility?: string }) =>
-      api.post<NoteTemplate>(`${orgPrefix()}/note-templates`, data),
+      api.post<NoteTemplate>(libraryApi('templates'), data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['noteTemplates'] }); },
   });
 }
@@ -273,7 +275,7 @@ export function useUpdateNoteTemplate() {
       fieldDefinitions?: unknown[];
       visibility?: string;
       isDefault?: boolean;
-    }) => api.patch<NoteTemplate>(`${orgPrefix()}/note-templates/${templateId}`, data),
+    }) => api.patch<NoteTemplate>(`${libraryApi('templates')}/${templateId}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['noteTemplates'] }); },
   });
 }
@@ -281,7 +283,7 @@ export function useUpdateNoteTemplate() {
 export function useDeleteNoteTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (templateId: string) => api.delete(`${orgPrefix()}/note-templates/${templateId}`),
+    mutationFn: (templateId: string) => api.delete(`${libraryApi('templates')}/${templateId}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['noteTemplates'] }); },
   });
 }

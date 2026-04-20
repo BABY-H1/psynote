@@ -5,6 +5,9 @@ import { AIScaleCreator } from '../components/AIScaleCreator';
 import { ScaleImporter } from '../components/ScaleImporter';
 import { Sparkles, FileText, Trash2, Edit3, Eye, X, ClipboardList } from 'lucide-react';
 import { PageLoading, EmptyState, StatusBadge, useToast } from '../../../shared/components';
+import { DistributionControl } from '../../../shared/components/DistributionControl';
+import { useIsSystemLibraryScope } from '../../../shared/api/libraryScope';
+import { useQueryClient } from '@tanstack/react-query';
 
 type View =
   | { type: 'list' }
@@ -32,6 +35,8 @@ export function ScaleLibrary() {
   const { data: scales, isLoading } = useScales();
   const deleteScale = useDeleteScale();
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const isSystemScope = useIsSystemLibraryScope();
   const [view, setView] = useState<View>({ type: 'list' });
   const [modal, setModal] = useState<ModalView>(null);
 
@@ -112,11 +117,18 @@ export function ScaleLibrary() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <ClipboardList className="w-4 h-4 text-brand-500 flex-shrink-0" />
                     <span className="text-sm font-semibold text-slate-900 truncate">{scale.title}</span>
-                    {scale.isPublic && <StatusBadge label="公开" variant="green" />}
                     {!scale.orgId && <StatusBadge label="平台" variant="blue" />}
-                    <span className="text-xs text-slate-400">
-                      {scale.dimensionCount ?? '-'} 维度 · {scale.itemCount ?? '-'} 题
+                    <span className="text-xs px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full">
+                      {scale.dimensionCount ?? '-'} 维度
                     </span>
+                    <span className="text-xs px-2 py-0.5 bg-indigo-50 text-indigo-700 rounded-full">
+                      {scale.itemCount ?? '-'} 题
+                    </span>
+                    <DistributionControl
+                      resource="scales"
+                      item={scale}
+                      onSaved={() => qc.invalidateQueries({ queryKey: ['scales'] })}
+                    />
                   </div>
                   {scale.description && (
                     <p className="text-xs text-slate-500 mt-1 line-clamp-2">{scale.description}</p>
@@ -138,28 +150,36 @@ export function ScaleLibrary() {
                     <ClipboardList className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => setView({ type: 'detail', scaleId: scale.id, editing: true })}
+                    onClick={() => {
+                      if (!scale.orgId && !isSystemScope) {
+                        toast('无权修改：平台级内容仅系统管理员可管理', 'error');
+                        return;
+                      }
+                      setView({ type: 'detail', scaleId: scale.id, editing: true });
+                    }}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
                     title="编辑"
                   >
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
-                  {scale.orgId && (
-                    <button
-                      onClick={() => {
-                        if (confirm('确定删除此量表？此操作不可恢复。')) {
-                          deleteScale.mutate(scale.id, {
-                            onSuccess: () => toast('量表已删除', 'success'),
-                            onError: (err) => toast(err.message || '删除失败', 'error'),
-                          });
-                        }
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-red-500 rounded"
-                      title="删除"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => {
+                      if (!scale.orgId && !isSystemScope) {
+                        toast('无权删除：平台级内容仅系统管理员可管理', 'error');
+                        return;
+                      }
+                      if (confirm('确定删除此量表？此操作不可恢复。')) {
+                        deleteScale.mutate(scale.id, {
+                          onSuccess: () => toast('量表已删除', 'success'),
+                          onError: (err) => toast(err.message || '删除失败', 'error'),
+                        });
+                      }
+                    }}
+                    className="p-1.5 text-slate-400 hover:text-red-500 rounded"
+                    title="删除"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
                 </div>
               </div>
             </div>

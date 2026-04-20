@@ -41,11 +41,13 @@ describe('aiRoutes — route registration contract', () => {
       'POST /configure-screening-rules',
       'POST /create-agreement-chat',
       'POST /create-course-chat',
+      'POST /create-goal-chat',
       'POST /create-note-template-chat',
       'POST /create-scale-chat',
       'POST /create-scheme-chat',
       'POST /extract-agreement',
       'POST /extract-course',
+      'POST /extract-goal',
       'POST /extract-note-template',
       'POST /extract-scale',
       'POST /extract-scheme',
@@ -74,13 +76,13 @@ describe('aiRoutes — route registration contract', () => {
     ]);
   });
 
-  it('registers exactly 38 endpoints (no drift)', async () => {
+  it('registers exactly 40 endpoints (no drift)', async () => {
     const app = Fastify();
     let count = 0;
     app.addHook('onRoute', () => { count++; });
     await app.register(aiRoutes);
     await app.ready();
     await app.close();
-    expect(count).toBe(38);
+    expect(count).toBe(40);
   });
 });

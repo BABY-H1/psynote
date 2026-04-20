@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useConsentTemplates, useCreateConsentTemplate, useDeleteConsentTemplate,
 } from '../../../api/useConsent';
 import { useExtractAgreement, useCreateAgreementChat } from '../../../api/useAI';
 import { PageLoading, useToast } from '../../../shared/components';
 import { AgreementDetail } from '../components/AgreementDetail';
+import { DistributionControl } from '../../../shared/components/DistributionControl';
+import { useIsSystemLibraryScope } from '../../../shared/api/libraryScope';
 import {
   Edit3, Trash2, FileCheck, Eye, Upload, Sparkles, Loader2, Send,
   ArrowLeft, Check,
@@ -27,6 +30,8 @@ export function AgreementLibrary() {
   const { data: templates, isLoading } = useConsentTemplates();
   const deleteTemplate = useDeleteConsentTemplate();
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const isSystemScope = useIsSystemLibraryScope();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [detailEditing, setDetailEditing] = useState(false);
@@ -101,12 +106,17 @@ export function AgreementLibrary() {
             <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4">
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <FileCheck className="w-4 h-4 text-brand-500 flex-shrink-0" />
                     <span className="text-sm font-semibold text-slate-900">{t.title}</span>
                     <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
                       {consentTypeLabels[t.consentType] || t.consentType}
                     </span>
+                    <DistributionControl
+                      resource="agreements"
+                      item={t}
+                      onSaved={() => qc.invalidateQueries({ queryKey: ['consentTemplates'] })}
+                    />
                   </div>
                   <p className="text-xs text-slate-500 mt-1 line-clamp-2">{t.content.slice(0, 100)}...</p>
                 </div>
@@ -119,7 +129,13 @@ export function AgreementLibrary() {
                     <Eye className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => goToDetail(t.id, true)}
+                    onClick={() => {
+                      if (!t.orgId && !isSystemScope) {
+                        toast('无权修改：平台级内容仅系统管理员可管理', 'error');
+                        return;
+                      }
+                      goToDetail(t.id, true);
+                    }}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
                     title="编辑"
                   >
@@ -127,6 +143,10 @@ export function AgreementLibrary() {
                   </button>
                   <button
                     onClick={async () => {
+                      if (!t.orgId && !isSystemScope) {
+                        toast('无权删除：平台级内容仅系统管理员可管理', 'error');
+                        return;
+                      }
                       if (confirm(`确定删除"${t.title}"？`)) {
                         try {
                           await deleteTemplate.mutateAsync(t.id);

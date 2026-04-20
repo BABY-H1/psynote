@@ -2,9 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { assertLibraryItemOwnedByOrg } from '../../middleware/library-ownership.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import { rejectClient } from '../../middleware/reject-client.js';
+import { courses } from '../../db/schema.js';
 import * as courseService from './course.service.js';
 
 export async function courseRoutes(app: FastifyInstance) {
@@ -83,6 +85,7 @@ export async function courseRoutes(app: FastifyInstance) {
     preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request) => {
     const { courseId } = request.params as { courseId: string };
+    await assertLibraryItemOwnedByOrg(courses, courseId, request.org!.orgId);
     const body = request.body as Partial<{
       title: string;
       description: string;
@@ -110,6 +113,7 @@ export async function courseRoutes(app: FastifyInstance) {
     preHandler: [requireRole('org_admin', 'counselor')],
   }, async (request, reply) => {
     const { courseId } = request.params as { courseId: string };
+    await assertLibraryItemOwnedByOrg(courses, courseId, request.org!.orgId);
     await courseService.deleteCourse(courseId);
     await logAudit(request, 'delete', 'courses', courseId);
     return reply.status(204).send();

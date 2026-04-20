@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Building2, CreditCard, Users, Wrench } from 'lucide-react';
+import { ArrowLeft, Building2, Users } from 'lucide-react';
 import { TIER_LABELS, getOrgTypeDisplay, type OrgTier } from '@psynote/shared';
 import { api } from '../../../api/client';
 import {
@@ -8,10 +8,8 @@ import {
   IssueLicenseModal,
   ModifyLicenseModal,
 } from './tenant-detail/TenantDetailModals';
+import { TenantBasicInfoTab } from './tenant-detail/TenantBasicInfoTab';
 import { TenantMembersTab } from './tenant-detail/TenantMembersTab';
-import { TenantOverviewTab } from './tenant-detail/TenantOverviewTab';
-import { TenantServicesTab } from './tenant-detail/TenantServicesTab';
-import { TenantSubscriptionTab } from './tenant-detail/TenantSubscriptionTab';
 import { useTenantActions } from './tenant-detail/useTenantActions';
 import {
   LICENSE_STATUS_LABELS,
@@ -22,23 +20,32 @@ import {
 } from './tenant-detail/types';
 
 /**
- * Sysadmin-facing tenant inspector / editor. Orchestrates 4 tabs +
- * 3 modals. Data loads once on mount and refreshes after every
- * mutation via `useTenantActions`.
+ * Sysadmin-facing tenant inspector / editor. Two tabs:
+ *   - 基本信息: 5 cards, each editable card owns its own edit state and
+ *     PATCHes only its own slice on save. No global edit mode.
+ *   - 成员: member add / remove / role change (modal-driven).
+ * License lifecycle mutations (issue / modify / renew / revoke) go
+ * through modals because they're non-idempotent transactions with their
+ * own validation, not simple form fields.
  */
 export function TenantDetail() {
   const { orgId } = useParams<{ orgId: string }>();
   const navigate = useNavigate();
   const [tenant, setTenant] = useState<TenantDetailData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab, setTab] = useState<Tab>('basic');
 
   const [showAddMember, setShowAddMember] = useState(false);
   const [addMemberForm, setAddMemberForm] = useState({ email: '', name: '', password: '', role: 'counselor' });
   const [addMemberError, setAddMemberError] = useState('');
 
   const [showIssueLicense, setShowIssueLicense] = useState(false);
-  const [licenseForm, setLicenseForm] = useState({ tier: 'team' as OrgTier, maxSeats: 10, months: 12 });
+  const [licenseForm, setLicenseForm] = useState({
+    tier: 'team' as OrgTier,
+    maxSeats: 10,
+    months: 12,
+    validFrom: new Date().toISOString().slice(0, 10),
+  });
   const [licenseError, setLicenseError] = useState('');
 
   const [showModifyLicense, setShowModifyLicense] = useState(false);
@@ -46,8 +53,6 @@ export function TenantDetail() {
   const [modifyError, setModifyError] = useState('');
 
   const [serviceConfig, setServiceConfig] = useState<ServiceConfig | null>(null);
-  const [serviceEditing, setServiceEditing] = useState(false);
-  const [serviceSaving, setServiceSaving] = useState(false);
 
   const reloadTenant = useCallback(async () => {
     if (!orgId) return;
@@ -65,7 +70,8 @@ export function TenantDetail() {
 
   useEffect(() => { reloadTenant(); }, [reloadTenant]);
   useEffect(() => {
-    if (tab === 'services' && !serviceConfig) reloadServices();
+    // Services config is part of the basic-info tab; fetched lazily on first visit.
+    if (tab === 'basic' && !serviceConfig) reloadServices();
   }, [tab, serviceConfig, reloadServices]);
 
   const actions = useTenantActions({ orgId, reloadTenant, reloadServices });
@@ -83,10 +89,8 @@ export function TenantDetail() {
   const typeDisplay = getOrgTypeDisplay(extractOrgType(tenant));
 
   const tabs: { key: Tab; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
-    { key: 'overview', label: '概览', icon: Building2 },
+    { key: 'basic', label: '基本信息', icon: Building2 },
     { key: 'members', label: `成员 (${tenant.members.length})`, icon: Users },
-    { key: 'subscription', label: '订阅', icon: CreditCard },
-    { key: 'services', label: '服务配置', icon: Wrench },
   ];
 
   return (
@@ -126,33 +130,25 @@ export function TenantDetail() {
         ))}
       </div>
 
-      {tab === 'overview' && <TenantOverviewTab tenant={tenant} />}
-      {tab === 'members' && (
-        <TenantMembersTab
-          members={tenant.members}
-          onAddMember={() => setShowAddMember(true)}
-          onChangeRole={actions.changeMemberRole}
-          onRemoveMember={actions.removeMember}
-        />
-      )}
-      {tab === 'subscription' && (
-        <TenantSubscriptionTab
+      {tab === 'basic' && (
+        <TenantBasicInfoTab
           tenant={tenant}
+          serviceConfig={serviceConfig}
+          onSaveMetadata={actions.saveTenantMetadata}
+          onSaveAiConfig={actions.saveAiConfig}
+          onSaveEmailConfig={actions.saveEmailConfig}
           onIssue={() => setShowIssueLicense(true)}
           onModify={openModifyLicense}
           onRenew={actions.renewLicense}
           onRevoke={actions.revokeLicense}
         />
       )}
-      {tab === 'services' && (
-        <TenantServicesTab
-          serviceConfig={serviceConfig}
-          setServiceConfig={setServiceConfig}
-          editing={serviceEditing}
-          saving={serviceSaving}
-          onStartEdit={() => setServiceEditing(true)}
-          onCancel={() => { setServiceEditing(false); reloadServices(); }}
-          onSave={() => actions.saveServices(serviceConfig, setServiceSaving, () => setServiceEditing(false))}
+      {tab === 'members' && (
+        <TenantMembersTab
+          members={tenant.members}
+          onAddMember={() => setShowAddMember(true)}
+          onChangeRole={actions.changeMemberRole}
+          onRemoveMember={actions.removeMember}
         />
       )}
 

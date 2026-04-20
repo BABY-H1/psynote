@@ -8,6 +8,8 @@ import { extractAgreement } from './pipelines/extract-agreement.js';
 import { chatCreateAgreement } from './pipelines/create-agreement-chat.js';
 import { extractNoteTemplate } from './pipelines/extract-note-template.js';
 import { chatCreateNoteTemplate } from './pipelines/create-note-template-chat.js';
+import { extractGoal } from './pipelines/extract-goal.js';
+import { chatCreateGoal } from './pipelines/create-goal-chat.js';
 
 /**
  * Templates + misc authoring routes:
@@ -110,6 +112,30 @@ export async function aiTemplatesRoutes(app: FastifyInstance) {
     }
     const result = await chatCreateNoteTemplate(body.messages);
     await logAudit(request, 'ai_call', 'create-note-template-chat');
+    return result;
+  });
+
+  /** Extract treatment goal from text */
+  app.post('/extract-goal', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { content: string };
+    if (!body.content) throw new ValidationError('content is required');
+    const result = await extractGoal(body);
+    await logAudit(request, 'ai_call', 'extract-goal');
+    return result;
+  });
+
+  /** AI-guided treatment goal creation chat */
+  app.post('/create-goal-chat', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+  }, async (request) => {
+    const body = request.body as { messages: { role: 'user' | 'assistant'; content: string }[] };
+    if (!body.messages || !Array.isArray(body.messages) || body.messages.length === 0) {
+      throw new ValidationError('messages array is required');
+    }
+    const result = await chatCreateGoal(body.messages);
+    await logAudit(request, 'ai_call', 'create-goal-chat');
     return result;
   });
 

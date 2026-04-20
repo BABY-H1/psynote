@@ -1,5 +1,5 @@
 import type { FastifyInstance } from 'fastify';
-import { applyAiGuards } from './ai-shared.js';
+import { applyAiGuards, applyAdminAiGuards } from './ai-shared.js';
 import { aiAssessmentRoutes } from './ai-assessment.routes.js';
 import { aiTreatmentRoutes } from './ai-treatment.routes.js';
 import { aiScalesMaterialRoutes } from './ai-scales-material.routes.js';
@@ -27,6 +27,23 @@ export async function aiRoutes(app: FastifyInstance) {
 
   await app.register(aiAssessmentRoutes);
   await app.register(aiTreatmentRoutes);
+  await app.register(aiScalesMaterialRoutes);
+  await app.register(aiGroupSchemesRoutes);
+  await app.register(aiCourseAuthoringRoutes);
+  await app.register(aiTemplatesRoutes);
+}
+
+/**
+ * System-admin AI routes mounted at `/api/admin/ai`. Reuses the same 4
+ * library-authoring sub-modules (scale / scheme / course / templates) so
+ * the sysadmin has parity with the org user when creating platform-level
+ * content via AI. Clinical AI (assessment / treatment) is intentionally
+ * omitted — those handlers depend on org-scoped data (client profiles,
+ * care episodes) that has no meaning outside a specific tenant.
+ */
+export async function adminAiRoutes(app: FastifyInstance) {
+  applyAdminAiGuards(app);
+
   await app.register(aiScalesMaterialRoutes);
   await app.register(aiGroupSchemesRoutes);
   await app.register(aiCourseAuthoringRoutes);

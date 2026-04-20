@@ -103,7 +103,7 @@ export function SchemeDetail({ schemeId, onBack, initialEditing = false }: Props
   const activeSessionIndex = activeTab === 'overview' ? null : activeTab;
 
   return (
-    <div className="flex flex-row-reverse -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
+    <div className="flex flex-row-reverse h-full">
       <div className="w-[420px] flex-shrink-0 border-l border-slate-200 bg-white flex flex-col">
         <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
           <button onClick={onBack} className="text-slate-400 hover:text-slate-600">

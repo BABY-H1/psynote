@@ -1,10 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useNoteTemplates, useCreateNoteTemplate, useDeleteNoteTemplate,
 } from '../../../api/useCounseling';
 import { useExtractNoteTemplate, useCreateNoteTemplateChat } from '../../../api/useAI';
 import { PageLoading, useToast } from '../../../shared/components';
 import { NoteTemplateDetail } from '../components/NoteTemplateDetail';
+import { DistributionControl } from '../../../shared/components/DistributionControl';
+import { useIsSystemLibraryScope } from '../../../shared/api/libraryScope';
 import {
   Edit3, Trash2, FileText, Upload, Sparkles, Loader2, Send, ArrowLeft, Eye,
 } from 'lucide-react';
@@ -22,6 +25,8 @@ export function NoteTemplateLibrary() {
   const { data: templates, isLoading } = useNoteTemplates();
   const deleteTemplate = useDeleteNoteTemplate();
   const { toast } = useToast();
+  const qc = useQueryClient();
+  const isSystemScope = useIsSystemLibraryScope();
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
   const [detailEditing, setDetailEditing] = useState(false);
@@ -96,13 +101,22 @@ export function NoteTemplateLibrary() {
             <div key={t.id} className="bg-white rounded-xl border border-slate-200 p-4 hover:border-slate-300 transition">
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <FileText className="w-4 h-4 text-brand-500 flex-shrink-0" />
                     <span className="text-sm font-semibold text-slate-900">{t.title}</span>
                     <span className="text-xs px-2 py-0.5 bg-slate-100 text-slate-500 rounded-full">
                       {formatLabels[t.format] || t.format}
                     </span>
-                    {t.isDefault && <span className="text-xs text-brand-600">默认</span>}
+                    {t.isDefault && (
+                      <span className="text-xs px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full">
+                        默认
+                      </span>
+                    )}
+                    <DistributionControl
+                      resource="templates"
+                      item={t}
+                      onSaved={() => qc.invalidateQueries({ queryKey: ['noteTemplates'] })}
+                    />
                   </div>
                   <div className="flex gap-2 mt-1.5 flex-wrap">
                     {(t.fieldDefinitions as any[])?.map((f: any, i: number) => (
@@ -121,7 +135,13 @@ export function NoteTemplateLibrary() {
                     <Eye className="w-3.5 h-3.5" />
                   </button>
                   <button
-                    onClick={() => goToDetail(t.id, true)}
+                    onClick={() => {
+                      if (!t.orgId && !isSystemScope) {
+                        toast('无权修改：平台级内容仅系统管理员可管理', 'error');
+                        return;
+                      }
+                      goToDetail(t.id, true);
+                    }}
                     className="p-1.5 text-slate-400 hover:text-slate-600 rounded"
                     title="编辑"
                   >
@@ -129,6 +149,10 @@ export function NoteTemplateLibrary() {
                   </button>
                   <button
                     onClick={async () => {
+                      if (!t.orgId && !isSystemScope) {
+                        toast('无权删除：平台级内容仅系统管理员可管理', 'error');
+                        return;
+                      }
                       if (confirm(`确定删除"${t.title}"？`)) {
                         try {
                           await deleteTemplate.mutateAsync(t.id);

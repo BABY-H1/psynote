@@ -26,7 +26,7 @@ import { treatmentPlanRoutes } from './modules/counseling/treatment-plan.routes.
 import { aiConversationRoutes } from './modules/counseling/ai-conversation.routes.js';
 import { referralRoutes } from './modules/referral/referral.routes.js';
 import { followUpRoutes } from './modules/follow-up/follow-up.routes.js';
-import { aiRoutes } from './modules/ai/ai.routes.js';
+import { aiRoutes, adminAiRoutes } from './modules/ai/ai.routes.js';
 import { schemeRoutes } from './modules/group/scheme.routes.js';
 import { instanceRoutes } from './modules/group/instance.routes.js';
 import { enrollmentRoutes } from './modules/group/enrollment.routes.js';
@@ -170,6 +170,9 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // AI services
   await app.register(aiRoutes, { prefix: '/api/orgs/:orgId/ai' });
+  // Admin AI — library authoring sub-modules only, no org context required.
+  // See `adminAiRoutes` for which sub-modules are included vs excluded.
+  await app.register(adminAiRoutes, { prefix: '/api/admin/ai' });
 
   // Group domain
   await app.register(schemeRoutes, { prefix: '/api/orgs/:orgId/group-schemes' });

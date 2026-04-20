@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { dataScopeGuard } from '../../middleware/data-scope.js';
+import { requireSystemAdmin } from '../../middleware/system-admin.js';
 import { aiClient } from './providers/openai-compatible.js';
 
 /**
@@ -26,6 +27,32 @@ export function applyAiGuards(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
   app.addHook('preHandler', dataScopeGuard);
+
+  app.addHook('preHandler', async (_request, reply) => {
+    if (!aiClient.isConfigured) {
+      return reply.status(503).send({ error: 'AI service is not configured' });
+    }
+  });
+}
+
+/**
+ * Variant of `applyAiGuards` for the system-admin-scoped AI routes mounted
+ * at `/api/admin/ai`. The admin doesn't belong to any org, so we can't run
+ * `orgContextGuard` (it throws when `:orgId` is missing). Instead we gate on
+ * `requireSystemAdmin`.
+ *
+ * Only the library-authoring AI sub-modules (scales / schemes / courses /
+ * templates) are mounted under this path — clinical sub-modules
+ * (assessment / treatment) still need org context to resolve client data
+ * and are intentionally not reachable here.
+ */
+export function applyAdminAiGuards(app: FastifyInstance) {
+  app.addHook('onRequest', async (request) => {
+    request.socket.setTimeout(300_000); // 5 min — same budget as the org path
+  });
+
+  app.addHook('preHandler', authGuard);
+  app.addHook('preHandler', requireSystemAdmin);
 
   app.addHook('preHandler', async (_request, reply) => {
     if (!aiClient.isConfigured) {

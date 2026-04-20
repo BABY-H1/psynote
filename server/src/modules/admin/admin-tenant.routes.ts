@@ -361,7 +361,7 @@ export async function adminTenantRoutes(app: FastifyInstance) {
   // ─── Update Tenant ──────────────────────────────────────────────
   app.patch('/:orgId', async (request) => {
     const { orgId } = request.params as { orgId: string };
-    const body = request.body as { name?: string; slug?: string };
+    const body = request.body as { name?: string; slug?: string; orgType?: string };
 
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId)).limit(1);
     if (!org) throw new NotFoundError('Organization', orgId);
@@ -377,6 +377,17 @@ export async function adminTenantRoutes(app: FastifyInstance) {
         if (dup) throw new ValidationError(`标识 '${body.slug}' 已存在`);
       }
       updates.slug = body.slug.trim();
+    }
+    // orgType lives inside the settings JSON blob (historical — predates the
+    // migration that would have given it its own column). Merge, don't overwrite,
+    // so other settings keys (aiConfig, emailConfig, branding, etc.) survive.
+    if (body.orgType) {
+      const ALLOWED_ORG_TYPES = ['solo', 'counseling', 'enterprise', 'school', 'hospital'];
+      if (!ALLOWED_ORG_TYPES.includes(body.orgType)) {
+        throw new ValidationError(`orgType 必须是 ${ALLOWED_ORG_TYPES.join(' / ')} 之一`);
+      }
+      const currentSettings = (org.settings || {}) as Record<string, any>;
+      updates.settings = { ...currentSettings, orgType: body.orgType };
     }
 
     const [updated] = await db.update(organizations).set(updates).where(eq(organizations.id, orgId)).returning();

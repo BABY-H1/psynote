@@ -30,6 +30,13 @@ export interface SignLicenseParams {
   tier: OrgTier;
   maxSeats: number;
   months: number;
+  /**
+   * Optional start date for the license. Defaults to "now" when omitted,
+   * which is the historical behavior. When set, both `issuedAt` and the
+   * expiry-countdown origin shift to this date — useful for pre-signing
+   * a license that takes effect later, or back-dating a renewal.
+   */
+  validFrom?: Date;
 }
 
 export interface SignLicenseResult {
@@ -85,8 +92,8 @@ export async function signLicenseWithExpiry(params: SignLicenseWithExpiryParams)
 export async function signLicense(params: SignLicenseParams): Promise<SignLicenseResult> {
   const privateKey = await getPrivateKey();
 
-  const now = new Date();
-  const expiresAt = new Date(now);
+  const issuedAt = params.validFrom ?? new Date();
+  const expiresAt = new Date(issuedAt);
   expiresAt.setMonth(expiresAt.getMonth() + params.months);
 
   const features = Array.from(TIER_FEATURES[params.tier] ?? TIER_FEATURES.starter);
@@ -96,19 +103,19 @@ export async function signLicense(params: SignLicenseParams): Promise<SignLicens
     tier: params.tier,
     maxSeats: params.maxSeats,
     features,
-    issuedAt: now.toISOString(),
+    issuedAt: issuedAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
   })
     .setProtectedHeader({ alg: 'RS256', typ: 'JWT' })
     .setIssuer('psynote-license-server')
     .setSubject(params.orgId)
-    .setIssuedAt()
+    .setIssuedAt(issuedAt)
     .setExpirationTime(expiresAt)
     .sign(privateKey);
 
   return {
     token,
-    issuedAt: now.toISOString(),
+    issuedAt: issuedAt.toISOString(),
     expiresAt: expiresAt.toISOString(),
     tier: params.tier,
     maxSeats: params.maxSeats,

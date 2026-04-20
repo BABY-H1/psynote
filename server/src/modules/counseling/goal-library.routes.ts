@@ -2,9 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { assertLibraryItemOwnedByOrg } from '../../middleware/library-ownership.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import { rejectClient } from '../../middleware/reject-client.js';
+import { treatmentGoalLibrary } from '../../db/schema.js';
 import * as goalService from './goal-library.service.js';
 
 export async function goalLibraryRoutes(app: FastifyInstance) {
@@ -40,6 +42,7 @@ export async function goalLibraryRoutes(app: FastifyInstance) {
 
   app.patch('/:goalId', { preHandler: [requireRole('org_admin', 'counselor')] }, async (request) => {
     const { goalId } = request.params as { goalId: string };
+    await assertLibraryItemOwnedByOrg(treatmentGoalLibrary, goalId, request.org!.orgId);
     const body = request.body as Record<string, unknown>;
     const updated = await goalService.updateGoal(goalId, body);
     await logAudit(request, 'update', 'treatment_goal_library', goalId);
@@ -48,6 +51,7 @@ export async function goalLibraryRoutes(app: FastifyInstance) {
 
   app.delete('/:goalId', { preHandler: [requireRole('org_admin', 'counselor')] }, async (request) => {
     const { goalId } = request.params as { goalId: string };
+    await assertLibraryItemOwnedByOrg(treatmentGoalLibrary, goalId, request.org!.orgId);
     await goalService.deleteGoal(goalId);
     await logAudit(request, 'delete', 'treatment_goal_library', goalId);
     return { success: true };

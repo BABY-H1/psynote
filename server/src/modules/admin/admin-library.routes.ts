@@ -1,8 +1,12 @@
 /**
  * Admin system-level knowledge base routes.
  *
- * CRUD for system content (orgId IS NULL) across 5 content types:
- * scales, courses, groupSchemes, noteTemplates, treatmentGoalLibrary.
+ * CRUD for system content (orgId IS NULL) across 6 content types:
+ * scales, courses, groupSchemes, noteTemplates, treatmentGoalLibrary,
+ * consentTemplates (agreements).
+ *
+ * Mirrors the org-side knowledge tabs 1:1 so the system admin can use the
+ * same library UI as org users; see `AdminLibrary.tsx` + `libraryApi()`.
  */
 import type { FastifyInstance } from 'fastify';
 import { eq, isNull, and, ilike, desc } from 'drizzle-orm';
@@ -13,6 +17,7 @@ import {
   groupSchemes,
   noteTemplates,
   treatmentGoalLibrary,
+  consentTemplates,
 } from '../../db/schema.js';
 import { authGuard } from '../../middleware/auth.js';
 import { requireSystemAdmin } from '../../middleware/system-admin.js';
@@ -39,6 +44,21 @@ export async function adminLibraryRoutes(app: FastifyInstance) {
     }
 
     return query;
+  });
+
+  // Single-entity fetch — required by ScaleDetail/SchemeDetail/AgreementDetail
+  // when the shared org-side library components load an item for editing.
+  // Scoped to platform-level rows only (orgId IS NULL) so this endpoint
+  // can't be used to exfiltrate an org's private content.
+  app.get('/scales/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [row] = await db
+      .select()
+      .from(scales)
+      .where(and(eq(scales.id, id), isNull(scales.orgId)))
+      .limit(1);
+    if (!row) return reply.status(404).send({ message: 'Scale not found' });
+    return row;
   });
 
   app.post('/scales', async (request, reply) => {
@@ -88,6 +108,17 @@ export async function adminLibraryRoutes(app: FastifyInstance) {
     return query;
   });
 
+  app.get('/courses/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [row] = await db
+      .select()
+      .from(courses)
+      .where(and(eq(courses.id, id), isNull(courses.orgId)))
+      .limit(1);
+    if (!row) return reply.status(404).send({ message: 'Course not found' });
+    return row;
+  });
+
   app.post('/courses', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
     const [item] = await db.insert(courses).values({
@@ -131,6 +162,17 @@ export async function adminLibraryRoutes(app: FastifyInstance) {
     }
 
     return query;
+  });
+
+  app.get('/schemes/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [row] = await db
+      .select()
+      .from(groupSchemes)
+      .where(and(eq(groupSchemes.id, id), isNull(groupSchemes.orgId)))
+      .limit(1);
+    if (!row) return reply.status(404).send({ message: 'Scheme not found' });
+    return row;
   });
 
   app.post('/schemes', async (request, reply) => {
@@ -178,6 +220,17 @@ export async function adminLibraryRoutes(app: FastifyInstance) {
     return query;
   });
 
+  app.get('/templates/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [row] = await db
+      .select()
+      .from(noteTemplates)
+      .where(and(eq(noteTemplates.id, id), isNull(noteTemplates.orgId)))
+      .limit(1);
+    if (!row) return reply.status(404).send({ message: 'Note template not found' });
+    return row;
+  });
+
   app.post('/templates', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
     const [item] = await db.insert(noteTemplates).values({
@@ -223,6 +276,17 @@ export async function adminLibraryRoutes(app: FastifyInstance) {
     return query;
   });
 
+  app.get('/goals/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [row] = await db
+      .select()
+      .from(treatmentGoalLibrary)
+      .where(and(eq(treatmentGoalLibrary.id, id), isNull(treatmentGoalLibrary.orgId)))
+      .limit(1);
+    if (!row) return reply.status(404).send({ message: 'Goal not found' });
+    return row;
+  });
+
   app.post('/goals', async (request, reply) => {
     const body = request.body as Record<string, unknown>;
     const [item] = await db.insert(treatmentGoalLibrary).values({
@@ -249,11 +313,75 @@ export async function adminLibraryRoutes(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // ─── Agreements (Consent Templates) ─────────────────────────────
+
+  app.get('/agreements', async (request) => {
+    const { search } = request.query as { search?: string };
+    let query = db
+      .select()
+      .from(consentTemplates)
+      .where(isNull(consentTemplates.orgId))
+      .orderBy(desc(consentTemplates.createdAt))
+      .$dynamic();
+
+    if (search) {
+      query = query.where(and(isNull(consentTemplates.orgId), ilike(consentTemplates.title, `%${search}%`)));
+    }
+
+    return query;
+  });
+
+  app.get('/agreements/:id', async (request, reply) => {
+    const { id } = request.params as { id: string };
+    const [row] = await db
+      .select()
+      .from(consentTemplates)
+      .where(and(eq(consentTemplates.id, id), isNull(consentTemplates.orgId)))
+      .limit(1);
+    if (!row) return reply.status(404).send({ message: 'Agreement not found' });
+    return row;
+  });
+
+  app.post('/agreements', async (request, reply) => {
+    const body = request.body as Record<string, unknown>;
+    const [item] = await db.insert(consentTemplates).values({
+      ...body,
+      orgId: null,
+      createdBy: request.user!.id,
+    } as any).returning();
+    await logAudit(request, 'create', 'consent_templates', item.id);
+    return reply.status(201).send(item);
+  });
+
+  app.patch('/agreements/:id', async (request) => {
+    const { id } = request.params as { id: string };
+    const body = request.body as Record<string, unknown>;
+    const [updated] = await db
+      .update(consentTemplates)
+      .set({ ...body, updatedAt: new Date() } as any)
+      .where(eq(consentTemplates.id, id))
+      .returning();
+    await logAudit(request, 'update', 'consent_templates', id);
+    return updated;
+  });
+
+  app.delete('/agreements/:id', async (request) => {
+    const { id } = request.params as { id: string };
+    await db.delete(consentTemplates).where(eq(consentTemplates.id, id));
+    await logAudit(request, 'delete', 'consent_templates', id);
+    return { ok: true };
+  });
+
   // ─── Distribution Management ────────────────────────────────────
   // Update allowedOrgIds for any content type
 
   const distributionTables: Record<string, any> = {
-    scales, courses, groupSchemes: groupSchemes, templates: noteTemplates, goals: treatmentGoalLibrary,
+    scales,
+    courses,
+    schemes: groupSchemes,
+    templates: noteTemplates,
+    goals: treatmentGoalLibrary,
+    agreements: consentTemplates,
   };
 
   for (const [type, table] of Object.entries(distributionTables)) {

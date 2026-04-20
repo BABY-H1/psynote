@@ -4,15 +4,16 @@ import { render, screen, cleanup, fireEvent, waitFor } from '@testing-library/re
 /**
  * Characterization for TenantDetail — sysadmin-facing tenant inspector.
  *
- * Written against the pre-split 687-line monolith; must stay green
- * after the 4 tab panels + modals + helpers split out.
+ * As of 2026-04 the tab structure collapsed from 4 (概览 / 成员 / 订阅 /
+ * 服务配置) to 2 (基本信息 / 成员). This file pins the merged layout:
  *
- * Pins:
- *   1. 4 tab buttons render: 概览 / 成员 / 订阅 / 服务配置
- *   2. Default tab is 概览 (InfoRow rows appear)
+ *   1. Two tab buttons render: 基本信息 / 成员
+ *   2. Default tab is 基本信息 — surfaces both 基本信息 + 运营概况 cards
+ *      (plus subscription + services, now on one page)
  *   3. Clicking 成员 switches to members table
- *   4. License status chip renders
+ *   4. License status chip renders ("有效" for active license)
  *   5. 返回租户列表 back button present
+ *   6. Single 修改 button switches the tab into edit mode
  */
 
 const apiGet = vi.fn();
@@ -75,19 +76,23 @@ beforeEach(() => {
   });
 });
 
-describe('TenantDetail — pre-split characterization', () => {
-  it('renders 4 tab buttons (概览 / 成员 / 订阅 / 服务配置) after load', async () => {
+describe('TenantDetail — post-merge characterization', () => {
+  it('renders 2 tab buttons (基本信息 / 成员) after load', async () => {
     render(<TenantDetail />);
-    await waitFor(() => expect(screen.getByRole('button', { name: /概览/ })).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByRole('button', { name: /基本信息/ })).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /成员/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /订阅/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /服务配置/ })).toBeInTheDocument();
+    // The old tab labels are gone.
+    expect(screen.queryByRole('button', { name: /^概览$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^订阅$/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /服务配置/ })).toBeNull();
   });
 
-  it('default tab shows 基本信息 + 运营概况 info rows', async () => {
+  it('default tab surfaces 基本信息 + 运营概况 cards', async () => {
     render(<TenantDetail />);
-    await waitFor(() => expect(screen.getByText('基本信息')).toBeInTheDocument());
-    expect(screen.getByText('运营概况')).toBeInTheDocument();
+    // "基本信息" appears on both the tab chip and the card heading, so
+    // assert via the heading-only neighbour 运营概况 which is unique.
+    await waitFor(() => expect(screen.getByText('运营概况')).toBeInTheDocument());
+    expect(screen.getAllByText('基本信息').length).toBeGreaterThan(0);
   });
 
   it('clicking 成员 tab shows the members table heading', async () => {
@@ -106,5 +111,24 @@ describe('TenantDetail — pre-split characterization', () => {
   it('back-to-tenants button present', async () => {
     render(<TenantDetail />);
     await waitFor(() => expect(screen.getByRole('button', { name: /返回租户列表/ })).toBeInTheDocument());
+  });
+
+  it('per-card 修改 button puts only that card into edit mode', async () => {
+    render(<TenantDetail />);
+    // Each editable card (基本信息 / AI 服务 / 邮件服务) has its own "修改"
+    // button. Subscription shows "修改套餐" — intentionally not a bare "修改".
+    await waitFor(() => expect(screen.getAllByRole('button', { name: '修改' }).length).toBeGreaterThan(0));
+    const editButtons = screen.getAllByRole('button', { name: '修改' });
+    expect(editButtons.length).toBeGreaterThanOrEqual(1);
+
+    // Click the first one (基本信息 card). That card's save+cancel appear,
+    // but the other cards' 修改 buttons remain visible (independent states).
+    const before = editButtons.length;
+    fireEvent.click(editButtons[0]);
+    expect(screen.getByRole('button', { name: /保存/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '取消' })).toBeInTheDocument();
+    // One "修改" button consumed by the now-editing card; the remaining
+    // cards keep theirs available.
+    expect(screen.getAllByRole('button', { name: '修改' }).length).toBe(before - 1);
   });
 });

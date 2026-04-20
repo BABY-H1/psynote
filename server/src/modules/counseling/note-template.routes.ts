@@ -2,9 +2,11 @@ import type { FastifyInstance } from 'fastify';
 import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
+import { assertLibraryItemOwnedByOrg } from '../../middleware/library-ownership.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import { rejectClient } from '../../middleware/reject-client.js';
+import { noteTemplates } from '../../db/schema.js';
 import * as templateService from './note-template.service.js';
 
 export async function noteTemplateRoutes(app: FastifyInstance) {
@@ -48,6 +50,7 @@ export async function noteTemplateRoutes(app: FastifyInstance) {
     { preHandler: [requireRole('org_admin', 'counselor')] },
     async (request) => {
       const { templateId } = request.params as { templateId: string };
+      await assertLibraryItemOwnedByOrg(noteTemplates, templateId, request.org!.orgId);
       const body = request.body as Record<string, unknown>;
       const updated = await templateService.updateTemplate(templateId, body);
       await logAudit(request, 'update', 'note_templates', templateId);
@@ -61,6 +64,7 @@ export async function noteTemplateRoutes(app: FastifyInstance) {
     { preHandler: [requireRole('org_admin', 'counselor')] },
     async (request) => {
       const { templateId } = request.params as { templateId: string };
+      await assertLibraryItemOwnedByOrg(noteTemplates, templateId, request.org!.orgId);
       await templateService.deleteTemplate(templateId);
       await logAudit(request, 'delete', 'note_templates', templateId);
       return { success: true };

@@ -41,7 +41,14 @@ export function AddMemberModal({
   );
 }
 
-/** Issue-license modal — tier + maxSeats + months. */
+/**
+ * Issue-license modal — tier + maxSeats + start date + duration.
+ *
+ * `validFrom` is optional in the API (server defaults to `now`), but the UI
+ * always shows a date picker prefilled with today so sysadmins have an
+ * explicit anchor for the expiry calculation. Computed end date is shown as
+ * a read-only hint below.
+ */
 export function IssueLicenseModal({
   form,
   error,
@@ -49,12 +56,23 @@ export function IssueLicenseModal({
   onClose,
   onSubmit,
 }: {
-  form: { tier: OrgTier; maxSeats: number; months: number };
+  form: { tier: OrgTier; maxSeats: number; months: number; validFrom: string };
   error: string;
-  onChange: (patch: Partial<{ tier: OrgTier; maxSeats: number; months: number }>) => void;
+  onChange: (patch: Partial<{ tier: OrgTier; maxSeats: number; months: number; validFrom: string }>) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
+  // Computed expiry preview — keep it purely derived so the form state only
+  // holds the two inputs (start date + months), not the derived end date.
+  const endDateHint = (() => {
+    if (!form.validFrom) return '';
+    const start = new Date(form.validFrom);
+    if (Number.isNaN(start.getTime())) return '';
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + (form.months || 0));
+    return end.toLocaleDateString('zh-CN');
+  })();
+
   return (
     <Modal title="签发许可证" onClose={onClose}>
       <div className="space-y-3">
@@ -66,9 +84,20 @@ export function IssueLicenseModal({
         <Field label="最大席位">
           <input type="number" min={1} value={form.maxSeats} onChange={(e) => onChange({ maxSeats: parseInt(e.target.value) || 1 })} className={fieldInput} />
         </Field>
+        <Field label="起始日期">
+          <input
+            type="date"
+            value={form.validFrom}
+            onChange={(e) => onChange({ validFrom: e.target.value })}
+            className={fieldInput}
+          />
+        </Field>
         <Field label="有效期（月）">
           <input type="number" min={1} value={form.months} onChange={(e) => onChange({ months: parseInt(e.target.value) || 12 })} className={fieldInput} />
         </Field>
+        {endDateHint && (
+          <p className="text-xs text-slate-500">到期时间：<span className="font-medium text-slate-700">{endDateHint}</span></p>
+        )}
         {error && <p className="text-sm text-red-500">{error}</p>}
       </div>
       <ModalFooter onClose={onClose} onSubmit={onSubmit} submitLabel="签发" />

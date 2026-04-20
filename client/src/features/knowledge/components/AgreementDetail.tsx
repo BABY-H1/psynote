@@ -113,7 +113,7 @@ export function AgreementDetail({ templateId, onBack, initialEditing = false }: 
   const data: EditState = editing && editData ? editData : templateToEditState(template);
 
   return (
-    <div className="flex -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
+    <div className="flex h-full">
       {/* LEFT: Content */}
       <div className="flex-1 flex flex-col bg-slate-50 min-w-0">
         {/* Top bar */}

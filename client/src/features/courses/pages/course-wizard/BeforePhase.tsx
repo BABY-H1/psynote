@@ -114,7 +114,7 @@ export function BeforePhase({ state, onChange, courses, selectedCourse, onCourse
         <div className="space-y-2 max-h-64 overflow-y-auto">
           {filteredCourses.length === 0 ? (
             <div className="text-center py-6 text-sm text-slate-400">
-              {courses.length === 0 ? '暂无已发布课程，请先在课程工作室创建并发布' : '未找到匹配的课程'}
+              {courses.length === 0 ? '暂无已发布课程，请先在课程教学创建并发布' : '未找到匹配的课程'}
             </div>
           ) : filteredCourses.map((course) => (
             <button key={course.id} onClick={() => onCourseSelect(course.id)}
@@ -144,7 +144,7 @@ export function BeforePhase({ state, onChange, courses, selectedCourse, onCourse
             )}
           </div>
         )}
-        {!state.courseId && <p className="text-xs text-amber-600">如需创建新课程，请先在知识库 → 课程工作室中创建并发布</p>}
+        {!state.courseId && <p className="text-xs text-amber-600">如需创建新课程，请先在知识库 → 课程教学中创建并发布</p>}
       </CollapsibleSection>
 
       {/* Basic Info */}

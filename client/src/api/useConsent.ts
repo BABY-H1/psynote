@@ -3,20 +3,25 @@ import type { ConsentTemplate, ConsentRecord } from '@psynote/shared';
 import type { ClientDocument } from '@psynote/shared';
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
+import { libraryApi, libraryScopeKey } from '../shared/api/libraryScope';
 
 function orgPrefix() {
   const orgId = useAuthStore.getState().currentOrgId;
   return `/orgs/${orgId}`;
 }
 
-// ─── Templates (counselor side) ─────────────────────────────────
+// ─── Templates (shared: counselor + system admin) ───────────────
+// The 4 template hooks below route to org or admin endpoints via
+// `libraryApi('agreements')`. Consent *records* and *documents* stay
+// org-scoped (they're per-client, not platform content).
 
 export function useConsentTemplates() {
   const orgId = useAuthStore((s) => s.currentOrgId);
+  const isSystemAdmin = useAuthStore((s) => s.isSystemAdmin);
   return useQuery({
-    queryKey: ['consentTemplates', orgId],
-    queryFn: () => api.get<ConsentTemplate[]>(`${orgPrefix()}/compliance/consent-templates`),
-    enabled: !!orgId,
+    queryKey: ['consentTemplates', libraryScopeKey()],
+    queryFn: () => api.get<ConsentTemplate[]>(libraryApi('agreements')),
+    enabled: !!orgId || isSystemAdmin,
   });
 }
 
@@ -24,7 +29,7 @@ export function useCreateConsentTemplate() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { title: string; consentType: string; content: string }) =>
-      api.post<ConsentTemplate>(`${orgPrefix()}/compliance/consent-templates`, data),
+      api.post<ConsentTemplate>(libraryApi('agreements'), data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['consentTemplates'] }); },
   });
 }
@@ -33,7 +38,7 @@ export function useUpdateConsentTemplate() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ templateId, ...data }: { templateId: string; title?: string; consentType?: string; content?: string }) =>
-      api.patch<ConsentTemplate>(`${orgPrefix()}/compliance/consent-templates/${templateId}`, data),
+      api.patch<ConsentTemplate>(`${libraryApi('agreements')}/${templateId}`, data),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['consentTemplates'] }); },
   });
 }
@@ -42,7 +47,7 @@ export function useDeleteConsentTemplate() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (templateId: string) =>
-      api.delete(`${orgPrefix()}/compliance/consent-templates/${templateId}`),
+      api.delete(`${libraryApi('agreements')}/${templateId}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['consentTemplates'] }); },
   });
 }
