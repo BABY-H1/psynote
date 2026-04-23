@@ -204,6 +204,7 @@ export async function adminDashboardRoutes(app: FastifyInstance) {
         monthlyEpisodes: Number(r.monthly_episode_count),
         tier: lic?.tier ?? null,
         licenseStatus: lic?.status ?? 'none',
+        licenseExpiresAt: lic?.expiresAt ?? null,
         lastActivityAt: r.last_activity_at
           ? (r.last_activity_at instanceof Date
               ? r.last_activity_at.toISOString()

@@ -1,91 +1,44 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  FileText,
-  ClipboardCheck,
-  CalendarClock,
-  Sparkles,
+  FileText, CalendarClock, Layers, BookOpen, MessageSquare, ChevronRight,
 } from 'lucide-react';
-import { useClientDashboard, useMyTimeline } from '@client/api/useClientPortal';
+import { useClientDashboard, useMyTimeline, useAvailableGroups, useAvailableCourses } from '@client/api/useClientPortal';
 import { useMyDocuments } from '@client/api/useConsent';
-import { PageLoading, RiskBadge } from '@client/shared/components';
+import { useAuthStore } from '@client/stores/authStore';
+import { PageLoading } from '@client/shared/components';
 import { TaskCard } from '../components/TaskCard';
 import { SectionHeader } from '../components/SectionHeader';
 import { useViewingContext } from '../stores/viewingContext';
 
 /**
- * Phase 8c — HomeTab: task-driven landing page.
+ * HomeTab —— "打开门户立刻看到要做什么"。
  *
- * The goal here is "open the portal → immediately see what I need to do".
- * We show:
+ * 去掉旧版顶部的风险/干预状态 banner（对来访者过度暴露不友好，且 Phase 8c
+ * 的实现基本是没接上的死路）。只保留 3 段内容：
  *
- *   1. Greeting banner with risk status + current intervention type
- *   2. 待办事项 — a list of task cards, computed client-side from 3 sources:
- *        a) unsigned consent documents (useMyDocuments.status='pending')
- *        b) upcoming appointments within next 7 days (useClientDashboard.upcomingAppointments)
- *        c) pending assessment fill-ins — Phase 8c v1 does NOT have a proper
- *           "todo assessment" API; we stub the UI and leave a TODO to wire
- *           when the backend adds `/client/pending-assessments`.
- *   3. 最近动态 — the most recent 3 timeline events from useMyTimeline(),
- *      so users can scroll and see "what happened recently" without leaving
- *      the home tab.
- *   4. Empty-state hero card when there's nothing to do.
- *
- * Data strategy:
- * - Reuses 3 existing hooks; no new server endpoints.
- * - Todo list is computed via useMemo so it only recomputes when underlying
- *   data changes.
+ *   1. 待办事项 —— 合并自三个数据源（待签协议 / 7 天内预约）
+ *   2. 可报名活动 / 预约咨询 —— 机构对我开放的团辅、课程和咨询入口
+ *      （tabs 切换，避免一屏塞太满）
+ *   3. 最近动态 —— 时间线前 3 条
  */
 
-const RISK_DISPLAY: Record<
-  string,
-  { label: string; text: string; bg: string; border: string }
-> = {
-  level_1: {
-    label: '状态良好',
-    text: 'text-green-700',
-    bg: 'bg-green-50',
-    border: 'border-green-200',
-  },
-  level_2: {
-    label: '需要关注',
-    text: 'text-yellow-700',
-    bg: 'bg-yellow-50',
-    border: 'border-yellow-200',
-  },
-  level_3: {
-    label: '建议咨询',
-    text: 'text-orange-700',
-    bg: 'bg-orange-50',
-    border: 'border-orange-200',
-  },
-  level_4: {
-    label: '请联系咨询师',
-    text: 'text-red-700',
-    bg: 'bg-red-50',
-    border: 'border-red-200',
-  },
-};
-
-const INTERVENTION_LABEL: Record<string, string> = {
-  course: '课程学习',
-  group: '团体辅导',
-  counseling: '个体咨询',
-  referral: '专业转介',
-};
+type HubTab = 'activities' | 'counseling';
 
 export function HomeTab() {
   const navigate = useNavigate();
-  // Phase 14 — viewingAs decides whether HomeTab shows my own data or
-  // a child's data. Timeline is guardian-blocked; only fetch when looking
-  // at myself (otherwise the API returns 403).
+  const user = useAuthStore((s) => s.user);
   const viewingAs = useViewingContext((s) => s.viewingAs);
+  const viewingAsName = useViewingContext((s) => s.viewingAsName);
   const isViewingChild = !!viewingAs;
   const { data: dashboard, isLoading: dashboardLoading } = useClientDashboard({ as: viewingAs ?? undefined });
   const { data: timeline } = useMyTimeline();
   const { data: myDocs } = useMyDocuments({ as: viewingAs ?? undefined });
+  const { data: groups } = useAvailableGroups();
+  const { data: courses } = useAvailableCourses();
 
-  // Compute the todo list by combining 3 data sources.
+  const [hubTab, setHubTab] = useState<HubTab>('activities');
+
   const todos = useMemo(() => {
     type Todo = {
       id: string;
@@ -97,7 +50,6 @@ export function HomeTab() {
     };
     const list: Todo[] = [];
 
-    // 1. Pending consent documents
     const pendingDocs = (myDocs ?? []).filter((d) => d.status === 'pending');
     if (pendingDocs.length > 0) {
       list.push({
@@ -110,7 +62,6 @@ export function HomeTab() {
       });
     }
 
-    // 2. Upcoming appointments within next 7 days
     const now = Date.now();
     const sevenDaysFromNow = now + 7 * 24 * 60 * 60 * 1000;
     const upcoming = (dashboard?.upcomingAppointments ?? []).filter((a: any) => {
@@ -125,8 +76,7 @@ export function HomeTab() {
         id: `appt-${appt.id}`,
         icon: <CalendarClock className="w-5 h-5" />,
         title: `${d.getMonth() + 1}月${d.getDate()}日 ${d.toLocaleTimeString('zh-CN', {
-          hour: '2-digit',
-          minute: '2-digit',
+          hour: '2-digit', minute: '2-digit',
         })}`,
         subtitle: `${typeLabel}咨询 · 咨询师已确认`,
         tone: 'blue',
@@ -134,68 +84,37 @@ export function HomeTab() {
       });
     });
 
-    // 3. Pending assessments — Phase 8c v1 stub. A proper endpoint
-    // would be something like GET /client/pending-assessments; for now
-    // we surface a placeholder only if useMyTimeline reveals a recently
-    // issued assessment event. This keeps the UI functional on demo data
-    // and lets the backend catch up later.
-    // (Deliberate no-op for now — leave it out rather than showing fake UI.)
-
     return list;
   }, [myDocs, dashboard, navigate]);
 
-  if (dashboardLoading) {
-    return <PageLoading />;
-  }
+  if (dashboardLoading) return <PageLoading />;
 
-  const riskKey = dashboard?.episode?.currentRisk;
-  const risk = riskKey ? RISK_DISPLAY[riskKey] ?? RISK_DISPLAY.level_1 : null;
-  const interventionLabel =
-    dashboard?.episode?.interventionType &&
-    INTERVENTION_LABEL[dashboard.episode.interventionType];
-
-  // Take the 3 most recent timeline events for the "最近动态" section.
-  // When viewing a child, we don't show the timeline (it's a sensitive
-  // mix of session events that guardians shouldn't see).
   const recentEvents = isViewingChild ? [] : (timeline ?? []).slice(0, 3);
 
-  return (
-    <div className="space-y-6">
-      {/* Greeting / status banner */}
-      {risk ? (
-        <div className={`rounded-2xl p-4 border ${risk.bg} ${risk.border}`}>
-          <div className="flex items-center gap-3">
-            <Sparkles className={`w-5 h-5 ${risk.text}`} />
-            <div className="flex-1 min-w-0">
-              <div className="text-xs text-slate-500">当前状态</div>
-              <div className={`text-base font-bold ${risk.text}`}>{risk.label}</div>
-              {interventionLabel && (
-                <div className="text-xs text-slate-500 mt-0.5">
-                  当前服务: {interventionLabel}
-                </div>
-              )}
-            </div>
-            {riskKey && <RiskBadge level={riskKey as any} />}
-          </div>
-        </div>
-      ) : (
-        <div className="rounded-2xl p-4 border bg-slate-50 border-slate-200">
-          <div className="text-xs text-slate-500">当前状态</div>
-          <div className="text-base font-bold text-slate-400">暂无评估记录</div>
-        </div>
-      )}
+  const openGroups = isViewingChild ? [] : (groups ?? []).filter((g: any) => !g.myEnrollmentStatus);
+  const openCourses = isViewingChild ? [] : (courses ?? []).filter((c: any) => !c.enrollment);
 
-      {/* 待办 */}
+  const greetingName = isViewingChild ? viewingAsName : user?.name;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* 欢迎 */}
+      <div>
+        <h1 className="text-lg font-bold text-slate-900">
+          你好，{greetingName || '朋友'}
+        </h1>
+        <p className="text-xs text-slate-500 mt-0.5">
+          {isViewingChild ? '正在查看孩子的状态' : '愿你今天感觉不错'}
+        </p>
+      </div>
+
+      {/* 1. 待办事项 */}
       <section>
         <SectionHeader title="待办事项" count={todos.length} />
         {todos.length === 0 ? (
-          <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center bg-white">
-            <div className="text-sm font-medium text-slate-500">
-              🎉 所有事项都已完成
-            </div>
-            <div className="text-xs text-slate-400 mt-1">
-              保持良好状态，等待下一次服务安排
-            </div>
+          <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center bg-white">
+            <div className="text-sm font-medium text-slate-500">🎉 所有事项都已完成</div>
+            <div className="text-xs text-slate-400 mt-1">保持良好状态，等待下一次服务安排</div>
           </div>
         ) : (
           <div className="space-y-2">
@@ -213,21 +132,104 @@ export function HomeTab() {
         )}
       </section>
 
-      {/* 最近动态 */}
-      {recentEvents.length > 0 && (
+      {/* 2. 可报名活动 / 预约咨询 */}
+      {!isViewingChild && (
         <section>
-          <SectionHeader
-            title="最近动态"
-            action={
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-slate-900">发现服务</h3>
+            <div className="flex bg-slate-100 rounded-full p-0.5 text-xs">
               <button
                 type="button"
-                onClick={() => navigate('/portal/archive')}
-                className="text-xs text-brand-600 font-medium"
+                onClick={() => setHubTab('activities')}
+                className={`px-3 py-1 rounded-full transition ${
+                  hubTab === 'activities' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                }`}
               >
-                全部 →
+                可报名活动
               </button>
-            }
-          />
+              <button
+                type="button"
+                onClick={() => setHubTab('counseling')}
+                className={`px-3 py-1 rounded-full transition ${
+                  hubTab === 'counseling' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500'
+                }`}
+              >
+                预约咨询
+              </button>
+            </div>
+          </div>
+
+          {hubTab === 'activities' ? (
+            <div className="space-y-2">
+              {openGroups.length === 0 && openCourses.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-slate-200 p-4 text-center bg-white">
+                  <div className="text-sm text-slate-500">暂无开放的活动</div>
+                  <div className="text-xs text-slate-400 mt-1">机构发布后会出现在这里</div>
+                </div>
+              ) : (
+                <>
+                  {openGroups.slice(0, 3).map((g: any) => (
+                    <ActivityRow
+                      key={g.id}
+                      icon={<Layers className="w-5 h-5" />}
+                      tone="amber"
+                      title={g.title}
+                      subtitle={g.description || '团体辅导'}
+                      meta={g.startDate ? `${g.startDate}${g.location ? ' · ' + g.location : ''}` : '待定'}
+                      onClick={() => navigate(`/portal/services/group/${g.id}`)}
+                    />
+                  ))}
+                  {openCourses.slice(0, 3).map((c: any) => (
+                    <ActivityRow
+                      key={c.courseId || c.id}
+                      icon={<BookOpen className="w-5 h-5" />}
+                      tone="purple"
+                      title={c.courseTitle || c.title}
+                      subtitle={c.courseCategory || '自助课程'}
+                      meta="点击了解"
+                      onClick={() => navigate(`/portal/services/course/${c.courseId || c.id}`)}
+                    />
+                  ))}
+                </>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => navigate('/portal/book')}
+                className="w-full bg-white border border-slate-200 rounded-2xl p-4 flex items-center gap-3 text-left transition active:scale-[0.98] hover:border-slate-300"
+              >
+                <div className="w-11 h-11 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center flex-shrink-0">
+                  <MessageSquare className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-slate-900">预约个体咨询</div>
+                  <div className="text-xs text-slate-500 mt-0.5">选择咨询师并发起预约申请</div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0" />
+              </button>
+              <div className="text-xs text-slate-400 px-2">
+                提交申请后，咨询师确认时间会在"待办事项"中通知你。
+              </div>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 3. 最近动态 */}
+      {recentEvents.length > 0 && (
+        <section>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-semibold text-slate-900">最近动态</h3>
+            <button
+              type="button"
+              onClick={() => navigate('/portal/archive')}
+              className="text-xs text-brand-600 font-medium"
+            >
+              全部 →
+            </button>
+          </div>
           <div className="space-y-2">
             {recentEvents.map((event: any) => (
               <TimelinePreviewCard key={event.id} event={event} />
@@ -235,28 +237,48 @@ export function HomeTab() {
           </div>
         </section>
       )}
-
-      {/* Unread notifications badge (small footer stat) */}
-      {dashboard?.unreadNotificationCount ? (
-        <div className="text-center text-xs text-slate-400">
-          你有 {dashboard.unreadNotificationCount} 条未读消息
-        </div>
-      ) : null}
     </div>
   );
 }
 
-/**
- * Compact timeline event preview card, used only on the HomeTab for the
- * "最近动态" section. The full Timeline component from the client package
- * is used on ArchiveTab for complete history.
- */
+function ActivityRow({
+  icon, tone, title, subtitle, meta, onClick,
+}: {
+  icon: React.ReactNode;
+  tone: 'amber' | 'purple';
+  title: string;
+  subtitle: string;
+  meta: string;
+  onClick: () => void;
+}) {
+  const toneMap = {
+    amber: 'bg-amber-50 text-amber-600',
+    purple: 'bg-purple-50 text-purple-600',
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full bg-white border border-slate-200 rounded-2xl p-4 flex items-start gap-3 text-left transition active:scale-[0.98] hover:border-slate-300"
+    >
+      <div className={`w-11 h-11 rounded-xl ${toneMap[tone]} flex items-center justify-center flex-shrink-0`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm font-semibold text-slate-900 truncate">{title}</div>
+        <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">{subtitle}</div>
+        <div className="text-xs text-slate-400 mt-1">{meta}</div>
+      </div>
+      <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0 mt-3" />
+    </button>
+  );
+}
+
 function TimelinePreviewCard({ event }: { event: any }) {
   const date = event.createdAt ? new Date(event.createdAt) : null;
   const dateLabel = date
     ? `${date.getMonth() + 1}/${date.getDate()} ${date.toLocaleTimeString('zh-CN', {
-        hour: '2-digit',
-        minute: '2-digit',
+        hour: '2-digit', minute: '2-digit',
       })}`
     : '';
 
@@ -266,9 +288,7 @@ function TimelinePreviewCard({ event }: { event: any }) {
         <div className="text-sm font-medium text-slate-700 flex-1 min-w-0">
           {event.title || event.type || '活动'}
         </div>
-        {dateLabel && (
-          <div className="text-[10px] text-slate-400 flex-shrink-0">{dateLabel}</div>
-        )}
+        {dateLabel && <div className="text-[10px] text-slate-400 flex-shrink-0">{dateLabel}</div>}
       </div>
       {event.description && (
         <div className="text-xs text-slate-500 mt-1 line-clamp-2">{event.description}</div>

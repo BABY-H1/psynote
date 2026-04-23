@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, ClipboardList, CheckCircle2 } from 'lucide-react';
-import { useMyAppointments, useAvailableGroups, useAvailableCourses, useMyAssessments } from '@client/api/useClientPortal';
-import { PageLoading } from '@client/shared/components';
+import { Calendar, ClipboardList, CheckCircle2, FileText, ChevronRight } from 'lucide-react';
+import { useMyAppointments, useAvailableGroups, useAvailableCourses, useMyAssessments, useMyResults } from '@client/api/useClientPortal';
+import { PageLoading, RiskBadge } from '@client/shared/components';
 import { ServiceCard } from '../components/ServiceCard';
 import { SectionHeader } from '../components/SectionHeader';
 import { useViewingContext } from '../stores/viewingContext';
@@ -54,6 +54,7 @@ export function MyServicesTab() {
   const { data: groups, isLoading: groupsLoading } = useAvailableGroups();
   const { data: courses, isLoading: coursesLoading } = useAvailableCourses();
   const { data: myAssessments } = useMyAssessments();
+  const { data: myResults } = useMyResults();
 
   // "My counseling" = distinct counselors from the appointments list. For
   // each counselor, we also compute the next upcoming appointment (if any).
@@ -130,7 +131,11 @@ export function MyServicesTab() {
     return <PageLoading />;
   }
 
-  const hasAny = myCounseling.length > 0 || myGroups.length > 0 || myCourses.length > 0;
+  const hasAny =
+    myCounseling.length > 0 ||
+    myGroups.length > 0 ||
+    myCourses.length > 0 ||
+    (!isViewingChild && ((myAssessments?.length ?? 0) > 0 || (myResults?.length ?? 0) > 0));
 
   return (
     <div className="space-y-8">
@@ -209,6 +214,45 @@ export function MyServicesTab() {
                 />
               );
             })}
+          </div>
+        </section>
+      )}
+
+      {/* 我的测评结果 — guardian-blocked */}
+      {!isViewingChild && myResults && myResults.length > 0 && (
+        <section>
+          <SectionHeader title="我的测评结果" count={myResults.length} />
+          <div className="space-y-2">
+            {myResults.slice(0, 5).map((r: any) => (
+              <button
+                key={r.id}
+                type="button"
+                onClick={() => navigate(`/portal/archive/results/${r.id}`)}
+                className="w-full bg-white border border-slate-200 rounded-2xl p-3 flex items-center gap-3 text-left transition active:scale-[0.98] hover:border-slate-300"
+              >
+                <div className="w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-5 h-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-semibold text-slate-900 truncate">测评报告</div>
+                  <div className="text-xs text-slate-400 mt-0.5">
+                    {new Date(r.createdAt).toLocaleDateString('zh-CN')}
+                    {typeof r.totalScore === 'number' && <span className="ml-2">总分 {r.totalScore}</span>}
+                  </div>
+                </div>
+                {r.riskLevel && <RiskBadge level={r.riskLevel} />}
+                <ChevronRight className="w-4 h-4 text-slate-300 flex-shrink-0 ml-1" />
+              </button>
+            ))}
+            {myResults.length > 5 && (
+              <button
+                type="button"
+                onClick={() => navigate('/portal/archive')}
+                className="w-full text-center text-xs text-brand-600 py-2"
+              >
+                查看全部 {myResults.length} 份报告 →
+              </button>
+            )}
           </div>
         </section>
       )}

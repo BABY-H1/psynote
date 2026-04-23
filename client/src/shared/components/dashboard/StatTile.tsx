@@ -53,11 +53,13 @@ export interface StatTileProps {
   onClick?: () => void;
   /** Small muted text shown next to label, e.g. "即将上线" / "最多 5 人" */
   hint?: string;
+  /** Reduce padding / icon / font sizes for tight side columns */
+  compact?: boolean;
 }
 
 export function StatTile({
   icon, label, value, suffix, tone = 'slate',
-  loading, highlight, onClick, hint,
+  loading, highlight, onClick, hint, compact,
 }: StatTileProps) {
   const t = TONE_MAP[tone];
   const Comp: any = onClick ? 'button' : 'div';
@@ -70,7 +72,9 @@ export function StatTile({
       type={onClick ? 'button' : undefined}
       onClick={onClick}
       className={
-        `bg-white rounded-xl p-4 flex items-center gap-4 text-left border transition ${
+        `bg-white rounded-xl flex items-center text-left border transition ${
+          compact ? 'p-2.5 gap-2' : 'p-4 gap-4'
+        } ${
           highlight
             ? 'border-rose-200 ring-1 ring-rose-100'
             : 'border-slate-200'
@@ -80,18 +84,20 @@ export function StatTile({
       }
     >
       {icon && (
-        <div className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${t.iconBg} ${t.iconText}`}>
+        <div className={`rounded-lg flex items-center justify-center flex-shrink-0 ${
+          compact ? 'w-7 h-7' : 'w-9 h-9'
+        } ${t.iconBg} ${t.iconText}`}>
           {icon}
         </div>
       )}
       <div className="min-w-0">
-        <div className={`text-2xl font-bold ${highlight ? 'text-rose-700' : 'text-slate-900'}`}>
+        <div className={`font-bold ${compact ? 'text-lg leading-tight' : 'text-2xl'} ${highlight ? 'text-rose-700' : 'text-slate-900'}`}>
           {displayValue}
           {suffix && !loading && (
-            <span className="text-sm font-normal text-slate-400 ml-1">{suffix}</span>
+            <span className={`font-normal text-slate-400 ml-1 ${compact ? 'text-xs' : 'text-sm'}`}>{suffix}</span>
           )}
         </div>
-        <div className="text-xs text-slate-500 truncate">
+        <div className={`text-slate-500 truncate ${compact ? 'text-[11px]' : 'text-xs'}`}>
           {label}
           {hint && <span className="text-slate-300 ml-2">{hint}</span>}
         </div>

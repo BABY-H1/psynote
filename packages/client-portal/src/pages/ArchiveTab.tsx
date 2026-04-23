@@ -1,47 +1,58 @@
 import React, { useState } from 'react';
 import { FileText, Folder, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useMyResults } from '@client/api/useClientPortal';
-import { useMyTimeline } from '@client/api/useClientPortal';
+import { useMyResults, useMyTimeline } from '@client/api/useClientPortal';
 import { PageLoading, RiskBadge } from '@client/shared/components';
 import { RISK_LABELS } from '@client/features/assessment/constants';
 import { Timeline } from '@client/features/counseling/components/Timeline';
-import { SectionHeader } from '../components/SectionHeader';
 
 /**
- * Phase 8c — ArchiveTab: "past" — 测评历史 + 完整时间线。
+ * ArchiveTab —— 来访者的历史档案。
  *
- * Two sections:
- *   1. 测评历史 — list of assessment results, expandable to show total score,
- *      risk level, dimension scores. Merged from the old MyReports page.
- *   2. 健康时间线 — complete chronological timeline via the client
- *      Timeline component, which shows all care events (appointments,
- *      session notes, assessments, consents, …).
+ * 布局要求（用户反馈）：
+ *   - 顶部：sticky 档案切换条（测评报告 / 健康时间线）
+ *   - 中间：只有"档案"部分滚动，切换不变
+ *   - 底部：PortalAppShell 的 BottomTabBar（已经 sticky）
  *
- * Future extension: a "已结案个案回顾" section showing historical care
- * episodes that have status='closed'. The current /client/dashboard endpoint
- * only returns the single active episode, so surfacing closed episodes
- * would require a new endpoint. Deferred to post-Phase 8c.
+ * 所以本 Tab 自身实现一个 sticky 档案切换，避免用户在长时间线里失去上下文。
  */
+type ArchiveSection = 'results' | 'timeline';
+
 export function ArchiveTab() {
   const { data: results, isLoading: resultsLoading } = useMyResults();
   const { data: timeline, isLoading: timelineLoading } = useMyTimeline();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [section, setSection] = useState<ArchiveSection>('results');
   const navigate = useNavigate();
 
-  if (resultsLoading || timelineLoading) {
-    return <PageLoading />;
-  }
+  if (resultsLoading || timelineLoading) return <PageLoading />;
 
-  const hasResults = results && results.length > 0;
-  const hasTimeline = timeline && timeline.length > 0;
+  const hasResults = !!results && results.length > 0;
+  const hasTimeline = !!timeline && timeline.length > 0;
 
   return (
-    <div className="space-y-8">
-      {/* 测评历史 */}
-      <section>
-        <SectionHeader title="测评历史" count={results?.length ?? 0} />
-        {!hasResults ? (
+    <div className="flex flex-col gap-3">
+      {/* Sticky 档案切换 —— 位于 portal shell 顶部 header 下方 */}
+      <div className="sticky top-0 z-20 -mx-4 px-4 py-2 bg-slate-50/95 backdrop-blur-sm border-b border-slate-100">
+        <div className="flex bg-white border border-slate-200 rounded-full p-0.5 text-xs">
+          <SectionToggle
+            active={section === 'results'}
+            label="测评报告"
+            count={results?.length ?? 0}
+            onClick={() => setSection('results')}
+          />
+          <SectionToggle
+            active={section === 'timeline'}
+            label="健康时间线"
+            count={timeline?.length ?? 0}
+            onClick={() => setSection('timeline')}
+          />
+        </div>
+      </div>
+
+      {/* 档案内容 —— 只有此部分滚动 */}
+      {section === 'results' ? (
+        !hasResults ? (
           <EmptyRow
             icon={<FileText className="w-5 h-5 text-slate-400" />}
             title="暂无测评报告"
@@ -67,18 +78,14 @@ export function ArchiveTab() {
                         <FileText className="w-5 h-5" />
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm font-semibold text-slate-900">
-                          测评报告
-                        </div>
+                        <div className="text-sm font-semibold text-slate-900">测评报告</div>
                         <div className="text-xs text-slate-400 mt-0.5">
                           {new Date(r.createdAt).toLocaleDateString('zh-CN')}
                         </div>
                       </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="text-sm font-mono text-slate-600">
-                        {r.totalScore} 分
-                      </span>
+                      <span className="text-sm font-mono text-slate-600">{r.totalScore} 分</span>
                       {r.riskLevel && <RiskBadge level={r.riskLevel} />}
                     </div>
                   </button>
@@ -87,9 +94,7 @@ export function ArchiveTab() {
                     <div className="border-t border-slate-100 p-4 space-y-3">
                       <div className="grid grid-cols-2 gap-2">
                         <div className="bg-slate-50 rounded-xl p-3 text-center">
-                          <div className="text-2xl font-bold text-slate-900">
-                            {r.totalScore}
-                          </div>
+                          <div className="text-2xl font-bold text-slate-900">{r.totalScore}</div>
                           <div className="text-[10px] text-slate-500 mt-0.5">总分</div>
                         </div>
                         {r.riskLevel && (
@@ -97,9 +102,7 @@ export function ArchiveTab() {
                             <div className="text-2xl font-bold text-slate-900">
                               {RISK_LABELS[r.riskLevel as keyof typeof RISK_LABELS] ?? r.riskLevel}
                             </div>
-                            <div className="text-[10px] text-slate-500 mt-0.5">
-                              风险等级
-                            </div>
+                            <div className="text-[10px] text-slate-500 mt-0.5">风险等级</div>
                           </div>
                         )}
                       </div>
@@ -115,19 +118,14 @@ export function ArchiveTab() {
                                 key={dimId}
                                 className="flex items-center justify-between bg-slate-50 rounded-lg px-3 py-2"
                               >
-                                <span className="text-xs text-slate-700 truncate max-w-[65%]">
-                                  {dimId}
-                                </span>
-                                <span className="text-xs font-mono text-slate-600">
-                                  {String(score)}
-                                </span>
+                                <span className="text-xs text-slate-700 truncate max-w-[65%]">{dimId}</span>
+                                <span className="text-xs font-mono text-slate-600">{String(score)}</span>
                               </div>
                             ))}
                           </div>
                         </div>
                       )}
 
-                      {/* Phase 9β — link to detail page with full report + AI interpretation */}
                       <button
                         type="button"
                         onClick={(e) => {
@@ -145,35 +143,42 @@ export function ArchiveTab() {
               );
             })}
           </div>
-        )}
-      </section>
-
-      {/* 完整时间线 */}
-      <section>
-        <SectionHeader title="健康时间线" />
-        {!hasTimeline ? (
-          <EmptyRow
-            icon={<Folder className="w-5 h-5 text-slate-400" />}
-            title="暂无历史记录"
-            subtitle="开始服务后，所有事件会在这里按时间排列"
-          />
-        ) : (
-          <Timeline events={timeline || []} isLoading={false} />
-        )}
-      </section>
+        )
+      ) : !hasTimeline ? (
+        <EmptyRow
+          icon={<Folder className="w-5 h-5 text-slate-400" />}
+          title="暂无历史记录"
+          subtitle="开始服务后，所有事件会在这里按时间排列"
+        />
+      ) : (
+        <Timeline events={timeline || []} isLoading={false} />
+      )}
     </div>
   );
 }
 
-function EmptyRow({
-  icon,
-  title,
-  subtitle,
+function SectionToggle({
+  active, label, count, onClick,
 }: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
+  active: boolean;
+  label: string;
+  count: number;
+  onClick: () => void;
 }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex-1 py-1.5 rounded-full transition text-center ${
+        active ? 'bg-brand-50 text-brand-700 font-semibold' : 'text-slate-500'
+      }`}
+    >
+      {label} {count > 0 && <span className={active ? 'text-brand-500' : 'text-slate-400'}>{count}</span>}
+    </button>
+  );
+}
+
+function EmptyRow({ icon, title, subtitle }: { icon: React.ReactNode; title: string; subtitle: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center bg-white">
       <div className="flex justify-center mb-2">{icon}</div>

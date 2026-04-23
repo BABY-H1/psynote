@@ -129,19 +129,9 @@ export function GroupCenter() {
 
   return (
     <div>
-      {/* Header — title removed (Phase 14e: lives in DeliveryCenter tab label). */}
-      <div className="flex items-center justify-end mb-6">
-        <button
-          onClick={() => setView('create')}
-          className="flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition"
-        >
-          <Plus className="w-4 h-4" />
-          发布活动
-        </button>
-      </div>
-
-      {/* Filters: search input + StatusFilterTabs (Phase 4a) */}
-      <div className="flex flex-wrap items-center gap-3 mb-4">
+      {/* Toolbar: search + StatusFilterTabs + 发布 CTA — all on one row
+          (Phase 14e: title moved to DeliveryCenter tab label; CTA pinned to the right). */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="relative flex-1 max-w-xs min-w-[160px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -152,6 +142,13 @@ export function GroupCenter() {
           />
         </div>
         <StatusFilterTabs options={statusOptions} value={statusFilter} onChange={setStatusFilter} />
+        <button
+          onClick={() => setView('create')}
+          className="ml-auto flex items-center gap-1.5 px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 transition"
+        >
+          <Plus className="w-4 h-4" />
+          发布活动
+        </button>
       </div>
 
       {/* Instance List */}

@@ -1,36 +1,28 @@
 /**
- * Phase 10 — Org admin home dashboard.
+ * 机构管理员首页 —— 重设计版。
  *
- * Replaces the counselor workstation for org_admin users. Shows:
- * - Org overview metrics (counselors, clients, sessions)
- * - Action items (unassigned clients, pending notes, expiring consents)
- * - Recent notifications
- * - Quick navigation links
+ * 第一性原理：打开首页的 10 秒内识别"有没有事卡在我这里 + 本月运营比上月如何"。
+ *
+ *  ┌────────────────────────────────────────────────────┐
+ *  │ 欢迎标语                                            │
+ *  │ 5 KPIDelta (本月新增来访者 / 个咨 / 进行中团辅 /   │
+ *  │             进行中课程 / 本月测评 —— 均带环比)     │
+ *  ├──────────────────────────────┬─────────────────────┤
+ *  │ 待分配来访者 action card     │ 最近通知 列表        │
+ *  │ （唯一真正跑通的决策队列）   │ （内部滚动）         │
+ *  └──────────────────────────────┴─────────────────────┘
  */
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import {
-  Users, UserCheck, Calendar, AlertTriangle, ClipboardList, Bell,
-  ArrowRight, FileWarning, ShieldAlert, UsersRound, BookOpen,
-  ClipboardCheck, Inbox,
+  UserPlus, Calendar, UsersRound, BookOpen, ClipboardCheck,
+  AlertTriangle, Bell,
 } from 'lucide-react';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
-import { StatTile } from '../../../shared/components/dashboard';
-
-interface DashboardStats {
-  counselorCount: number;
-  clientCount: number;
-  monthlySessionCount: number;
-  unassignedCount: number;
-  pendingNoteCount: number;
-  expiringConsentCount: number;
-  activeGroupCount: number;
-  activeCourseCount: number;
-  monthlyAssessmentCount: number;
-  pendingIntakeCount: number;
-}
+import { useDashboardStats, useDashboardKpiDelta } from '../../../api/useDashboard';
+import { KPIDelta } from '../../../shared/components/dashboard';
 
 interface Notification {
   id: string;
@@ -43,16 +35,6 @@ interface Notification {
   refId?: string;
 }
 
-function useDashboardStats() {
-  const orgId = useAuthStore((s) => s.currentOrgId);
-  return useQuery({
-    queryKey: ['dashboard-stats', orgId],
-    queryFn: () => api.get<DashboardStats>(`/orgs/${orgId}/dashboard/stats`),
-    enabled: !!orgId,
-    refetchInterval: 60_000, // refresh every minute
-  });
-}
-
 function useRecentNotifications() {
   const orgId = useAuthStore((s) => s.currentOrgId);
   return useQuery({
@@ -63,209 +45,163 @@ function useRecentNotifications() {
 }
 
 export function OrgAdminDashboard() {
-  const user = useAuthStore((s) => s.user);
-  const { data: stats, isLoading } = useDashboardStats();
-  const { data: notifications = [] } = useRecentNotifications();
   const navigate = useNavigate();
-
-  const recentNotifs = notifications.slice(0, 8);
+  const user = useAuthStore((s) => s.user);
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: delta, isLoading: deltaLoading } = useDashboardKpiDelta();
+  const { data: notifications = [] } = useRecentNotifications();
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">
+    <div className="h-full flex flex-col gap-4 min-h-0">
+      {/* 欢迎 */}
+      <div className="flex items-baseline gap-3 flex-wrap flex-shrink-0">
+        <h1 className="text-xl font-bold text-slate-900">
           你好，{user?.name || '管理员'}
         </h1>
-        <p className="text-sm text-slate-500 mt-1">机构运营概览</p>
+        <p className="text-sm text-slate-500">机构运营概览</p>
       </div>
 
-      {/* Metrics cards — 2 rows of 3 (Phase 14c: migrated to shared StatTile) */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-        <StatTile
-          icon={<UserCheck className="w-5 h-5" />}
+      {/* 5 核心 KPI 环比 */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        <KPIDelta
+          icon={<UserPlus className="w-4 h-4" />}
           tone="blue"
-          label="活跃咨询师"
-          value={stats?.counselorCount}
-          loading={isLoading}
+          label="本月新增来访者"
+          current={delta?.newClient.current}
+          previous={delta?.newClient.previous}
+          suffix="人"
+          loading={deltaLoading}
         />
-        <StatTile
-          icon={<Users className="w-5 h-5" />}
-          tone="emerald"
-          label="活跃来访者"
-          value={stats?.clientCount}
-          loading={isLoading}
-        />
-        <StatTile
-          icon={<Calendar className="w-5 h-5" />}
+        <KPIDelta
+          icon={<Calendar className="w-4 h-4" />}
           tone="violet"
           label="本月个咨"
-          value={stats?.monthlySessionCount}
+          current={delta?.session.current}
+          previous={delta?.session.previous}
           suffix="场"
-          loading={isLoading}
+          loading={deltaLoading}
         />
-        <StatTile
-          icon={<UsersRound className="w-5 h-5" />}
+        <KPIDelta
+          icon={<UsersRound className="w-4 h-4" />}
           tone="orange"
           label="进行中团辅"
-          value={stats?.activeGroupCount}
-          loading={isLoading}
-          onClick={() => navigate('/delivery')}
+          current={delta?.groupActive.current}
+          previous={delta?.groupActive.previous}
+          suffix="个"
+          loading={deltaLoading}
+          onClick={() => navigate('/delivery?type=group')}
         />
-        <StatTile
-          icon={<BookOpen className="w-5 h-5" />}
+        <KPIDelta
+          icon={<BookOpen className="w-4 h-4" />}
           tone="teal"
           label="进行中课程"
-          value={stats?.activeCourseCount}
-          loading={isLoading}
-          onClick={() => navigate('/delivery')}
+          current={delta?.courseActive.current}
+          previous={delta?.courseActive.previous}
+          suffix="个"
+          loading={deltaLoading}
+          onClick={() => navigate('/delivery?type=course')}
         />
-        <StatTile
-          icon={<ClipboardCheck className="w-5 h-5" />}
+        <KPIDelta
+          icon={<ClipboardCheck className="w-4 h-4" />}
           tone="indigo"
           label="本月测评"
-          value={stats?.monthlyAssessmentCount}
+          current={delta?.assessment.current}
+          previous={delta?.assessment.previous}
           suffix="份"
-          loading={isLoading}
-          onClick={() => navigate('/delivery')}
+          loading={deltaLoading}
         />
       </div>
 
-      {/* Action items */}
-      <div>
-        <h2 className="text-sm font-semibold text-slate-500 tracking-wider uppercase mb-3">待办事项</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <ActionCard
-            icon={<AlertTriangle className="w-4 h-4" />}
-            label="待分配来访者"
+      {/* 待分配动作卡 + 最近通知 */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-1 min-h-0 flex">
+          <UnassignedCard
             count={stats?.unassignedCount ?? 0}
-            color="amber"
+            loading={statsLoading}
             onClick={() => navigate('/collaboration')}
-            loading={isLoading}
-          />
-          <ActionCard
-            icon={<Inbox className="w-4 h-4" />}
-            label="待处理申请"
-            count={stats?.pendingIntakeCount ?? 0}
-            color="violet"
-            onClick={() => navigate('/collaboration')}
-            loading={isLoading}
-          />
-          <ActionCard
-            icon={<ClipboardList className="w-4 h-4" />}
-            label="待审笔记"
-            count={stats?.pendingNoteCount ?? 0}
-            color="blue"
-            onClick={() => navigate('/collaboration')}
-            loading={isLoading}
-          />
-          <ActionCard
-            icon={<FileWarning className="w-4 h-4" />}
-            label="即将过期同意书"
-            count={stats?.expiringConsentCount ?? 0}
-            color="red"
-            onClick={() => navigate('/settings')}
-            loading={isLoading}
           />
         </div>
-      </div>
 
-      {/* Recent notifications */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-slate-500 tracking-wider uppercase">最近通知</h2>
-          <Bell className="w-4 h-4 text-slate-400" />
-        </div>
-        <div className="bg-white border border-slate-200 rounded-xl divide-y divide-slate-100">
-          {recentNotifs.length === 0 && (
-            <div className="p-6 text-sm text-slate-400 text-center">暂无通知</div>
-          )}
-          {recentNotifs.map((n) => (
-            <div
-              key={n.id}
-              className={`p-3 flex items-start gap-3 ${!n.isRead ? 'bg-blue-50/50' : ''}`}
-            >
-              <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${!n.isRead ? 'bg-blue-500' : 'bg-transparent'}`} />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-slate-800 font-medium">{n.title}</div>
-                {n.body && (
-                  <div className="text-xs text-slate-500 mt-0.5 truncate">{n.body}</div>
-                )}
-                <div className="text-xs text-slate-400 mt-1">
-                  {new Date(n.createdAt).toLocaleString('zh-CN')}
-                </div>
-              </div>
+        <div className="lg:col-span-2 min-h-0 flex">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 flex flex-col w-full min-h-0">
+            <div className="flex items-center justify-between mb-3 flex-shrink-0">
+              <h3 className="text-base font-bold text-slate-900">最近通知</h3>
+              <Bell className="w-4 h-4 text-slate-400" />
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Quick links */}
-      <div>
-        <h2 className="text-sm font-semibold text-slate-500 tracking-wider uppercase mb-3">快捷入口</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <QuickLink label="协作中心" onClick={() => navigate('/collaboration')} />
-          <QuickLink label="成员管理" onClick={() => navigate('/settings/members')} />
-          <QuickLink label="交付中心" onClick={() => navigate('/delivery')} />
-          <QuickLink label="知识库" onClick={() => navigate('/knowledge')} />
+            <div className="flex-1 min-h-0 overflow-y-auto -mx-1 px-1">
+              {notifications.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-sm text-slate-400">
+                  暂无通知
+                </div>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {notifications.map((n) => (
+                    <li
+                      key={n.id}
+                      className={`p-2.5 flex items-start gap-2.5 ${!n.isRead ? 'bg-blue-50/40' : ''}`}
+                    >
+                      <div className={`w-2 h-2 rounded-full mt-1.5 flex-shrink-0 ${!n.isRead ? 'bg-blue-500' : 'bg-transparent'}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm text-slate-800 font-medium truncate">{n.title}</div>
+                        {n.body && (
+                          <div className="text-xs text-slate-500 mt-0.5 truncate">{n.body}</div>
+                        )}
+                        <div className="text-xs text-slate-400 mt-1">
+                          {new Date(n.createdAt).toLocaleString('zh-CN')}
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-const colorMap = {
-  amber: { bg: 'bg-amber-50', text: 'text-amber-700', badge: 'bg-amber-100 text-amber-800' },
-  blue: { bg: 'bg-blue-50', text: 'text-blue-700', badge: 'bg-blue-100 text-blue-800' },
-  red: { bg: 'bg-red-50', text: 'text-red-700', badge: 'bg-red-100 text-red-800' },
-  violet: { bg: 'bg-violet-50', text: 'text-violet-700', badge: 'bg-violet-100 text-violet-800' },
-} as const;
-
-function ActionCard({ icon, label, count, color, onClick, loading }: {
-  icon: React.ReactNode;
-  label: string;
+interface UnassignedCardProps {
   count: number;
-  color: keyof typeof colorMap;
-  onClick: () => void;
   loading: boolean;
-}) {
-  const c = colorMap[color];
-  const hasItems = count > 0;
+  onClick: () => void;
+}
 
+function UnassignedCard({ count, loading, onClick }: UnassignedCardProps) {
+  const hasItems = count > 0;
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`p-4 rounded-xl border text-left transition w-full ${
+      className={`flex flex-col w-full rounded-xl border p-4 text-left transition ${
         hasItems
-          ? `${c.bg} border-${color}-200 hover:border-${color}-300`
+          ? 'bg-amber-50 border-amber-200 hover:border-amber-300'
           : 'bg-white border-slate-200 hover:border-slate-300'
       }`}
     >
       <div className="flex items-center justify-between mb-2">
-        <span className={hasItems ? c.text : 'text-slate-400'}>{icon}</span>
+        <span className={`p-2 rounded-lg ${hasItems ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-400'}`}>
+          <AlertTriangle className="w-4 h-4" />
+        </span>
         {hasItems && (
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${c.badge}`}>
-            {loading ? '…' : count}
+          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-amber-100 text-amber-800">
+            等待派单
           </span>
         )}
       </div>
-      <div className={`text-sm font-medium ${hasItems ? c.text : 'text-slate-500'}`}>{label}</div>
-      {!hasItems && !loading && (
-        <div className="text-xs text-slate-400 mt-0.5">无待处理</div>
-      )}
-    </button>
-  );
-}
-
-function QuickLink({ label, onClick }: { label: string; onClick: () => void }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="bg-white border border-slate-200 rounded-xl p-3 text-sm text-slate-700 font-medium hover:border-slate-300 hover:bg-slate-50 transition flex items-center justify-between"
-    >
-      {label}
-      <ArrowRight className="w-3.5 h-3.5 text-slate-400" />
+      <div className={`text-3xl font-bold leading-tight ${hasItems ? 'text-amber-700' : 'text-slate-400'}`}>
+        {loading ? '—' : count}
+      </div>
+      <div className={`text-sm font-medium mt-1 ${hasItems ? 'text-amber-700' : 'text-slate-600'}`}>
+        待分配来访者
+      </div>
+      <div className="text-xs text-slate-400 mt-1">
+        {hasItems
+          ? '点击进入协作中心 · 派单 Tab 处理'
+          : '无待派单 · 所有来访者均已分配咨询师'}
+      </div>
+      <div className="flex-1" />
     </button>
   );
 }

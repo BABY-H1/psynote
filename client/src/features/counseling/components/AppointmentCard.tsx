@@ -31,6 +31,16 @@ interface Props {
   onComplete?: () => void;
   onNoShow?: () => void;
   isPending?: boolean;
+  /** If provided, the whole card becomes clickable (action buttons stopPropagation). */
+  onCardClick?: () => void;
+}
+
+function stopAnd(cb?: () => void) {
+  if (!cb) return undefined;
+  return (e: React.MouseEvent) => {
+    e.stopPropagation();
+    cb();
+  };
 }
 
 export function AppointmentCard({
@@ -41,11 +51,32 @@ export function AppointmentCard({
   onComplete,
   onNoShow,
   isPending,
+  onCardClick,
 }: Props) {
   const status = statusConfig[appointment.status] || statusConfig.pending;
+  const clickable = !!onCardClick;
+
+  const cardProps = clickable
+    ? {
+        role: 'button' as const,
+        tabIndex: 0,
+        onClick: onCardClick,
+        onKeyDown: (e: React.KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            onCardClick!();
+          }
+        },
+      }
+    : {};
 
   return (
-    <div className="bg-white rounded-lg border border-slate-200 p-4">
+    <div
+      className={`bg-white rounded-lg border border-slate-200 p-4 transition ${
+        clickable ? 'cursor-pointer hover:border-brand-300 hover:shadow-sm' : ''
+      }`}
+      {...cardProps}
+    >
       <div className="flex items-start justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
@@ -89,7 +120,7 @@ export function AppointmentCard({
         <div className="flex gap-2 mt-3 pt-3 border-t border-slate-100">
           {appointment.status === 'pending' && onConfirm && (
             <button
-              onClick={onConfirm}
+              onClick={stopAnd(onConfirm)}
               disabled={isPending}
               className="px-3 py-1.5 bg-brand-600 text-white rounded text-xs font-medium hover:bg-brand-500 disabled:opacity-50"
             >
@@ -98,7 +129,7 @@ export function AppointmentCard({
           )}
           {appointment.status === 'pending' && onCancel && (
             <button
-              onClick={onCancel}
+              onClick={stopAnd(onCancel)}
               disabled={isPending}
               className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded text-xs hover:bg-slate-50 disabled:opacity-50"
             >
@@ -107,7 +138,7 @@ export function AppointmentCard({
           )}
           {appointment.status === 'confirmed' && onComplete && (
             <button
-              onClick={onComplete}
+              onClick={stopAnd(onComplete)}
               disabled={isPending}
               className="px-3 py-1.5 bg-green-600 text-white rounded text-xs font-medium hover:bg-green-500 disabled:opacity-50"
             >
@@ -116,7 +147,7 @@ export function AppointmentCard({
           )}
           {appointment.status === 'confirmed' && onCancel && (
             <button
-              onClick={onCancel}
+              onClick={stopAnd(onCancel)}
               disabled={isPending}
               className="px-3 py-1.5 border border-slate-200 text-slate-600 rounded text-xs hover:bg-slate-50 disabled:opacity-50"
             >
@@ -125,7 +156,7 @@ export function AppointmentCard({
           )}
           {appointment.status === 'confirmed' && onNoShow && (
             <button
-              onClick={onNoShow}
+              onClick={stopAnd(onNoShow)}
               disabled={isPending}
               className="px-3 py-1.5 border border-red-200 text-red-600 rounded text-xs hover:bg-red-50 disabled:opacity-50"
             >

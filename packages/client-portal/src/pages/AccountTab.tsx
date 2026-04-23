@@ -1,34 +1,30 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { User as UserIcon, FileCheck, Settings, LogOut, ChevronRight, Mail, Users } from 'lucide-react';
+import {
+  User as UserIcon, FileCheck, Settings, LogOut, ChevronRight, Mail,
+  Building2, Users, Plus,
+} from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuthStore } from '@client/stores/authStore';
 import { useMyDocuments } from '@client/api/useConsent';
+import { api } from '@client/api/client';
+import { PARENT_RELATION_LABELS } from '@psynote/shared';
 import { useMyChildren } from '../api/useFamily';
 
 /**
- * Phase 8c — AccountTab: "我的" tab.
+ * AccountTab — "我的" tab.
  *
- * Layout:
- *   [Avatar card]  Big card with user's name, email, maybe avatar
- *   ──────────────
- *   [Link row]     个人信息       → /portal/account/profile
- *   [Link row]     协议与授权  (2) → /portal/account/consents (count from pending docs)
- *   [Link row]     设置           → /portal/account/settings (future)
- *   ──────────────
- *   [Logout]       退出登录       → logout() + navigate('/login')
- *
- * Intentionally simple: this is the "destination" tab, not a dashboard.
- * Everything below the avatar card is a list of navigation rows following
- * the iOS/Android settings-screen idiom. Each row is full-width, tall
- * enough for touch targets, with a chevron on the right to signal drill-down.
+ * 用户反馈：以前点进"我的孩子"才能看关系，这是多余一次跳转。现在 AccountTab
+ * 把"所属机构 + 绑定的孩子"直接 inline 展示，用户一眼就知道自己当前是谁、
+ * 为谁看。
  */
 export function AccountTab() {
   const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const { data: myDocs } = useMyDocuments();
   const { data: children } = useMyChildren();
+  const { data: orgs } = useMyOrgs();
   const pendingCount = (myDocs ?? []).filter((d) => d.status === 'pending').length;
-  const childrenCount = (children ?? []).length;
 
   const handleLogout = () => {
     logout();
@@ -55,7 +51,77 @@ export function AccountTab() {
         </div>
       </div>
 
-      {/* Navigation rows */}
+      {/* 我的归属 */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-2">
+          <Building2 className="w-4 h-4 text-slate-500" />
+          <span className="text-xs font-semibold text-slate-600 tracking-wide">所属机构</span>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {(orgs ?? []).length === 0 ? (
+            <div className="px-4 py-3 text-xs text-slate-400">暂无机构</div>
+          ) : (
+            (orgs ?? []).map((o) => (
+              <div key={o.id} className="px-4 py-3 flex items-center gap-3">
+                <div className="w-9 h-9 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-slate-900 truncate">{o.name}</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">角色：{roleLabel(o.myRole)}</div>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* 我的孩子 */}
+      <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-slate-500" />
+            <span className="text-xs font-semibold text-slate-600 tracking-wide">绑定的孩子</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/portal/account/children')}
+            className="text-xs text-brand-600 font-medium flex items-center gap-0.5"
+          >
+            <Plus className="w-3 h-3" />
+            绑定/管理
+          </button>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {(children ?? []).length === 0 ? (
+            <div className="px-4 py-3 text-xs text-slate-400">
+              还未绑定任何孩子 · 点击右上角可以开始绑定
+            </div>
+          ) : (
+            (children ?? []).map((c) => (
+              <button
+                key={c.relationshipId}
+                type="button"
+                onClick={() => navigate('/portal/account/children')}
+                className="w-full px-4 py-3 flex items-center gap-3 text-left hover:bg-slate-50"
+              >
+                <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center flex-shrink-0 text-sm font-bold">
+                  {c.childName?.charAt(0) || '?'}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-medium text-slate-900 truncate">{c.childName}</div>
+                  <div className="text-[11px] text-slate-400 mt-0.5">
+                    {PARENT_RELATION_LABELS[c.relation]}
+                  </div>
+                </div>
+                <ChevronRight className="w-4 h-4 text-slate-300" />
+              </button>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* 导航入口 */}
       <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden divide-y divide-slate-100">
         <AccountRow
           icon={<UserIcon className="w-5 h-5 text-brand-600" />}
@@ -69,14 +135,6 @@ export function AccountTab() {
           label="协议与授权"
           badge={pendingCount > 0 ? String(pendingCount) : undefined}
           onClick={() => navigate('/portal/account/consents')}
-        />
-        <AccountRow
-          icon={<Users className="w-5 h-5 text-emerald-600" />}
-          iconBg="bg-emerald-50"
-          label="我的孩子"
-          badge={childrenCount > 0 ? String(childrenCount) : undefined}
-          hint={childrenCount === 0 ? '可绑定' : undefined}
-          onClick={() => navigate('/portal/account/children')}
         />
         <AccountRow
           icon={<Settings className="w-5 h-5 text-slate-500" />}
@@ -104,14 +162,27 @@ export function AccountTab() {
   );
 }
 
+function roleLabel(role: string): string {
+  switch (role) {
+    case 'client': return '来访者';
+    case 'counselor': return '咨询师';
+    case 'org_admin': return '机构管理员';
+    case 'supervisor': return '督导';
+    default: return role;
+  }
+}
+
+function useMyOrgs() {
+  const user = useAuthStore((s) => s.user);
+  return useQuery({
+    queryKey: ['myOrgs', user?.id ?? null],
+    queryFn: () => api.get<Array<{ id: string; name: string; myRole: string }>>('/orgs'),
+    enabled: !!user,
+  });
+}
+
 function AccountRow({
-  icon,
-  iconBg,
-  label,
-  badge,
-  hint,
-  onClick,
-  disabled,
+  icon, iconBg, label, badge, hint, onClick, disabled,
 }: {
   icon: React.ReactNode;
   iconBg: string;

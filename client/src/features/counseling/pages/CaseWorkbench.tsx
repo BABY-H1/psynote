@@ -103,19 +103,8 @@ export function CaseWorkbench() {
 
   return (
     <div className="space-y-6">
-      {/* Header — title removed (Phase 14e: lives in DeliveryCenter tab label now).
-          Keep only the CTA; count hint moves into the filter bar below. */}
-      <div className="flex items-center justify-end">
-        <button
-          onClick={() => navigate('/episodes/new')}
-          className="px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 flex items-center gap-2"
-        >
-          <Plus className="w-4 h-4" />
-          新建个案
-        </button>
-      </div>
-
-      {/* Filters: search input + StatusFilterTabs */}
+      {/* Toolbar: search + StatusFilterTabs + 新建 CTA — all on one row
+          (Phase 14e: title moved to DeliveryCenter tab label; keep the CTA on the right). */}
       <div className="flex flex-wrap items-center gap-3">
         <div className="relative flex-1 max-w-xs min-w-[160px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
@@ -131,6 +120,13 @@ export function CaseWorkbench() {
           value={statusFilter}
           onChange={(v) => setStatusFilter(v as StatusFilter)}
         />
+        <button
+          onClick={() => navigate('/episodes/new')}
+          className="ml-auto px-4 py-2 bg-brand-600 text-white rounded-lg text-sm font-medium hover:bg-brand-500 flex items-center gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          新建个案
+        </button>
       </div>
 
       {/* Episode list grouped by client */}

@@ -1,67 +1,55 @@
 import React from 'react';
 import { useAuthStore } from '../../../stores/authStore';
 import { DashboardCountGrid } from '../components/DashboardCountGrid';
+import { TodayTimeline } from '../components/TodayTimeline';
 import { Workstation } from '../components/Workstation';
-import { FollowUpAlerts } from '../components/FollowUpAlerts';
+import { ActionQueue } from '../components/ActionQueue';
 
 /**
- * 首页 — 三段式工作台（Phase 14e 调整）
+ * 咨询师首页 —— 顶部 CountGrid + 下方三列。
  *
- *   ┌──────────────────────────────────────────┐
- *   │  你好，{user}                            │
- *   ├──────────────────────────────────────────┤
- *   │  ─── 看板 · 未来 ─────────────────       │
- *   │  <DashboardCountGrid />                  │
- *   ├──────────────────────────────────────────┤
- *   │  ─── 操作台 · 现在 ───────────────       │
- *   │  <Workstation />                         │
- *   ├──────────────────────────────────────────┤
- *   │  ─── 风险关注 ─────────────────────      │
- *   │  <FollowUpAlerts />                      │
- *   └──────────────────────────────────────────┘
+ * ┌──────────────────────────────────────────────────────┐
+ * │ DashboardCountGrid                                    │
+ * ├────────────────┬────────────────┬────────────────────┤
+ * │ TodayTimeline  │ Workstation    │ ActionQueue        │
+ * │ (今日时间线)    │ (预约管理/排班) │ (需要处理)         │
+ * └────────────────┴────────────────┴────────────────────┘
  *
- * Phase 14e 把原「档案库·过去」段（ArchiveSection = PersonArchivePreview +
- * RecentInteractions + FollowUpAlerts）替换为直接展示 FollowUpAlerts
- * 一张卡，段名改为「风险关注」。原来的"对象档案 top5"和"最近互动"从
- * 主页移除（仍可通过 交付中心 → 对象档案 入口访问）。
+ * 设计目标：首屏 10 秒内能识别"今天有几场 / 下一场是谁 / 憋着的事"。
+ * - col-1 今日时间线：只看当日时轴，当前时刻标线，已过去 dim
+ * - col-2 预约管理：全量按日期分组，可状态筛选；"排班设置"就地展开
+ * - col-3 需要处理：合并原 FollowUpAlerts 的 4 类规则（待确认预约 /
+ *   过期未写笔记 / 高风险未跟进 / 测评分数上升）
+ *
+ * 整页不滚动：每列内部自己 overflow-auto。
  */
 export function DashboardHome() {
   const user = useAuthStore((s) => s.user);
-
   return (
-    <div className="space-y-8">
-      {/* Welcome header */}
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">
-          你好，{user?.name || '用户'}
+    <div className="h-full flex flex-col gap-4 min-h-0">
+      {/* 欢迎 */}
+      <div className="flex items-baseline gap-3 flex-wrap flex-shrink-0">
+        <h1 className="text-xl font-bold text-slate-900">
+          你好，{user?.name || '咨询师'}
         </h1>
-        <p className="text-sm text-slate-500 mt-1">
-          欢迎回到 Psynote 工作台，以下是今天需要关注的内容
-        </p>
+        <p className="text-sm text-slate-500">今日工作看板</p>
       </div>
 
-      {/* ─── 看板 · 未来 ─── */}
-      <SectionDivider label="看板 · 未来" />
+      {/* 看板 */}
       <DashboardCountGrid />
 
-      {/* ─── 操作台 · 现在 ─── */}
-      <SectionDivider label="操作台 · 现在" />
-      <Workstation />
-
-      {/* ─── 风险关注 ─── */}
-      <SectionDivider label="风险关注" />
-      <FollowUpAlerts />
-    </div>
-  );
-}
-
-function SectionDivider({ label }: { label: string }) {
-  return (
-    <div className="flex items-center gap-3 select-none">
-      <span className="text-xs font-semibold text-slate-500 tracking-wider uppercase">
-        {label}
-      </span>
-      <div className="flex-1 h-px bg-slate-200" />
+      {/* 三列主区 */}
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="min-h-0 flex">
+          <TodayTimeline />
+        </div>
+        <div className="min-h-0 flex">
+          <Workstation />
+        </div>
+        <div className="min-h-0 flex">
+          <ActionQueue />
+        </div>
+      </div>
     </div>
   );
 }

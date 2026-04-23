@@ -135,17 +135,17 @@ const TONE_MAP: Record<Tone, { bg: string; text: string; iconBg: string }> = {
 
 function CountTile({ label, value, icon, tone, onClick, disabled }: TileData) {
   const t = TONE_MAP[tone];
-  const cls = `bg-white rounded-xl border border-slate-200 p-4 text-left transition ${
+  const cls = `bg-white rounded-xl border border-slate-200 p-3 text-left transition ${
     disabled ? 'cursor-default opacity-60' : `cursor-pointer ${t.bg}`
   }`;
 
   const content = (
     <>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-1">
         <span className="text-xs text-slate-500">{label}</span>
-        <div className={`${t.iconBg} ${t.text} p-1.5 rounded-md`}>{icon}</div>
+        <div className={`${t.iconBg} ${t.text} p-1 rounded-md`}>{icon}</div>
       </div>
-      <div className="text-2xl font-bold text-slate-900">{value}</div>
+      <div className="text-xl font-bold text-slate-900">{value}</div>
     </>
   );
 

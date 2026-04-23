@@ -10,6 +10,8 @@
  */
 export { StatTile } from './StatTile';
 export type { StatTileProps, StatTileTone } from './StatTile';
+export { KPIDelta } from './KPIDelta';
+export type { KPIDeltaProps } from './KPIDelta';
 export { RiskBarStack } from './RiskBarStack';
 export type { RiskBarStackProps, RiskBarStackRow } from './RiskBarStack';
 export { MonthlyTrendChart } from './MonthlyTrendChart';
