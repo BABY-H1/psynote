@@ -5,6 +5,7 @@ import {
   useToast,
   ServiceDetailLayout,
   ServiceTabBar,
+  ServiceCandidatesTab,
   type ServiceTab,
 } from '../../../shared/components';
 import type { GroupInstance, ServiceStatus } from '@psynote/shared';
@@ -36,7 +37,7 @@ import { ReportsTab } from './detail/ReportsTab';
  *      reports  → records
  */
 
-const VISIBLE_TABS: ServiceTab[] = ['overview', 'participants', 'timeline', 'records'];
+const VISIBLE_TABS: ServiceTab[] = ['overview', 'candidates', 'participants', 'timeline', 'records'];
 const TAB_LABELS: Partial<Record<ServiceTab, string>> = {
   participants: '成员',
   timeline: '活动记录',
@@ -138,6 +139,9 @@ export function GroupInstanceDetail({ instanceId, onClose }: Props) {
       }
     >
       {tab === 'overview' && <OverviewTab instance={instance} />}
+      {tab === 'candidates' && (
+        <ServiceCandidatesTab serviceType="group" instanceId={instanceId} />
+      )}
       {tab === 'participants' && <MembersTab instance={instance} />}
       {tab === 'timeline' && <SessionsTab instance={instance} />}
       {tab === 'records' && <ReportsTab instance={instance} />}

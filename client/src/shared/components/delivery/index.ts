@@ -32,6 +32,8 @@ export type { DeliveryCardData } from './DeliveryCard';
 export { ServiceTabBar } from './ServiceTabBar';
 export type { ServiceTab } from './ServiceTabBar';
 
+export { ServiceCandidatesTab } from './ServiceCandidatesTab';
+
 export { ServiceDetailLayout } from './ServiceDetailLayout';
 
 export { AIChatPanel } from './AIChatPanel';

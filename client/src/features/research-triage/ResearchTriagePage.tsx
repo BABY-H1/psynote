@@ -1,0 +1,111 @@
+/**
+ * 研判分流 (Research & Triage) — L1-L4 decision workbench over the
+ * screening-type assessment results, plus a forward-compatible scaffold
+ * for manually-added triage targets.
+ *
+ * Layout:
+ *   [TopFilterBar]   [筛查测评 | 手工候选 | 全部] + batch/assessment filters
+ *   ┌──────────────────────────────────────────────────────────────┐
+ *   │ Level sidebar │ Candidate list │ Detail + action bar         │
+ *   └──────────────────────────────────────────────────────────────┘
+ *
+ * Intake-type候选在交付中心(团辅/课程详情 → 候选 tab)处理,不在这里。
+ */
+import React, { useState } from 'react';
+import { DEFAULT_TRIAGE_CONFIG } from '@psynote/shared';
+import { TopFilterBar } from './components/TopFilterBar';
+import { LevelBucketSidebar } from './components/LevelBucketSidebar';
+import { TriageCandidateList } from './components/TriageCandidateList';
+import { TriageDetailPanel } from './components/TriageDetailPanel';
+import {
+  useTriageCandidates,
+  useTriageBuckets,
+  type TriageCandidateRow,
+  type TriageMode,
+} from '../../api/useResearchTriage';
+
+export function ResearchTriagePage() {
+  const [mode, setMode] = useState<TriageMode>('screening');
+  const [batchId, setBatchId] = useState<string | undefined>(undefined);
+  const [assessmentId, setAssessmentId] = useState<string | undefined>(undefined);
+  const [selectedLevel, setSelectedLevel] = useState<string | undefined>(undefined);
+  const [selectedRow, setSelectedRow] = useState<TriageCandidateRow | null>(null);
+
+  const filters = { mode, batchId, assessmentId };
+  const bucketsQuery = useTriageBuckets({ batchId, assessmentId });
+  const listQuery = useTriageCandidates({ ...filters, level: selectedLevel });
+
+  const levels = DEFAULT_TRIAGE_CONFIG.levels;
+
+  return (
+    <div className="h-full flex flex-col gap-4">
+      <div>
+        <h1 className="text-xl font-bold text-slate-900">研判分流</h1>
+        <p className="text-xs text-slate-500 mt-0.5">
+          筛查测评结果按 L1-L4 分级，逐人决定下一步动作
+        </p>
+      </div>
+
+      <TopFilterBar
+        mode={mode}
+        onModeChange={(m) => {
+          setMode(m);
+          setSelectedRow(null);
+        }}
+        batchId={batchId}
+        onBatchChange={(b) => {
+          setBatchId(b);
+          setSelectedRow(null);
+        }}
+        assessmentId={assessmentId}
+        onAssessmentChange={(a) => {
+          setAssessmentId(a);
+          setBatchId(undefined);
+          setSelectedRow(null);
+        }}
+      />
+
+      <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
+        <div className="col-span-2">
+          <LevelBucketSidebar
+            levels={levels}
+            buckets={bucketsQuery.data}
+            selectedLevel={selectedLevel}
+            onSelect={(lvl) => {
+              setSelectedLevel(lvl);
+              setSelectedRow(null);
+            }}
+            isLoading={bucketsQuery.isLoading}
+            disabled={mode === 'manual'}
+          />
+        </div>
+
+        <div className="col-span-5">
+          <TriageCandidateList
+            rows={listQuery.data ?? []}
+            isLoading={listQuery.isLoading}
+            isError={listQuery.isError}
+            selectedKey={selectedRow ? keyOf(selectedRow) : null}
+            onSelect={setSelectedRow}
+            mode={mode}
+          />
+        </div>
+
+        <div className="col-span-5">
+          <TriageDetailPanel
+            row={selectedRow}
+            onCleared={() => setSelectedRow(null)}
+            onActionDone={() => {
+              bucketsQuery.refetch();
+              listQuery.refetch();
+            }}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function keyOf(row: TriageCandidateRow): string {
+  return row.resultId ?? row.candidateId ?? '';
+}

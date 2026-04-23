@@ -63,6 +63,8 @@ import { useOrgBranding } from '../api/useOrgBranding';
 import { OrgCollaboration } from '../features/collaboration/OrgCollaboration';
 import { AuditLogViewer } from '../features/collaboration/AuditLogViewer';
 import { OrgSettingsPage } from '../features/settings/pages/OrgSettingsPage';
+// Research & triage — L1-L4 decision workbench over screening results
+import { ResearchTriagePage } from '../features/research-triage/ResearchTriagePage';
 
 function AppRoutes() {
   const { user, currentOrgId, currentRole, isSystemAdmin, _hydrated } = useAuthStore();
@@ -170,6 +172,8 @@ function AppRoutes() {
           {/* Per-module detail and wizard routes — kept; entered from inside the delivery center */}
           <Route path="episodes/new" element={<CreateEpisodeWizard />} />
           <Route path="episodes/:episodeId" element={<EpisodeDetail />} />
+          {/* Research & triage — L1-L4 decision workbench (org_admin + counselor) */}
+          <Route path="research-triage" element={<ResearchTriagePage />} />
           {/* Phase 10 — collaboration center (org_admin + counselor) */}
           <Route path="collaboration" element={<OrgCollaboration />} />
           {/* Phase 10 — audit log (org_admin, also embedded in settings later) */}
@@ -291,6 +295,12 @@ const allNavItems: NavItem[] = [
   { to: '/', label: '首页', end: true },
   { to: '/knowledge', label: '知识库' },
   { to: '/delivery', label: '交付中心' },
+  {
+    to: '/research-triage',
+    label: '研判分流',
+    onlyForRoles: ['org_admin', 'counselor'],
+    hideForOrgTypes: ['solo'],
+  },
   {
     to: '/collaboration',
     label: '协作中心',

@@ -77,6 +77,8 @@ import { collaborationRoutes } from './modules/collaboration/collaboration.route
 import { workflowRoutes } from './modules/workflow/workflow.routes.js';
 // Phase 13 — Crisis handling case workflow
 import { crisisRoutes } from './modules/crisis/crisis-case.routes.js';
+// Research & triage — L1-L4 decision workbench over screening assessment results
+import { triageRoutes } from './modules/triage/triage.routes.js';
 // EAP Enterprise — 国央企版 partnership & assignment
 import { eapPartnershipRoutes } from './modules/eap/eap-partnership.routes.js';
 import { eapAssignmentRoutes } from './modules/eap/eap-assignment.routes.js';
@@ -253,6 +255,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(collaborationRoutes, { prefix: '/api/orgs/:orgId/collaboration' });
   await app.register(workflowRoutes, { prefix: '/api/orgs/:orgId/workflow' });
   await app.register(crisisRoutes, { prefix: '/api/orgs/:orgId/crisis' });
+  await app.register(triageRoutes, { prefix: '/api/orgs/:orgId/triage' });
 
   // EAP Enterprise — partnerships + assignments + analytics + public registration.
   // Phase 14h: /eap/employees and /eap/crisis HTTP routes deleted (zero clients

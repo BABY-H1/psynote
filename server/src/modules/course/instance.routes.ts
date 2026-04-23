@@ -5,6 +5,7 @@ import { requireRole } from '../../middleware/rbac.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as instanceService from './instance.service.js';
+import { listCandidatesForService } from '../triage/triage-queries.service.js';
 
 export async function courseInstanceRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
@@ -31,6 +32,18 @@ export async function courseInstanceRoutes(app: FastifyInstance) {
   app.get('/:instanceId', async (request) => {
     const { instanceId } = request.params as { instanceId: string };
     return instanceService.getInstanceById(instanceId);
+  });
+
+  /** Candidates queued for this course instance (populated by workflow rules). */
+  app.get('/:instanceId/candidates', async (request) => {
+    const { instanceId } = request.params as { instanceId: string };
+    const { status } = request.query as { status?: string };
+    return listCandidatesForService({
+      orgId: request.org!.orgId,
+      serviceType: 'course',
+      instanceId,
+      status,
+    });
   });
 
   // ─── Create Instance ───────────────────────────────────────────

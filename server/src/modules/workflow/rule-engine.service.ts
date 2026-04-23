@@ -336,6 +336,19 @@ async function createCandidate(
     || `由规则「${rule.name}」触发 · 风险等级 ${ctx.payload.riskLevel}`;
   const assignedToUserId = (cfg.assignedToUserId as string | undefined) || undefined;
 
+  // Target service linkage — only meaningful for group/course candidates, but
+  // we accept them for any kind to keep the insert path uniform. Populated
+  // lets GroupInstanceDetail / CourseInstanceDetail reverse-lookup candidates
+  // pointing at a specific service.
+  const targetGroupInstanceId =
+    kind === 'group_candidate'
+      ? (cfg.targetGroupInstanceId as string | undefined) || null
+      : null;
+  const targetCourseInstanceId =
+    kind === 'course_candidate'
+      ? (cfg.targetCourseInstanceId as string | undefined) || null
+      : null;
+
   const [entry] = await db
     .insert(candidatePool)
     .values({
@@ -350,6 +363,8 @@ async function createCandidate(
       sourcePayload: ctx.payload as unknown as Record<string, unknown>,
       status: 'pending',
       assignedToUserId,
+      targetGroupInstanceId,
+      targetCourseInstanceId,
     })
     .returning({ id: candidatePool.id });
 

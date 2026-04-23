@@ -6,6 +6,7 @@ import { dataScopeGuard } from '../../middleware/data-scope.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as instanceService from './instance.service.js';
+import { listCandidatesForService } from '../triage/triage-queries.service.js';
 
 export async function instanceRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
@@ -27,6 +28,18 @@ export async function instanceRoutes(app: FastifyInstance) {
   app.get('/:instanceId', async (request) => {
     const { instanceId } = request.params as { instanceId: string };
     return instanceService.getInstanceById(instanceId);
+  });
+
+  /** Candidates queued for this group instance (populated by workflow rules). */
+  app.get('/:instanceId/candidates', async (request) => {
+    const { instanceId } = request.params as { instanceId: string };
+    const { status } = request.query as { status?: string };
+    return listCandidatesForService({
+      orgId: request.org!.orgId,
+      serviceType: 'group',
+      instanceId,
+      status,
+    });
   });
 
   app.post('/', {

@@ -1264,10 +1264,17 @@ export const candidatePool = pgTable('candidate_pool', {
   // 接受后关联到的实体(比如 accepted 后创建了个案,这里存个案 id)
   resolvedRefType: text('resolved_ref_type'),
   resolvedRefId: uuid('resolved_ref_id'),
+  // 候选目标服务:规则作者在规则 action.config 里指定的"打算把这个人加到哪个团辅/课程"
+  // 仅对 group_candidate / course_candidate 两类有意义;crisis / episode 候选可留空。
+  // 填了之后,团辅/课程详情页的"候选"tab 就能反查"指向本服务的候选名单"。
+  targetGroupInstanceId: uuid('target_group_instance_id').references(() => groupInstances.id, { onDelete: 'set null' }),
+  targetCourseInstanceId: uuid('target_course_instance_id').references(() => courseInstances.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('idx_candidate_pool_org_status_kind').on(t.orgId, t.status, t.kind),
   index('idx_candidate_pool_client').on(t.clientUserId, t.status),
+  index('idx_candidate_pool_target_group').on(t.targetGroupInstanceId, t.status),
+  index('idx_candidate_pool_target_course').on(t.targetCourseInstanceId, t.status),
 ]);
 
 // ─── AI Usage Tracking ───────────────────────────────────────────

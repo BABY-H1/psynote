@@ -1,5 +1,5 @@
 import React from 'react';
-import { LayoutDashboard, Users, ListChecks, FileText, Package } from 'lucide-react';
+import { LayoutDashboard, Users, ListChecks, FileText, Package, Sparkles } from 'lucide-react';
 
 /**
  * ServiceTabBar — 5 个标准 tab 的统一 tab 行。
@@ -24,12 +24,13 @@ import { LayoutDashboard, Users, ListChecks, FileText, Package } from 'lucide-re
  * 例如团辅可叫"成员"，课程可叫"学员"，测评可叫"受测者"。
  */
 
-export type ServiceTab = 'overview' | 'participants' | 'timeline' | 'records' | 'assets';
+export type ServiceTab = 'overview' | 'candidates' | 'participants' | 'timeline' | 'records' | 'assets';
 
-const DEFAULT_TABS: ServiceTab[] = ['overview', 'participants', 'timeline', 'records', 'assets'];
+const DEFAULT_TABS: ServiceTab[] = ['overview', 'candidates', 'participants', 'timeline', 'records', 'assets'];
 
 const DEFAULT_LABEL: Record<ServiceTab, string> = {
   overview: '总览',
+  candidates: '候选',
   participants: '参与者',
   timeline: '时间线',
   records: '记录',
@@ -38,6 +39,7 @@ const DEFAULT_LABEL: Record<ServiceTab, string> = {
 
 const DEFAULT_ICON: Record<ServiceTab, React.ReactNode> = {
   overview: <LayoutDashboard className="w-4 h-4" />,
+  candidates: <Sparkles className="w-4 h-4" />,
   participants: <Users className="w-4 h-4" />,
   timeline: <ListChecks className="w-4 h-4" />,
   records: <FileText className="w-4 h-4" />,
