@@ -1,0 +1,32 @@
+# Psynote Alpha —— Caddy 反代配置
+#
+# 职责:
+#   1. 自动申请并续期 HTTPS 证书(Let's Encrypt)
+#   2. /api/* → 转到 app 容器 :4000
+#   3. /portal/* 和 /invite/* 和 /register/* → SPA fallback(Portal)
+#   4. 其他 → SPA fallback(主 app)
+#
+# SPA fallback:所有非 API、非静态资源的路径都 rewrite 到 index.html,
+# 让 React Router 接管。客户端路由表见 client/src/app/App.tsx。
+
+{$CADDY_DOMAIN} {
+	encode gzip zstd
+
+	# API 反代
+	handle /api/* {
+		reverse_proxy app:4000
+	}
+
+	# 静态资源 + SPA fallback
+	handle {
+		root * /srv/client
+		try_files {path} /index.html
+		file_server
+	}
+
+	# 访问日志(写到 stdout,让 docker logs 收)
+	log {
+		output stdout
+		format console
+	}
+}

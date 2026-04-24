@@ -30,3 +30,6 @@ export { ServiceDetail } from './pages/ServiceDetail';
 export { BookAppointment } from './pages/BookAppointment';
 export { CourseReader } from './pages/CourseReader';
 export { ConsentCenter } from './pages/ConsentCenter';
+
+// Public entry pages (no auth required)
+export { CounselingPublicRegisterPage } from './pages/CounselingPublicRegisterPage';

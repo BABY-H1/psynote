@@ -7,6 +7,8 @@ import { join } from 'path';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
+import { passwordResetRoutes } from './modules/auth/password-reset.routes.js';
+import { counselingPublicRoutes } from './modules/counseling/counseling-public.routes.js';
 import { userRoutes } from './modules/user/user.routes.js';
 import { orgRoutes } from './modules/org/org.routes.js';
 import { scaleRoutes } from './modules/assessment/scale.routes.js';
@@ -142,6 +144,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Routes
   await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(passwordResetRoutes, { prefix: '/api/auth' });
   // Phase 14f — self-service user endpoints (/me)
   await app.register(userRoutes, { prefix: '/api/users' });
   await app.register(orgRoutes, { prefix: '/api/orgs' });
@@ -264,6 +267,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(eapAssignmentRoutes, { prefix: '/api/orgs/:orgId/eap/assignments' });
   await app.register(eapAnalyticsRoutes, { prefix: '/api/orgs/:orgId/eap/analytics' });
   await app.register(eapPublicRoutes, { prefix: '/api/public/eap' });
+  await app.register(counselingPublicRoutes, { prefix: '/api/public/counseling' });
 
   // School — class & student management
   await app.register(schoolClassRoutes, { prefix: '/api/orgs/:orgId/school/classes' });

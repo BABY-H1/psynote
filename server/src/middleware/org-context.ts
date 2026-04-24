@@ -4,8 +4,21 @@ import { db } from '../config/database.js';
 import { queryClient } from '../config/database.js';
 import { orgMembers, organizations } from '../db/schema.js';
 import { ForbiddenError, NotFoundError } from '../lib/errors.js';
-import type { OrgRole, OrgTier, OrgType, LicenseInfo } from '@psynote/shared';
-import { planToTier } from '@psynote/shared';
+import type {
+  OrgRole,
+  OrgTier,
+  OrgType,
+  LicenseInfo,
+  RoleV2,
+  Principal,
+  DataClass,
+} from '@psynote/shared';
+import {
+  planToTier,
+  principalOf,
+  legacyRoleToV2,
+  ROLE_DATA_CLASS_POLICY,
+} from '@psynote/shared';
 import { verifyLicense } from '../lib/license/verify.js';
 
 export interface OrgContext {
@@ -21,6 +34,16 @@ export interface OrgContext {
   orgType: OrgType;
   /** License verification result — used for seat limits & expiry display */
   license: LicenseInfo;
+  // ── Role Architecture V2 (migration 026) ──
+  // 从 org_members.role_v2 读,空时由 (legacy role, orgType) fallback 推导。
+  // Phase 2 backfill 跑后这个字段保证非空。
+  roleV2: RoleV2;
+  /** 派生自 roleV2 的登录形态 */
+  principalClass: Principal;
+  /** 派生督导身份 —— 替代散落在代码里的 `role==='counselor' && fullPracticeAccess` */
+  isSupervisor: boolean;
+  /** 该成员可触达的 PHI 数据密级白名单(ROLE_DATA_CLASS_POLICY + accessProfile.dataClasses) */
+  allowedDataClasses: readonly DataClass[];
 }
 
 /** No license present — use DB plan as fallback */
@@ -104,6 +127,10 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
       .limit(1);
     const { tier, license } = await resolveTier(orgId, orgRow?.licenseKey, orgRow?.plan);
     const orgSettings = (orgRow?.settings || {}) as Record<string, any>;
+    const sysOrgType = (orgSettings.orgType || 'counseling') as OrgType;
+    // System admin 在任何 orgType 下都按最高权限 admin 角色映射,可触达所有
+    // 临床密级(phi_full/phi_summary/de_identified/aggregate)。
+    const sysRoleV2 = legacyRoleToV2(sysOrgType, 'org_admin');
     request.org = {
       orgId,
       role: 'org_admin',
@@ -112,8 +139,12 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
       fullPracticeAccess: true,
       superviseeUserIds: [],
       tier,
-      orgType: (orgSettings.orgType || 'counseling') as OrgType,
+      orgType: sysOrgType,
       license,
+      roleV2: sysRoleV2,
+      principalClass: principalOf(sysRoleV2),
+      isSupervisor: true,
+      allowedDataClasses: ROLE_DATA_CLASS_POLICY[sysRoleV2],
     };
     await queryClient`SELECT set_config('app.current_org_id', ${orgId}, true)`;
     await queryClient`SELECT set_config('app.current_user_id', ${userId}, true)`;
@@ -164,17 +195,52 @@ export async function orgContextGuard(request: FastifyRequest, reply: FastifyRep
     .limit(1);
   const { tier, license } = await resolveTier(orgId, orgRow?.licenseKey, orgRow?.plan);
   const memberOrgSettings = (orgRow?.settings || {}) as Record<string, any>;
+  const resolvedOrgType = (memberOrgSettings.orgType || 'counseling') as OrgType;
+  const resolvedFPA = member.fullPracticeAccess ?? (member.role === 'org_admin');
+
+  // ── Role V2 resolution (migration 026) ──
+  // 优先读 org_members.role_v2;空则由 (orgType, legacy role, isGuardianAccount)
+  // fallback 推导。Phase 2 backfill 跑完后 roleV2 保证非空。
+  const legacyRole = member.role as OrgRole;
+  const roleV2: RoleV2 =
+    (member.roleV2 as RoleV2 | null) ??
+    legacyRoleToV2(resolvedOrgType, legacyRole);
+
+  // 派生督导身份 —— 替代 `role==='counselor' && fullPracticeAccess` 的散落判断
+  const isSupervisor =
+    roleV2 === 'supervisor' ||
+    roleV2 === 'clinic_admin' ||
+    roleV2 === 'psychologist' ||
+    roleV2 === 'school_admin' ||
+    roleV2 === 'owner' ||
+    (legacyRole === 'counselor' && resolvedFPA);
+
+  // allowedDataClasses = ROLE 默认策略 ∪ access_profile.dataClasses 补丁
+  const policyClasses = ROLE_DATA_CLASS_POLICY[roleV2];
+  const profileExtra =
+    (member.accessProfile as { dataClasses?: DataClass[] } | null)
+      ?.dataClasses ?? [];
+  const allowedDataClasses: DataClass[] = Array.from(
+    new Set<DataClass>([...policyClasses, ...profileExtra]),
+  );
+
+  const principalClass: Principal =
+    (member.principalClass as Principal | null) ?? principalOf(roleV2);
 
   request.org = {
     orgId,
-    role: member.role as OrgRole,
+    role: legacyRole,
     memberId: member.id,
     supervisorId: member.supervisorId ?? null,
-    fullPracticeAccess: member.fullPracticeAccess ?? (member.role === 'org_admin'),
+    fullPracticeAccess: resolvedFPA,
     superviseeUserIds,
     tier,
-    orgType: (memberOrgSettings.orgType || 'counseling') as OrgType,
+    orgType: resolvedOrgType,
     license,
+    roleV2,
+    principalClass,
+    isSupervisor,
+    allowedDataClasses,
   };
 
   // Set PostgreSQL session variables for RLS

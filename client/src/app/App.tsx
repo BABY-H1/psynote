@@ -8,6 +8,9 @@ import { isVisible, type SceneContext, type SceneVisibility } from './scene/visi
 import { DEFAULT_ORG_TYPE } from '../shared/constants/roles';
 import { useAuthStore } from '../stores/authStore';
 import { LoginPage } from '../features/auth/pages/LoginPage';
+import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
+import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
+import { PrivacyPolicyPage, TermsOfServicePage } from '../features/legal/LegalPage';
 import { ScaleLibrary } from '../features/assessment/pages/ScaleLibrary';
 import { AssessmentRunner } from '../features/assessment/pages/AssessmentRunner';
 import { EpisodeDetail } from '../features/counseling/pages/EpisodeDetail';
@@ -31,6 +34,7 @@ import {
   BookAppointment,
   CourseReader,
   ConsentCenter,
+  CounselingPublicRegisterPage,
 } from '@psynote/client-portal';
 import { KnowledgeBase } from '../features/knowledge/pages/KnowledgeBase';
 import { GoalLibrary } from '../features/knowledge/pages/GoalLibrary';
@@ -83,6 +87,11 @@ function AppRoutes() {
       <Route path="/course-enroll/:instanceId" element={<PublicCourseEnrollment />} />
       <Route path="/checkin/:instanceId/:sessionId" element={<PublicCheckin />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/register/counseling/:orgSlug" element={<CounselingPublicRegisterPage />} />
+      <Route path="/legal/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/legal/terms" element={<TermsOfServicePage />} />
 
       {/* Auth required */}
       {!user ? (

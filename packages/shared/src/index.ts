@@ -15,3 +15,4 @@ export * from './types/workflow';
 export * from './types/crisis';
 export * from './types/parent-binding';
 export * from './schemas/triage-config';
+export * from './auth/index.js';

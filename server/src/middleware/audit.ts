@@ -1,4 +1,5 @@
 import type { FastifyRequest } from 'fastify';
+import type { DataClass } from '@psynote/shared';
 import { db } from '../config/database.js';
 import { auditLogs, phiAccessLogs } from '../db/schema.js';
 
@@ -30,6 +31,12 @@ export async function logAudit(
 
 /**
  * Log access to Protected Health Information (HIPAA requirement).
+ *
+ * Migration 026 加了 `dataClass` + `actorRoleSnapshot` 两个字段。新调用
+ * 请通过 options 传入,旧签名保持兼容 —— 不传 dataClass 时列留 NULL。
+ *
+ * dataClass 与 role snapshot 是上线后做 per-class 合规报告的关键字段,
+ * 新路由必须传,老路由 Phase 2-4 迁移时陆续接上。
  */
 export async function logPhiAccess(
   request: FastifyRequest,
@@ -38,8 +45,15 @@ export async function logPhiAccess(
   action: 'view' | 'export' | 'print' | 'share',
   resourceId?: string,
   reason?: string,
+  options?: {
+    dataClass?: DataClass;
+    /** 不传则从 request.org.roleV2 自动冻结快照 */
+    actorRoleSnapshot?: string;
+  },
 ) {
   try {
+    const actorRoleSnapshot =
+      options?.actorRoleSnapshot ?? request.org?.roleV2 ?? request.org?.role;
     await db.insert(phiAccessLogs).values({
       orgId: request.org!.orgId,
       userId: request.user!.id,
@@ -48,6 +62,8 @@ export async function logPhiAccess(
       resourceId,
       action,
       reason,
+      dataClass: options?.dataClass,
+      actorRoleSnapshot,
       ipAddress: request.ip,
       userAgent: request.headers['user-agent'],
     });

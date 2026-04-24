@@ -35,11 +35,44 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * password_reset_tokens (migration 027) —— 密码重置专用一次性 token 表。
+ *
+ * 安全设计:
+ *   - DB 只存 sha256(token),邮件链接里才是明文。即使 DB 被偷,token 不可回放
+ *   - 15 min 过期(expiresAt)
+ *   - 一次性(usedAt 非 null 即作废)
+ *   - 忘记密码对未知邮箱也返回 200,不暴露"邮箱是否注册"
+ */
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_password_reset_token_hash').on(t.tokenHash),
+  index('idx_password_reset_user_expires').on(t.userId, t.expiresAt),
+]);
+
 export const orgMembers = pgTable('org_members', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(), // org_admin | counselor | client
+  role: text('role').notNull(), // legacy: org_admin | counselor | client
+  // ── Role Architecture V2 (migration 026) ──
+  // per-orgType 角色字典。DB trigger `trg_validate_role_v2` 保证 role_v2 ∈
+  // orgType 对应的合法角色集。nullable:Phase 1 骨架期,backfill 未跑前为 NULL。
+  // 语义见 packages/shared/src/auth/roles.ts。
+  roleV2: text('role_v2'),
+  // Principal class 决定登录入口(staff→主 app / subject→Portal 自视角 / proxy→监护视角)。
+  // CHECK constraint 硬约束只允许 staff|subject|proxy。
+  principalClass: text('principal_class'),
+  // 单点权限补丁:{ dataClasses: DataClass[], extraScopes: string[], grantedAt, grantedBy, reason }
+  // Role 默认策略的覆盖层,Phase 3 UI 接入前默认空。
+  accessProfile: jsonb('access_profile'),
+  // ── Legacy (保留) ──
   permissions: jsonb('permissions').notNull().default({}),
   status: text('status').notNull().default('active'),
   validUntil: timestamp('valid_until', { withTimezone: true }),
@@ -960,10 +993,41 @@ export const phiAccessLogs = pgTable('phi_access_logs', {
   resourceId: uuid('resource_id'),
   action: text('action').notNull(),
   reason: text('reason'),
+  // Migration 026: Role Architecture V2 — data class + actor role snapshot.
+  // 记录本次访问数据的 PHI 密级 + 冻结当时的角色,供合规审计追溯。
+  dataClass: text('data_class'),
+  actorRoleSnapshot: text('actor_role_snapshot'),
   ipAddress: inet('ip_address'),
   userAgent: text('user_agent'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * user_role_audit (migration 026) —— 角色与权限变更专用审计表。
+ *
+ * 既有 audit_logs 是通用变更日志,不包含 role snapshot 字段。此表每次
+ * org_members.role_v2 / access_profile / principal_class 变更都写一行,
+ * 把变更前后快照、执行人当时角色一起冻结,便于按角色演变倒查。
+ *
+ * action: 'role_change' | 'access_profile_change' | 'principal_class_change'
+ */
+export const userRoleAudit = pgTable('user_role_audit', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  action: text('action').notNull(),
+  roleBefore: text('role_before'),
+  roleAfter: text('role_after'),
+  accessProfileBefore: jsonb('access_profile_before'),
+  accessProfileAfter: jsonb('access_profile_after'),
+  actorId: uuid('actor_id').references(() => users.id),
+  actorRoleSnapshot: text('actor_role_snapshot'),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_user_role_audit_org_user').on(t.orgId, t.userId, t.createdAt),
+  index('idx_user_role_audit_actor').on(t.actorId, t.createdAt),
+]);
 
 export const consentTemplates = pgTable('consent_templates', {
   id: uuid('id').primaryKey().defaultRandom(),

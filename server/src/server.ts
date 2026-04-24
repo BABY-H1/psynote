@@ -1,5 +1,6 @@
 import { buildApp } from './app.js';
 import { env } from './config/env.js';
+import { assertMailerReady } from './lib/mailer.js';
 
 /**
  * Server entry point — bootstraps the Fastify app via `buildApp()` and
@@ -9,6 +10,9 @@ import { env } from './config/env.js';
  * can reuse the wiring without hauling in the HTTP listener.
  */
 async function main() {
+  // production 环境缺 SMTP 配置会在这里抛错终止,避免密码重置等关键邮件静默丢失
+  assertMailerReady();
+
   const app = await buildApp();
 
   try {

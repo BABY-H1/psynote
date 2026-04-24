@@ -4,7 +4,7 @@ import { eq, and, asc, sql } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import {
   groupInstances, groupSchemes, groupSchemeSessions, groupEnrollments,
-  groupSessionRecords, groupSessionAttendance, users,
+  groupSessionRecords, groupSessionAttendance, users, orgMembers,
 } from '../../db/schema.js';
 
 /**
@@ -173,6 +173,27 @@ export async function publicEnrollRoutes(app: FastifyInstance) {
         })
         .returning();
       userId = newUser.id;
+    }
+
+    // 补建 org_members(role='client') —— 此前 bug: 只建 users 不建 org_members,
+    // 导致公开报名产生孤儿用户无法登录看到自己数据。alpha 修复:
+    // 若用户已是本 org 任意 role 成员,跳过;否则建 client role 行。
+    const [existingMember] = await db
+      .select({ id: orgMembers.id })
+      .from(orgMembers)
+      .where(and(
+        eq(orgMembers.orgId, instance.orgId),
+        eq(orgMembers.userId, userId),
+      ))
+      .limit(1);
+
+    if (!existingMember) {
+      await db.insert(orgMembers).values({
+        orgId: instance.orgId,
+        userId,
+        role: 'client',
+        status: 'active',
+      });
     }
 
     // Check if already enrolled

@@ -1,0 +1,112 @@
+# Psynote Alpha —— 一台 VPS 上的完整栈
+#
+# 服务:
+#   postgres  — 数据库(持久化 volume)
+#   redis     — BullMQ 队列
+#   app       — Fastify server + 把 client/dist 同步到 caddy 共享 volume
+#   caddy     — 自动 HTTPS 反代(公网入口 443 / 80)
+#
+# 启动:  docker compose up -d
+# 日志:  docker compose logs -f app
+# 进容器: docker compose exec app sh
+# 跑 seed: docker compose exec app npx tsx server/src/seed.ts
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-psynote}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-psynote}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-psynote}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # 默认 production;本地隧道模式可在 .env 里 NODE_ENV=development 关掉 mailer 强校验
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-psynote}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-psynote}
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      AI_API_KEY: ${AI_API_KEY}
+      AI_BASE_URL: ${AI_BASE_URL:-https://api.openai.com/v1}
+      AI_MODEL: ${AI_MODEL:-gpt-4o}
+      # production 部署需配置公网可访问的 URL;本地隧道模式第一次启动可先用 http://localhost,
+      # 起 cloudflared 拿到 trycloudflare URL 后回填此处并 restart app
+      CLIENT_URL: ${CLIENT_URL:-http://localhost}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
+      # SMTP 在 production 是硬约束(server/src/lib/mailer.ts assertMailerReady 会拒启),
+      # 在 development 不填仅 warn —— 本地隧道测试 1-2 人用不到邮件时可缺省
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      PORT: 4000
+      HOST: 0.0.0.0
+    volumes:
+      - client-static:/mnt/client-static
+    expose:
+      - "4000"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - client-static:/srv/client:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    environment:
+      # production: 填真实域名 → Caddy 自动 HTTPS
+      # tunnel (本地 + Cloudflare):填 :80 → Caddy 在 80 端口跑纯 HTTP,TLS 交给 Cloudflare Edge
+      CADDY_DOMAIN: ${CADDY_DOMAIN:-:80}
+    depends_on:
+      - app
+
+  # Cloudflare Tunnel —— 本地零服务器模式专用
+  # 启动方式: docker compose --profile tunnel up -d
+  # 查看分配的 trycloudflare.com URL: docker compose logs cloudflared
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    profiles: ['tunnel']
+    command: tunnel --no-autoupdate --url http://caddy:80
+    depends_on:
+      - caddy
+
+volumes:
+  postgres-data:
+  redis-data:
+  client-static:
+  caddy-data:
+  caddy-config:
