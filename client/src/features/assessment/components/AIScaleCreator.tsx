@@ -99,10 +99,21 @@ export function AIScaleCreator({ onClose, onCreated }: Props) {
             ]);
           }
         },
-        onError: () => {
+        onError: (err: unknown) => {
+          // Surface server-side error message when available (e.g. "AI 调用超时
+          // (320s, 上限 540s) — 请简化需求或重试") so the user knows whether to
+          // retry as-is or shrink their request. Fallback to generic copy for
+          // truly unknown errors (network blip, 5xx without body, etc.).
+          const serverMsg =
+            (err && typeof err === 'object' && 'message' in err && typeof (err as { message?: unknown }).message === 'string')
+              ? (err as { message: string }).message
+              : null;
+          const shown = serverMsg && serverMsg.length < 200
+            ? `抱歉，生成失败：${serverMsg}`
+            : '抱歉，生成过程中出现了错误，请重试。';
           setMessages((prev) => [
             ...prev,
-            { role: 'assistant', content: '抱歉，生成过程中出现了错误，请重试。' },
+            { role: 'assistant', content: shown },
           ]);
         },
       },

@@ -21,7 +21,9 @@ import { aiClient } from './providers/openai-compatible.js';
  */
 export function applyAiGuards(app: FastifyInstance) {
   app.addHook('onRequest', async (request) => {
-    request.socket.setTimeout(300_000); // 5 min
+    // 10 min — must exceed AIClient.chat fetch timeout (9 min) so AI 端超时
+    // 先于 socket 关闭,前端能拿到具体错误信息而不是空响应.
+    request.socket.setTimeout(600_000);
   });
 
   app.addHook('preHandler', authGuard);
@@ -48,7 +50,8 @@ export function applyAiGuards(app: FastifyInstance) {
  */
 export function applyAdminAiGuards(app: FastifyInstance) {
   app.addHook('onRequest', async (request) => {
-    request.socket.setTimeout(300_000); // 5 min — same budget as the org path
+    // 10 min — same as the org-scoped path (matches openai-compatible.ts 9-min ceiling).
+    request.socket.setTimeout(600_000);
   });
 
   app.addHook('preHandler', authGuard);
