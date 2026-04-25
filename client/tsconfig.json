@@ -13,7 +13,11 @@
       // matching alias that resolves against ../../client/src; the copy here
       // is needed so the client's tsc process also resolves this token when
       // it follows the import graph through node_modules/@psynote/client-portal.
-      "@client/*": ["./src/*"]
+      "@client/*": ["./src/*"],
+      // Dev/test resolve @psynote/shared → src so tsx + vitest + vite
+      // (via vite-tsconfig-paths) pick up source directly without needing
+      // a built dist. Prod runtime uses package.json main → dist/index.js.
+      "@psynote/shared": ["../packages/shared/src/index.ts"]
     }
   },
   "include": ["src"],
