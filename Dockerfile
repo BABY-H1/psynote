@@ -70,6 +70,12 @@ COPY --from=builder /app/packages/shared/dist ./packages/shared/dist
 COPY --from=builder /app/server/dist ./server/dist
 COPY --from=builder /app/client/dist ./client/dist
 
+# License keys —— tsc 只编译 .ts,这两个 .pem 是 sign.ts/verify.ts 用 readFileSync
+# 从 __dirname 加载的运行时资产,必须显式拷到 dist 里。
+# (sign.ts 找 dist/lib/license/keys/private.pem; verify.ts 找 dist/lib/license/public.pem)
+COPY --from=builder /app/server/src/lib/license/keys ./server/dist/lib/license/keys
+COPY --from=builder /app/server/src/lib/license/public.pem ./server/dist/lib/license/public.pem
+
 # Migration 运行所需
 COPY --from=builder /app/server/drizzle ./server/drizzle
 COPY --from=builder /app/server/drizzle.config.ts ./server/
