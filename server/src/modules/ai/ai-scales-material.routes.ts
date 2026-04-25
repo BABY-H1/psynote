@@ -89,6 +89,10 @@ export async function aiScalesMaterialRoutes(app: FastifyInstance) {
       };
     };
     if (!body.messages || !body.context) throw new ValidationError('messages and context are required');
+    if (!body.context.format) throw new ValidationError('context.format is required');
+    if (!Array.isArray(body.context.fieldDefinitions) || body.context.fieldDefinitions.length === 0) {
+      throw new ValidationError('context.fieldDefinitions must be a non-empty array');
+    }
 
     const response = await noteGuidanceChat(body.messages, body.context);
     await logAudit(request, 'ai_call', 'note-guidance-chat');

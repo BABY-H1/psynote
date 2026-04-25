@@ -87,13 +87,26 @@ export async function aiTreatmentRoutes(app: FastifyInstance) {
    */
   app.post('/recommendations', async (request) => {
     const body = request.body as {
-      riskLevel: string;
-      dimensions: { name: string; score: number; label: string }[];
+      riskLevel?: string;
+      dimensions?: { name: string; score: number; label: string }[];
       interventionType?: string;
       availableCourses?: { id: string; title: string; category: string }[];
       availableGroups?: { id: string; title: string; category: string }[];
     };
-    const result = await generateRecommendations(body);
+    // Validate required fields up-front — without these the pipeline crashes
+    // on `.map` of undefined deep in the prompt builder, returning 500 with
+    // an unhelpful "Cannot read properties of undefined" message.
+    if (!body.riskLevel) throw new ValidationError('riskLevel is required');
+    if (!Array.isArray(body.dimensions)) {
+      throw new ValidationError('dimensions must be an array');
+    }
+    const result = await generateRecommendations({
+      riskLevel: body.riskLevel,
+      dimensions: body.dimensions,
+      interventionType: body.interventionType,
+      availableCourses: body.availableCourses,
+      availableGroups: body.availableGroups,
+    });
     await logAudit(request, 'ai_call', 'recommendations');
     return result;
   });
