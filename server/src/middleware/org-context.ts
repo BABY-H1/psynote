@@ -106,10 +106,19 @@ declare module 'fastify' {
  * Middleware that resolves the org from :orgId param,
  * verifies user membership, and sets PostgreSQL session vars for RLS.
  */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function orgContextGuard(request: FastifyRequest, reply: FastifyReply) {
   const { orgId } = request.params as { orgId?: string };
   if (!orgId) {
     throw new NotFoundError('Organization ID is required');
+  }
+  // Pre-validate UUID shape — without this, any non-UUID slug like "/api/orgs/me"
+  // would slip into a Postgres query and crash with "invalid input syntax for type
+  // uuid", producing an opaque 500. We surface 404 cleanly instead so the caller
+  // can distinguish "wrong path" from "real server error".
+  if (!UUID_RE.test(orgId)) {
+    throw new NotFoundError('Organization', orgId);
   }
 
   const userId = request.user?.id;

@@ -277,7 +277,8 @@ export async function listTriageBuckets(
     })
     .from(assessmentResults)
     .innerJoin(assessments, eq(assessments.id, assessmentResults.assessmentId))
-    .where(and(...conditions));
+    .where(and(...conditions))
+    .groupBy(assessmentResults.riskLevel);
 
   const buckets: TriageBuckets = {
     level_1: 0, level_2: 0, level_3: 0, level_4: 0, unrated: 0,

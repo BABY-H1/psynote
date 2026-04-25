@@ -154,6 +154,7 @@ export async function counselingPublicRoutes(app: FastifyInstance) {
       return reply.code(200).send({
         status: 'already_registered',
         orgId: org.id,
+        userId: userRow.id,
         isNewUser: false,
         ...tokens,
       });
@@ -177,6 +178,7 @@ export async function counselingPublicRoutes(app: FastifyInstance) {
     return reply.code(201).send({
       status: 'registered',
       orgId: org.id,
+      userId: userRow.id,
       isNewUser,
       ...tokens,
     });
