@@ -162,7 +162,7 @@ export function AIScaleCreator({ onClose, onCreated }: Props) {
   };
 
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)]">
+    <div className="flex flex-col h-[calc(100vh-8rem)] max-w-4xl w-full mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-4">
         <button

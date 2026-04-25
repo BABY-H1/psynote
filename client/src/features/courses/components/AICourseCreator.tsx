@@ -124,7 +124,7 @@ export function AICourseCreator({ onClose, onCreated }: Props) {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-14rem)]">
+    <div className="flex flex-col h-[calc(100vh-14rem)] max-w-4xl w-full mx-auto">
       <div className="flex items-center gap-3 mb-4">
         <button onClick={onClose} className="text-slate-400 hover:text-slate-600">
           <ArrowLeft className="w-5 h-5" />
