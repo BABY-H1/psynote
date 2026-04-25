@@ -1,4 +1,5 @@
 import { aiClient } from '../providers/openai-compatible.js';
+import { extractStructuredPayload } from './chat-json-helpers.js';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -127,23 +128,32 @@ export async function chatCreateScale(
 
   const trimmed = result.trim();
 
-  // Check if the response is a JSON scale result
-  let jsonStr = trimmed;
-  if (jsonStr.startsWith('```')) {
-    jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-  }
+  // 鲁棒抽取: 模型经常在 JSON 前后写自然语言 ("好的, 我帮你生成…\n```json\n…\n```"),
+  // 老的 startsWith('```') 检查直接 false 落到 JSON.parse 抛错, 整段当 message 回,
+  // 前端就把整坨 JSON 贴在聊天里. extractStructuredPayload 会:
+  //  1. 直接 trim 试 parse
+  //  2. 剥首尾 ```json``` 围栏
+  //  3. 抓任意位置的 ```json``` 块
+  //  4. 找第一个平衡 {...} 块 (含截断修复)
+  // 任何一种成功且通过 predicate, 就当结构化结果用.
+  type ScaleEnvelope = { type: 'scale'; scale: ExtractedScale; summary?: string };
+  const isScale = (v: unknown): v is ScaleEnvelope =>
+    !!v && typeof v === 'object' && (v as { type?: unknown }).type === 'scale'
+    && !!(v as { scale?: unknown }).scale;
+  // 也兼容模型 "懒包" — 直接返回 inner scale 对象本身, 没有外层 type:'scale' 包.
+  const isBareScale = (v: unknown): v is ExtractedScale =>
+    !!v && typeof v === 'object'
+    && Array.isArray((v as { items?: unknown }).items)
+    && Array.isArray((v as { dimensions?: unknown }).dimensions)
+    && typeof (v as { title?: unknown }).title === 'string';
 
-  try {
-    const parsed = JSON.parse(jsonStr);
-    if (parsed.type === 'scale' && parsed.scale) {
-      return {
-        type: 'scale',
-        scale: parsed.scale,
-        summary: parsed.summary || '',
-      };
-    }
-  } catch {
-    // Not JSON — treat as regular message
+  const envelope = extractStructuredPayload<ScaleEnvelope>(trimmed, isScale);
+  if (envelope) {
+    return { type: 'scale', scale: envelope.scale, summary: envelope.summary || '' };
+  }
+  const bare = extractStructuredPayload<ExtractedScale>(trimmed, isBareScale);
+  if (bare) {
+    return { type: 'scale', scale: bare, summary: '' };
   }
 
   return { type: 'message', content: trimmed };
