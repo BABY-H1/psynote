@@ -59,17 +59,8 @@ export function AdminLibrary() {
           size — without it, tall child content makes this container grow
           past viewport. `overflow-y-auto` is for list views (content
           overflows, wrapper scrolls); detail views with `h-full` fit
-          exactly and scroll internally in their own panes.
-
-          `overflow-x-hidden` clips the 48px horizontal bleed from
-          `-m-6` detail pages (ScaleDetail, CourseDetail). Those pages
-          are designed for org scope where shell `<main>` has p-6 and
-          `-m-6` falls inside the padding box. In admin scope, shell
-          `<main>` has no padding and AdminLibrary supplies its own
-          `p-6 max-w-7xl`, so without this clip the negative margin
-          triggers a horizontal scrollbar (overflow-y: auto implies
-          overflow-x: auto per CSS spec). Closes BUG-004. */}
-      <div className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden">
+          exactly and scroll internally in their own panes. */}
+      <div className="flex-1 min-h-0 overflow-y-auto">
         <Outlet />
       </div>
     </div>

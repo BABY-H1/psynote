@@ -127,7 +127,7 @@ export function ScaleDetail({ scaleId, onBack, initialEditing = false, onPreview
     });
 
   return (
-    <div className="flex -m-6 overflow-hidden" style={{ height: 'calc(100vh - 5rem)' }}>
+    <div className="flex h-full overflow-hidden">
       <div className="flex-1 flex flex-col bg-slate-50 min-w-0 overflow-hidden">
         <ScaleDetailTopBar
           activeSubTab={activeSubTab}

@@ -408,8 +408,12 @@
 - 触发行: Tier 1.13 #9 + Tier 2.10 量表生成后保存
 - 复现: 系统管理员 /admin/library/scales → AI 生成量表 → 保存进编辑页 → 页面底部出现横向滚动, 顶部子 tab pill (总览/维度/题目/选项配置) 部分被裁切, 右上角操作按钮 (取消/保存/编辑/PanelRightOpen) 与右侧 AI 助手 header 重叠
 - 根因 (Phase G 探索确认): `<main>` 在 admin/org 两套 shell 上 padding 落点不同. AppShell main `p-6 overflow-y-auto` (有 padding) → ScaleDetail 的 `-m-6` 直接进 main 的 padding box, 不溢出. AdminLayout main `overflow-y-auto` (无 padding) + AdminLibrary 自带 `p-6 max-w-7xl mx-auto w-full` → ScaleDetail 的 `-m-6` 在 max-w-7xl 内 + Outlet wrapper 隐式 `overflow-x: auto` (CSS 规范: overflow-y: auto 时 overflow-x: visible 计算成 auto), 48px 溢出触发滚动条. CourseDetail 同样 `-m-6` 模式, admin scope 同隐患.
-- 修法: AdminLibrary.tsx Outlet wrapper 加 `overflow-x-hidden` (一个 Tailwind class). 一处修双 detail (ScaleDetail + CourseDetail), 不动 shell, 不动 KnowledgeBase, 不动 detail 组件本身.
-- 状态: **已修 (待 commit). 浏览器验证: a@ /admin/library/scales 进 ScaleDetail 后 `document.documentElement.scrollWidth === clientWidth` (1920===1920, 无横向滚动) ✅. CourseDetail admin scope 同样 verified clean ✅. b@ /knowledge/scales (org scope) 不回归 (KnowledgeBase 未动, 行为同前) ✅. List 视图渲染正常 ✅.**
+- 修法 v1 (commit f876ea9, 已撤): AdminLibrary 加 `overflow-x-hidden`. 治标不治本——只裁了 admin scope 的视觉, 没修 org scope 在窄视口也会溢出, 子 tab 仍被裁切, TopBar 仍被挤. 用户截图证实 org scope 在 ~1568px 窗口下也有横向滚动条, 跟其他正确的 detail (Goal/Agreement/Scheme/NoteTemplate 已用 `flex h-full`) 不一致.
+- 修法 v2 (final): 抛弃 `-m-6` + `calc(100vh - 5rem)` hack, 让 ScaleDetail / CourseDetail 跟其他 4 个 detail 页对齐用 `flex h-full overflow-hidden` 自然占满父容器 Outlet wrapper. 撤回 v1 给 AdminLibrary 加的 overflow-x-hidden (不再需要).
+  - `ScaleDetail.tsx:130` `flex -m-6 overflow-hidden` style={...} → `flex h-full overflow-hidden`
+  - `CourseDetail.tsx:123` `flex flex-row-reverse -m-6` style={...} → `flex flex-row-reverse h-full overflow-hidden`
+  - `AdminLibrary.tsx:63` 撤回 `overflow-x-hidden`
+- 状态: **已修 (待 commit). 浏览器验证: 1920px viewport 下 a@ /admin/library/scales / /admin/library/courses + b@ /knowledge/scales 三处 detail 进入后 `html/main/wrapper.scrollWidth === clientWidth` 全过 ✅. Sub-tabs (总览/维度/题目/选项配置 / 章节 1-6) 完整显示, TopBar 操作按钮 + AI panel 标题不再裁切 ✅. List 视图渲染正常 ✅.**
 
 ### BUG-005 — AI course creator 系统管理员 scope 一律 404
 - 严重度: **BLOCKER** (系统管理员永远无法用 AI 创建课程)
