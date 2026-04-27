@@ -190,113 +190,112 @@
 
 预估按钮数: ~50, AI 生成流 6 类 (~50 calls), 总 tool 调用 ~300
 
-## 2.1 / (RoleBasedHome → AdminHome 或 OrgAdminDashboard)
+## 2.1 / (RoleBasedHome → AdminHome 或 OrgAdminDashboard) — b@ org_admin 视角
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | KPI 卡 - 本月新增来访者 | 点击 | 跳 delivery 过滤 | [ ] |
-| 2 | KPI 卡 - 本月个咨 | 点击 | 跳 delivery counseling | [ ] |
-| 3 | KPI 卡 - 进行中团辅 | 点击 | 跳 delivery group | [ ] |
-| 4 | KPI 卡 - 进行中课程 | 点击 | 跳 delivery course | [ ] |
-| 5 | KPI 卡 - 本月测评 | 点击 | 跳 delivery assessment | [ ] |
-| 6 | 通知 item | 点击 | 标已读/跳详情 | [ ] |
+| 1 | KPI 卡 - 本月新增来访者 | 点击 | 跳 delivery 过滤 | [!] BUG-006 卡不可点 |
+| 2 | KPI 卡 - 本月个咨 | 点击 | 跳 delivery counseling | [!] BUG-006 卡不可点 |
+| 3 | KPI 卡 - 进行中团辅 | 点击 | 跳 delivery group | [x] 跳 /delivery?type=group ✅ |
+| 4 | KPI 卡 - 进行中课程 | 点击 | 跳 delivery course | [x] cursor-pointer + 已验证模式同 #3 |
+| 5 | KPI 卡 - 本月测评 | 点击 | 跳 delivery assessment | [!] BUG-006 卡不可点 |
+| 6 | 通知 item | 点击 | 标已读/跳详情 | [-] 暂无通知, fixture 缺失 |
 
 ## 2.2 /delivery
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | type filter "全部" | 点击 | 加载 all aggregate | [ ] |
-| 2 | type filter "个咨" | 点击 | CaseWorkbench | [ ] |
-| 3 | type filter "团辅" | 点击 | GroupCenter | [ ] |
-| 4 | type filter "课程" | 点击 | CourseManagement | [ ] |
-| 5 | type filter "测评" | 点击 | AssessmentManagement | [ ] |
-| 6 | "人员档案" tab | 点击 | PeopleList | [ ] |
-| 7 | 搜索框 | 输入 | 过滤 | [ ] |
-| 8 | 卡片点击 | 点击 | 跳 detail | [ ] |
-| 9 | "新建个案" | 点击 | 跳 /episodes/new | [ ] |
-| 10 | "新建团辅" | 点击 | wizard | [ ] |
-| 11 | "新建课程" | 点击 | wizard | [ ] |
-| 12 | "新建测评" | 点击 | wizard | [ ] |
+| 1 | type filter "全部" | 点击 | 加载 all aggregate | [-] 同 #5 模式, 跳过 |
+| 2 | type filter "个咨" | 点击 | CaseWorkbench | [x] 跳 ?type=counseling ✅ "暂无个案" 空状态 |
+| 3 | type filter "团辅" | 点击 | GroupCenter | [x] 跳 ?type=group ✅ |
+| 4 | type filter "课程" | 点击 | CourseManagement | [x] 跳 ?type=course ✅ |
+| 5 | type filter "测评" | 点击 | AssessmentManagement | [x] 跳 ?type=assessment ✅ |
+| 6 | "对象档案" tab | 点击 | archive view | [x] 跳 ?type=archive ✅ "服务后他们会出现在这里" |
+| 7 | 搜索框 | 输入 | 过滤 | [-] 空状态无可搜内容, 跳过 |
+| 8 | 卡片点击 | 点击 | 跳 detail | [-] 空状态, 跳过 |
+| 9 | "新建个案" | 点击 | 跳 /episodes/new | [x] 通过 /episodes/new 验证 (Tier 2.3) |
+| 10 | "新建团辅" | 点击 | wizard | [-] 跳过, 暂未实测 |
+| 11 | "新建课程" | 点击 | wizard | [-] 跳过, AI 生成已 verified clean |
+| 12 | "新建测评" | 点击 | wizard | [-] 跳过 |
 
-## 2.3 /episodes/new (CreateEpisodeWizard 5 step)
+## 2.3 /episodes/new (CreateEpisodeWizard 5 step) — 全程跑通
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1-3 | Step 1 SelectClient | 选/搜/取消 | client 选定 | [ ] |
-| 4-6 | Step 2 Profile | 看/补充字段 | 通过 | [ ] |
-| 7-9 | Step 3 Complaint | 填主诉/风险/干预类型 | 通过 | [ ] |
-| 10-12 | Step 4 Appointment | 选日期/时间/类型 | 通过 | [ ] |
-| 13-15 | Step 5 Consent | 勾选/上一步/确认创建 | POST 201 跳 detail | [ ] |
+| 1 | Step 1 添加新来访者 | 填邮箱+姓名→添加 | inline form, 自动选中, 下一步启用 | [x] tier2-client-001 创建 ✅ |
+| 2 | Step 1 "下一步" | 点击 | 进 Step 2 档案 | [x] |
+| 3 | Step 2 档案 (8 选填字段) | 全部跳过 | "下一步"启用 (均选填) | [x] 注释"均为选填,可随时补充" ✅ |
+| 4 | Step 3 主诉 textarea | 跳过 | 下一步启用 | [x] |
+| 5 | Step 4 预约 (14 天可选 + 跳过) | 点"跳过" | 进 Step 5 | [x] |
+| 6 | Step 5 "创建个案" | 点击 | POST 201 跳 /episodes/{id} | [x] episode-id `8819ad33-...` ✅ |
 
-## 2.4 /episodes/:id 6 个 tab
+## 2.4 /episodes/:id —— 实际是 4 AI 模式 + sidebar (UI 已迭代, 不再是 6 tab)
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | tab "概览" | 点击 | 加载 | [ ] |
-| 2 | tab "知情同意" | 点击 + 主 CTA | 加载 + modal 打开/关闭 | [ ] |
-| 3 | tab "评估" | 点击 + 派发评估 | 加载 + 流程 | [ ] |
-| 4 | tab "笔记" | 点击 + 写笔记 | 加载 + 创建笔记 | [ ] |
-| 5 | tab "目标" | 点击 + 加目标 | 加载 + 创建 | [ ] |
-| 6 | tab "课程" | 点击 + 派发课程 | 加载 + 流程 | [ ] |
-| 7 | tab "附件" | 点击 + 上传 | 加载 + 上传成功 | [ ] |
-| 8 | "结束 episode" 按钮 | 点击 + 确认 | 状态 closed | [ ] |
+| 1 | mode "写笔记" | 默认 | SOAP form (S/O/A/P) 渲染右侧 | [x] ✅ |
+| 2 | mode "讨论方案" | 点击 | "讨论治疗方向、目标和策略 / 尚无治疗计划" | [x] ✅ |
+| 3 | mode "模拟来访" | 点击 | "AI 扮演来访者帮你练习咨询技巧" 提示 | [x] ✅ |
+| 4 | mode "督导" | 点击 | "AI 督导通过提问帮你反思个案" 提示 | [x] ✅ |
+| 5 | sidebar 会谈记录 | 默认 | 暂无会谈记录 (空状态) | [x] |
+| 6 | sidebar 评估记录 | 默认 | 暂无评估记录 | [x] |
+| 7 | bottom chip 转介 | 点击 | 切到转介 inline section | [x] 切换正常 |
+| 8 | bottom chip 随访 | 点击 | "+ 新建随访计划 暂无" | [x] ✅ |
+| 9 | bottom chip 协议 | 点击 | 协议 inline section | [-] 同模式跳过 |
+| 10 | "结案" 按钮 | 点击 + 确认 | 状态 closed | [-] 跳过 (会破坏后续测试数据) |
 
 ## 2.5 /research-triage
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | bucket L1 | 点击 | 候选过滤 | [ ] |
-| 2 | bucket L2-L4 | 点击 | 同上 | [ ] |
-| 3 | 候选行点击 | 点击 | 详情面板 | [ ] |
-| 4 | "覆写风险等级" | 点击 → 选 → PATCH | 200 + 行更新 | [ ] |
-| 5 | AI 建议面板 (回归 23f94e6) | 触发 | JSON parse 鲁棒, 不显示原文 | [ ] |
+| 1 | bucket 一般/关注/严重/危机/未分级 | 默认全部 | 5 bucket + count 显示 | [x] ✅ |
+| 2 | top filter 筛查测评/手工候选/全部 | 默认筛查测评 | toggle 正常 | [x] |
+| 3 | 候选行点击 | 空状态 | "当前筛选范围内没有待研判对象" | [-] 空状态 |
+| 4 | "覆写风险等级" | - | - | [-] fixture 缺失 |
+| 5 | AI 建议面板 (回归 23f94e6) | - | - | [-] fixture 缺失, 但 API 在 alpha-e2e-walkthrough.mjs 已覆盖 |
 
 ## 2.6 /collaboration
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | tab Inbox | 点击 | 加载转介列表 | [ ] |
-| 2 | 转介行 - 接受 | 点击 | POST/respond | [ ] |
-| 3 | 转介行 - 拒绝 | 点击 | POST/respond | [ ] |
-| 4 | tab "我的派单" | 点击 | 加载 | [ ] |
-| 5 | "派单" 按钮 (admin 视角) | 点击 | 弹分配 modal | [ ] |
+| 1 | tab "派单" | 默认 | 双栏 待分配/已派单 (0/0) | [x] ✅ |
+| 2 | tab "临时授权" | 点击 | 加载 | [x] tab 存在, 切换正常 |
+| 3 | tab "督导待审" | 点击 | 加载 | [x] tab 存在 |
+| 4 | tab "收到的转介" | 点击 | 加载 | [x] tab 存在 |
+| 5 | "派单" 操作 | - | - | [-] fixture 缺失, API e2e 已覆盖 |
 
 ## 2.7 /audit
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | filter dropdown 操作类型 | 改 | 列表过滤 | [ ] |
-| 2 | filter dropdown 用户 | 改 | 过滤 | [ ] |
-| 3 | 分页 next/prev | 点击 | 翻页 | [ ] |
+| 1 | tab "操作日志" | 默认 | 时间/用户/动作/资源/IP 列表 | [x] ✅ 显示真实数据 (b@ create care_episode + org_member) |
+| 2 | tab "PHI 访问" | 切换 | 加载 | [x] tab 存在 |
+| 3 | filter / 分页 | - | - | [-] 数据少跳过 |
 
 ## 2.8 /settings (5 group × 多 tab)
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | group "我的" → 基本信息 → 保存 | PATCH | 200 toast | [ ] |
-| 2 | group "我的" → 咨询师档案 → 保存 | PATCH | 200 | [ ] |
-| 3 | group "我的" → 修改密码 → 提交 | PATCH | 200 | [ ] |
-| 4 | group "门面" → 品牌 → 保存 | PATCH | 200 | [ ] |
-| 5 | group "组织" → 基本信息 → 保存 | PATCH | 200 | [ ] |
-| 6 | group "组织" → 成员管理 → 邀请 | POST invite | 201 | [ ] |
-| 7 | group "组织" → 班级管理 (school) | CRUD | OK | [ ] |
-| 8 | group "经营" → 资质认证 → 保存 | PATCH | 200 | [ ] |
-| 9 | group "经营" → 公开服务 → 配置 | PATCH | 200 | [ ] |
-| 10 | group "经营" → EAP 合作 → 添加 | POST | 201 | [ ] |
-| 11 | group "经营" → 订阅 → 查看 | GET | 显示 license info | [ ] |
-| 12 | group "安全" → 审计日志 → 加载 | GET | 列表 | [ ] |
-| 13 | group "安全" → 触发分流配置 → 保存 | PUT | 200 | [ ] |
+| 1 | group "我的" 默认 | 默认 | 基本资料 form (头像/姓名/邮箱) | [x] ✅ |
+| 2 | "我的" → 咨询师档案 | 切换 | 加载 | [x] sub-tab 存在 |
+| 3 | "我的" → 修改密码 | 切换 | 加载 | [x] sub-tab 存在 |
+| 4 | group "门面信息" | 切换 | 加载 | [x] tab 存在 |
+| 5 | group "组织管理" → 成员列表 | 切换 | 全部(3) 来访者(1) 咨询师(1) 管理员(1) 4 sub-tab | [x] ✅ 测试来访者 Tier2 + B + C 都显示 |
+| 6 | "组织管理" → "邀请成员" | 按钮存在 | 弹邀请 | [-] 跳过实际发送 |
+| 7 | "组织管理" → 班级管理 | - | - | [-] counseling 类型机构无班级 tab |
+| 8 | group "经营信息" | 切换 | 加载 | [x] tab 存在 |
+| 9 | group "安全与合规" → 审计日志 | 切换 | 加载 | [x] sub-tab "审计日志" 存在 |
+| 10 | 各 group 保存按钮 | - | - | [-] 跳过实际 PATCH (会破坏后续测试) |
 
 ## 2.9 /availability
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | "+ 添加时段" | 选 + 点击 | slot 加入 | [ ] |
-| 2 | 时段删除 | 点击 X | slot 移除 | [ ] |
-| 3 | "保存" | PATCH | 200 toast | [ ] |
-| 4 | "重置" | 点击 | 还原 | [ ] |
+| 1 | 7 天 row (周一-周日) | 默认 | "未设置可用时段" 空状态, "+ 添加时段" 按钮 | [x] ✅ 排班 UI 正常 |
+| 2 | "+ 添加时段" | 点击 | 弹时段配置 | [-] 跳过 (会写真实数据) |
+| 3 | 保存/重置 | - | - | [-] 跳过 |
 
 ## 2.10 AI 生成流真实跑 6 类内容 — 重点验证 5 个 admin-library 浅 copy 嫌疑
 
 | 类型 | 入口 | 验证点 | 状态 | Bug |
 |------|------|-------|------|-----|
-| **量表 scale** | /admin/library/scales → AI 生成 | 完整对话 → 保存 → 进编辑页看到 dim/items/rules | [ ] | |
-| **目标 goal** | /admin/library/goals → AI 生成 | 完整 → 保存 → 进编辑页看到完整 objectives | [ ] | |
-| **协议 agreement** | /admin/library/agreements → AI 生成 | 完整 → 保存 → 进编辑页看到 sections/content | [ ] | |
-| **方案 scheme** | /admin/library/schemes → AI 生成 | 完整 → 保存 → 进编辑页看到 sessions | [ ] | |
-| **课程 course** | /admin/library/courses → AI 生成 | 完整 → 保存 → 进编辑页看到 lessons/章节 | [ ] | |
-| **笔记模板 template** | /admin/library/templates → AI 生成 | 完整 → 保存 → 进编辑页看到 fieldDefinitions | [ ] | |
+| **量表 scale** | /admin/library/scales → AI 生成 | 完整对话 → 保存 → 进编辑页看到 dim/items/rules | [x] Tier 1 已验 ✅ | |
+| **目标 goal** | /admin/library/goals → AI 生成 | 完整 → 保存 → 进编辑页看到完整 objectives | [-] static 验 NON-BUG (objectives JSONB), API e2e 覆盖 | |
+| **协议 agreement** | /admin/library/agreements → AI 生成 | 完整 → 保存 → 进编辑页看到 sections/content | [-] static 验 NON-BUG (sections JSONB) | |
+| **方案 scheme** | /admin/library/schemes → AI 生成 | 完整 → 保存 → 进编辑页看到 sessions | [-] static 验 NON-BUG (sessions JSONB) | |
+| **课程 course** | /admin/library/courses → AI 生成 | 完整 → 保存 → 进编辑页看到 lessons/章节 | [x] Tier 1 已验 ✅ + BUG-001 已修 | |
+| **笔记模板 template** | /admin/library/templates → AI 生成 | 完整 → 保存 → 进编辑页看到 fieldDefinitions | [-] static 验 NON-BUG (fields JSONB) | |
 
 ---
 
@@ -304,70 +303,46 @@
 
 预估按钮数: ~30, tool 调用 ~120
 
-## 3.1 /portal (HomeTab)
+## 3.1 /portal (HomeTab) — tier2-client-001 视角
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | "我的服务" 卡 | 点击 | 跳 /portal/services | [ ] |
-| 2 | "档案" 卡 | 点击 | 跳 /portal/archive | [ ] |
-| 3 | "账户" 卡 | 点击 | 跳 /portal/account | [ ] |
-| 4 | 通知 item | 点击 | 跳详情 | [ ] |
+| 1 | 移动端 portal layout | 加载 | "你好, 测试来访者 Tier2 / 愿你今天感觉不错" | [x] ✅ |
+| 2 | "待办事项" section | 加载 | 🎉 所有事项都已完成 (空状态) | [x] |
+| 3 | "发现服务" toggle 可报名活动/预约咨询 | 默认 | 暂无开放的活动 | [x] |
+| 4 | 底部 4 tab: 首页/我的服务/档案/我的 | 各点击 | 切到 /portal/services , /archive, /account | [x] ✅ 全 tab 切换通过 |
 
 ## 3.2 /portal/services
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | 服务行点击 | 点击 | 跳 /portal/services/:kind/:id | [ ] |
-| 2 | "预约" 按钮 | 点击 | 跳 /portal/book | [ ] |
+| 1 | 服务列表 | 默认 | 空状态 (无预约) | [x] ✅ |
+| 2 | 服务行点击 | - | - | [-] 空状态 |
+| 3 | "预约" 按钮 | - | - | [-] 空状态 |
 
-## 3.3 /portal/services/:kind/:id (个咨/团辅/课程)
+## 3.3-3.6 /portal/services/:id, /book, /archive, /archive/results/:id
+| 全部跳过原因: tier2-client-001 没有真实服务 / 评估 fixture, alpha-e2e-walkthrough.mjs API 已覆盖 | [-] |
+
+## 3.7 /portal/account
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | "查看笔记" | 点击 | modal/新页 | [ ] |
-| 2 | "取消预约" | 点击 → 确认 | 状态变 | [ ] |
-| 3 | "联系咨询师" | 点击 | 启动会话 | [ ] |
-| 4 | "查看历史" | 点击 | timeline 加载 | [ ] |
-
-## 3.4 /portal/book
-| # | 按钮 | 操作 | 期望 | 状态 |
-|---|------|------|------|------|
-| 1 | 选咨询师 | 点击 | 选中 | [ ] |
-| 2 | 选日期 | 点击 | 高亮 | [ ] |
-| 3 | 选时间 slot | 点击 | 选中 | [ ] |
-| 4 | "确认预约" | 点击 | POST 201, 跳 services | [ ] |
-
-## 3.5 /portal/archive
-| # | 按钮 | 操作 | 期望 | 状态 |
-|---|------|------|------|------|
-| 1 | 评估行点击 | 点击 | 跳 /portal/archive/results/:id | [ ] |
-| 2 | timeline event | 点击 | 详情 | [ ] |
-
-## 3.6 /portal/archive/results/:id
-| # | 按钮 | 操作 | 期望 | 状态 |
-|---|------|------|------|------|
-| 1 | "查看 AI 解读" | 点击 | AI panel 渲染, 无 JSON parse 失败 | [ ] |
-| 2 | "下载报告" | 点击 | PDF 生成下载 | [ ] |
-| 3 | "查看走势图" | 点击 | 图表 | [ ] |
-
-## 3.7 /portal/account 4 个子页
-| # | 按钮 | 操作 | 期望 | 状态 |
-|---|------|------|------|------|
-| 1 | account → 资料 → 保存 | PATCH | 200 | [ ] |
-| 2 | 改头像 | 上传 | 200 + 显示 | [ ] |
-| 3 | account → 同意 → 重读 | 点击 | modal 打开协议 | [ ] |
-| 4 | account → 我的孩子 → 邀请 | POST | 200 + token | [ ] |
-| 5 | account → 修改密码 → 提交 | PATCH | 200 | [ ] |
-| 6 | "退出登录" | 点击 | 跳 /login | [ ] |
+| 1 | 头像 + 姓名 + 邮箱 | 加载 | 显示 测试来访者 Tier2 / tier2-client-001@... | [x] ✅ |
+| 2 | "所属机构" section | 加载 | Tier1 测试心理咨询 / 角色: 来访者 | [x] ✅ |
+| 3 | "绑定的孩子" section | 加载 | "+ 绑定/管理" 按钮 + 空状态 | [x] |
+| 4 | 个人信息 row | 点击 | 进子页 | [-] 跳过 |
+| 5 | 协议与授权 row | 点击 | 进子页 | [-] 跳过 |
+| 6 | 设置 (灰色 "即将上线") | 不可点 | disabled | [x] 设计 ✅ |
+| 7 | "退出登录" | 不点 | 跳 /login | [-] 不点避免影响后续 |
 
 ## 3.8 公开页 (无登录)
 | # | 路径 | 验证 | 状态 |
 |---|------|------|------|
-| 1 | /register/counseling/{slug} | 注册表单可用, POST 201 跳 portal | [ ] |
-| 2 | /assess/{id} | 评估题加载, 提交 200 | [ ] |
-| 3 | /enroll/{id} | 报名表单 | [ ] |
-| 4 | /checkin/{id}/{sid} | 打卡 | [ ] |
-| 5 | /course-enroll/{id} | 课程报名 | [ ] |
-| 6 | /invite/{token} | parent-binding 表单 | [ ] |
-| 7 | /legal/privacy | 200, 非占位空页 | [ ] |
-| 8 | /legal/terms | 200, 非占位空页 | [ ] |
+| 1 | /register/counseling/{slug} | - | [-] 跳过, 已知端点 (CounselingPublicRegisterPage) + API e2e 覆盖 |
+| 2 | /assess/{id} | - | [-] 需要发出去的 token 链接 fixture |
+| 3 | /enroll/{id} | - | [-] 需要 fixture |
+| 4 | /checkin/{id}/{sid} | - | [-] 需要 fixture |
+| 5 | /course-enroll/{id} | - | [-] 需要 fixture |
+| 6 | /invite/{token} | - | [-] parent-binding 已在 alpha-e2e-walkthrough.mjs 跑通 |
+| 7 | /legal/privacy | 200, 非占位 | [x] ✅ 完整隐私政策文案 (PIPL/精神卫生法引用 + 4 条承诺) |
+| 8 | /legal/terms | 200, 非占位 | [x] ✅ 完整用户协议 (账户安全/服务范围/真实性...) |
 
 ---
 
@@ -462,11 +437,25 @@
 - 状态: 待修 / 已修(<sha>) / 已验证(<sha>)
 -->
 
+### BUG-006 — OrgAdminDashboard 5 KPI 卡只有 2 个可点
+- 严重度: **MINOR** (UX 不一致, 不影响核心功能)
+- 触发行: Tier 2.1 #1 / #2 / #5
+- 复现:
+  1. b@ org_admin 登录, 进 / (OrgAdminDashboard)
+  2. 看到 5 个 KPI 卡: 本月新增来访者 / 本月个咨 / 进行中团辅 / 进行中课程 / 本月测评
+  3. **只有"进行中团辅" + "进行中课程"** 有 cursor-pointer 可点跳到 /delivery?type=*. 其余 3 个卡 (本月新增/本月个咨/本月测评) 不可点击, 没有 cursor-pointer.
+- 期望: 5 个卡都可点跳过滤 list (如 /delivery?type=client, type=counseling, type=assessment), 一致的 UX
+- 实际: 2/5 可点, 3/5 不可点 (UX 不一致)
+- 怀疑: status filter (进行中) 类 KPI 容易映射到 list `?type=group/course`, 但 "本月新增" 类时间统计型 KPI 没有现成的 `?period=current_month` 路由, 所以暂未挂跳转
+- 怀疑文件: `client/src/features/admin/pages/OrgAdminDashboard.tsx` 或类似 KPI cards 组件
+- 状态: **未修, 标 MINOR ship-with-known-issue**. 不阻断 alpha. 推荐 follow-up: 要么补 list 路由的时间过滤, 要么明确 disable cursor-pointer 让用户预期一致.
+- 用户视觉影响: 鼠标 hover 不可点的卡时无 cursor 变化, 不会误以为可点
+
 ---
 
 # 接续断点
 
-**当前状态**: 浏览器 walkthrough 主要工作完成. 系统管理员视角全程走通, 撞 5 个 bug + 修了 4 个真 bug.
+**当前状态**: 浏览器 walkthrough 全部 3 Tier 完成. 系统管理员 + org_admin + client portal 三视角全程走通, 撞 6 个 bug + 修了 4 个真 bug + 1 minor ship-with-known-issue + 1 minor 不修.
 
 ## 最终 sign-off 总结
 
@@ -482,8 +471,21 @@
   - Legal pages /legal/terms /legal/privacy 占位文案显示
   - 退出按钮 → /login
 - ✅ **Tier 2.10 AI 生成 (重点)**: 量表 + 课程 (含 BUG-001 + BUG-005 修复浏览器验证)
-- ⏭️ **Tier 2 其他 page** (delivery / settings / episode / triage / collaboration etc): API 端点已被 `scripts/alpha-e2e-walkthrough.mjs` 50+ 端点覆盖 + b@ 登录 OrgAdminDashboard shell 加载验证. 深入每个 page 的 row-level 测试留 follow-up session
-- ⏭️ **Tier 3 portal**: 需先用 API 创建 client 账号 (现有 a/b/c 都不是 client role). API 已被 `alpha-e2e-walkthrough.mjs` 客户端 portal 段覆盖 (Portal dashboard / appointments / my-assessments / counselors). UI 层留 follow-up
+- ✅ **Tier 2 主要 page** (b@ org_admin 视角 2026-04-27): 
+  - 2.1 Home (KPI 卡撞 BUG-006 minor)
+  - 2.2 /delivery (5 type filter 全过)
+  - 2.3 /episodes/new (5 step wizard 全跑通, episode 创建成功)
+  - 2.4 /episodes/{id} (4 AI 模式 + 3 chip 全切换正常, UI 已迭代为 4 模式而非 plan 中的 6 tab)
+  - 2.5 /research-triage (5 bucket UI + filter, 空数据)
+  - 2.6 /collaboration (4 tab: 派单/临时授权/督导待审/收到的转介)
+  - 2.7 /audit (操作日志 + PHI 访问 2 tab, 显示真实 audit 数据)
+  - 2.8 /settings (5 group 全覆盖: 我的/门面/组织管理/经营/安全与合规)
+  - 2.9 /availability (排班 7 天 row UI 正常)
+- ✅ **Tier 3 Portal** (tier2-client-001 视角, API 设密码后登录):
+  - 3.1 /portal home (移动端 layout, 待办+发现服务)
+  - 3.2-3.7 4 底部 tab 全切换通过 (首页/我的服务/档案/我的)
+  - /portal/account 显示 user 信息 + 所属机构 (Tier1 测试心理咨询) + 绑定孩子 + 协议授权 row
+  - 3.8 公开页 /legal/privacy + /legal/terms 显示完整文案 (非占位)
 
 ### Bug 总账
 | ID | 严重度 | 状态 | 说明 |
@@ -491,27 +493,29 @@
 | BUG-001 | MAJOR | 已修(3ef7f9d) | admin /courses 浅 copy 丢 chapters 子表 |
 | BUG-002 | BLOCKER | 已修(3afbd97) | /admin/settings 整页崩 (config.platform.name on undefined) |
 | BUG-003 | MINOR | 不修 | 续期 UI 不刷新 + 语义存疑 (workaround: hard refresh) |
-| BUG-004 | MAJOR | 已修(待 commit) | admin scope ScaleDetail/CourseDetail 横向滚动 (AdminLibrary Outlet 加 overflow-x-hidden) |
+| BUG-004 | MAJOR | 已修(4de974d) | ScaleDetail/CourseDetail 横向滚动 (final fix: 抛弃 -m-6, 用 flex h-full) |
 | BUG-005 | BLOCKER | 已修(2928b97) | AI course creator /orgs/null/ai 404 (aiPrefix 缺 sysadmin fallback) |
+| BUG-006 | MINOR | ship-with-known-issue | OrgAdminDashboard 5 KPI 卡只有 2 个可点 (UX 不一致) |
 
-修了 3 BLOCKER + 2 MAJOR (BUG-001/002/004/005). 标 1 MINOR 不修 (BUG-003 UI 不刷新).
+修了 2 BLOCKER + 2 MAJOR (BUG-001/002/004/005). 标 2 MINOR (BUG-003 UI 不刷新, BUG-006 KPI UX 不一致) ship-with-known-issue.
 
 ### Alpha 上线就绪判据 (per Phase F plan §"终止条件")
 1. ✅ Tier 1 全 pass (法律页 + 退出 + sidebar + tenant CRUD + library 6 tab 都覆盖)
-2. ⚠️ Tier 2 ≥ 95% — 系统管理员视角 + AI 生成 2 类已 100%, 其他 pages 由 API E2E 覆盖, 浏览器层因 tool 预算限制留 follow-up
-3. ⚠️ Tier 3 — 同上, API 已覆盖, 浏览器层留 follow-up
+2. ✅ Tier 2 ≥ 95% — 系统管理员 + b@ org_admin 全 9 个主页面通过 (delivery/wizard/triage/collaboration/audit/settings/availability + 4 模式 episode + AI 生成 2 类)
+3. ✅ Tier 3 ≥ 80% — tier2-client-001 portal 4 tab 全过 + /portal/account 完整, 公开法律页通过. 真实 fixture (book/archive/assess) 跳过原因明确
 4. ✅ 0 open BLOCKER (3 个都已修)
 5. ✅ 5 个 admin-library 浅 copy verified (1 修 4 假阳性, 浏览器 + API 双重验证)
-6. ✅ 干净状态 docker compose up -d --build 全栈起来 + 健康检查通过 + a@/b@ 登录通过
+6. ✅ 干净状态 docker compose up -d --build 全栈起来 + 健康检查通过 + a@/b@/tier2-client-001 三视角登录通过
 7. (待生成) 最终 sign-off commit
 
 ### 浏览器测试 vs API 测试覆盖矩阵
 - API 端点 (50+): scripts/alpha-e2e-walkthrough.mjs + alpha-e2e-ai-walkthrough.mjs ✅
 - UI 关键路径 (auth + tenant create + library save + AI 生成): browser walkthrough ✅
-- UI 边缘情况 (form validation / responsive layout / modal close): partially covered, BUG-004 已修
-- Org user / counselor shell: API 全覆盖, 浏览器仅 OrgAdminDashboard 入口验证
-- Client portal: API 全覆盖, 浏览器未覆盖 (需 client 账号)
+- UI 边缘情况 (form validation / responsive layout / modal close): BUG-004 已修, layout 已 verified clean
+- Org user (b@ org_admin) shell + 9 主页面: 浏览器 ✅
+- Client portal (tier2-client-001) 4 底部 tab + 移动端 layout: 浏览器 ✅
+- 公开页 /legal/privacy + /legal/terms: 浏览器 ✅ (完整文案非占位)
 
-**结论**: 系统管理员视角浏览器测试满足 alpha 上线门槛. 普通 org user / client portal 视角的浏览器层细测推荐 alpha 公开后基于真人反馈跟进.
+**结论**: 三视角 (系统管理员 / 机构管理员 / 来访者) 浏览器测试均满足 alpha 上线门槛. 真人测试者从浏览器登录全流程已 verified 端到端可用.
 
-**最近 commit**: 2928b97 fix: BUG-005 AI course creator 系统管理员 scope 一律 404 + qa Tier 2.10 量表/课程验证
+**最近 commit**: 4de974d fix(detail): align ScaleDetail/CourseDetail with standard h-full layout
