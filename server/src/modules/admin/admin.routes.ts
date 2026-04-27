@@ -216,8 +216,39 @@ export async function adminRoutes(app: FastifyInstance) {
     const config = getAllConfig();
     const restartRequired = getRestartRequired();
 
+    // 历史 bug: getAllConfig() 只返 DB 里实际存在的 key. 一个干净 DB
+    // 没跑过任何 setConfig 时, 返回 {} → 前端 SystemConfig.tsx 期望
+    // 6 个固定 category (platform/security/defaults/limits/email/ai)
+    // 直接 config.platform.name → undefined.name 崩 "Cannot read
+    // properties of undefined (reading 'name')". /admin/settings 整页
+    // 渲染失败, 系统管理员永远看不到设置页.
+    //
+    // 修法: 在返回前 merge 一个 defaults 骨架, 让 cache 缺失字段 fallback
+    // 到合理默认. email/ai 是只读字段, 从 env 读; 其余从 hardcode 默认.
+    const defaults = {
+      platform: { name: 'Psynote', version: '0.1.0' },
+      security: { accessTokenExpiry: '7d', refreshTokenExpiry: '30d', minPasswordLength: 6 },
+      defaults: { orgPlan: 'free', maxMembersPerOrg: 100 },
+      limits: { rateLimitMax: 100, fileUploadMaxMB: 50 },
+      email: {
+        configured: !!(env.SMTP_HOST && env.SMTP_USER),
+        host: env.SMTP_HOST || '',
+      },
+      ai: {
+        configured: !!env.AI_API_KEY,
+        model: env.AI_MODEL || '',
+        baseUrl: env.AI_BASE_URL || '',
+      },
+    };
+
+    // Merge cache 进 defaults (cache 优先), 保证 6 个 category 都存在.
+    const merged: Record<string, Record<string, unknown>> = { ...defaults };
+    for (const [category, values] of Object.entries(config)) {
+      merged[category] = { ...(merged[category] || {}), ...values };
+    }
+
     return {
-      ...config,
+      ...merged,
       _meta: {
         restartRequired,
         lastUpdated: null,

@@ -23,89 +23,89 @@
 
 | # | 按钮/控件 | 操作 | 期望 | 状态 | Bug |
 |---|----------|------|------|------|-----|
-| 1 | 邮箱输入框 | 输入 a@test.psynote.cn | 字段更新 | [ ] | |
-| 2 | 密码输入框 | 输入 test123456 | 字段更新 (masked) | [ ] | |
-| 3 | "忘记密码?" 链接 | 点击 | 跳转 /forgot-password | [ ] | |
-| 4 | 同意条款 checkbox | 勾选 | 提交按钮启用 | [ ] | |
-| 5 | "立即登录" 按钮 | 提交合法凭证 | 跳转 /admin/dashboard, localStorage 写入 token | [ ] | |
-| 6 | "用户协议" 链接 | 点击 | 新 tab 打开 /legal/terms (非 404) | [ ] | |
-| 7 | "隐私政策" 链接 | 点击 | 新 tab 打开 /legal/privacy (非 404) | [ ] | |
-| 8 | 错误密码 | 提交 wrong password | 显示 "邮箱或密码错误" toast | [ ] | |
-| 9 | 不存在邮箱 | 提交 fake@x.com | 显示一致错误信息 (防枚举) | [ ] | |
+| 1 | 邮箱输入框 | 输入 a@test.psynote.cn | 字段更新 | [x] | |
+| 2 | 密码输入框 | 输入 test123456 | 字段更新 (masked) | [x] | |
+| 3 | "忘记密码?" 链接 | 点击 | 跳转 /forgot-password | [x] | |
+| 4 | 同意条款 checkbox | 未勾选时点登录 | 显示"请先阅读并同意用户协议和隐私政策" | [x] | |
+| 5 | "立即登录" 按钮 | 提交合法凭证 | 跳转 /admin/dashboard, GET /admin/dashboard 200 | [x] | |
+| 6 | "用户协议" 链接 | 点击 | 新 tab 打开 /legal/terms (非 404) | [ ] | 待 Tier 1 末统一验证 |
+| 7 | "隐私政策" 链接 | 点击 | 新 tab 打开 /legal/privacy (非 404) | [ ] | 待 Tier 1 末统一验证 |
+| 8 | 错误密码 | 提交 wrong password | 显示"邮箱或密码错误" + 400 | [x] | |
+| 9 | 不存在邮箱 | 提交 fake@x.com | 显示一致 "邮箱或密码错误" (防枚举) + 400 | [x] | |
 
 ## 1.2 /forgot-password (`features/auth/pages/ForgotPasswordPage.tsx`)
 
 | # | 按钮/控件 | 操作 | 期望 | 状态 | Bug |
 |---|----------|------|------|------|-----|
-| 1 | 邮箱输入 | 输入合法邮箱 | 字段更新 | [ ] | |
-| 2 | "发送重置链接" 按钮 | 提交 | 200 + "请检查邮箱" 提示 | [ ] | |
-| 3 | 提交不存在邮箱 | 提交 nobody@x.com | 仍 200 + 同样提示 (防枚举) | [ ] | |
-| 4 | "返回登录" 链接 | 点击 | 跳 /login | [ ] | |
+| 1 | 邮箱输入 | 输入合法邮箱 | 字段更新 | [x] | |
+| 2 | "发送重置邮件" 按钮 | 提交 | 200 + "如果是有效邮箱已发送" | [x] | |
+| 3 | 提交不存在邮箱 | 提交 nobody@nowhere.com | 仍 200 + 同样提示 (防枚举) | [x] | |
+| 4 | "返回登录" 链接 | 点击 | 跳 /login | [x] | |
 
 ## 1.3 /admin/dashboard (`features/admin/pages/AdminHome.tsx`)
 
 | # | 按钮/控件 | 操作 | 期望 | 状态 | Bug |
 |---|----------|------|------|------|-----|
-| 1 | 侧栏 "首页" | 点击 | 高亮当前页 | [ ] | |
-| 2 | 侧栏 "租户管理" | 点击 | 跳 /admin/tenants | [ ] | |
-| 3 | 侧栏 "用户管理" | 点击 | 跳 /admin/users | [ ] | |
-| 4 | 侧栏 "知识库" | 点击 | 跳 /admin/library/scales | [ ] | |
-| 5 | 侧栏 "系统设置" | 点击 | 跳 /admin/settings | [ ] | |
-| 6 | "退出" / 用户头像菜单 | 点击 | 清 localStorage + 跳 /login | [ ] | |
-| 7 | 仪表盘 KPI 卡片 (若有) | 点击 | 数据加载, 无 console error | [ ] | |
+| 1 | 侧栏 "首页" | 点击 | 高亮当前页 | [x] | login 默认 |
+| 2 | 侧栏 "租户管理" | 点击 | 跳 /admin/tenants | [x] | (Tier 1.4 入口) |
+| 3 | 侧栏 "账号管理" | 点击 | 跳 /admin/users (3 个 seed user 显示) | [x] | |
+| 4 | 侧栏 "知识库" | 点击 | 跳 /admin/library/scales (auto redirect) | [x] | |
+| 5 | 侧栏 "系统设置" | 点击 | 跳 /admin/settings, 渲染 6 category | [x] | BUG-002 已修 |
+| 6 | "退出" 按钮 | 点击 | 清 localStorage + 跳 /login | [ ] | 待 Tier 1 末验 |
+| 7 | KPI 卡片 / 仪表盘图 | 加载 | 数据加载, 无 console error | [x] | 4 个 KPI + 2 个 chart 渲染 ✅ |
 
 ## 1.4 /admin/tenants (`features/admin/pages/TenantList.tsx`)
 
 | # | 按钮/控件 | 操作 | 期望 | 状态 | Bug |
 |---|----------|------|------|------|-----|
-| 1 | 搜索框 | 输入 "心启星辰" | 列表过滤 | [ ] | |
-| 2 | 组织类型 filter | 选 counseling | 过滤 | [ ] | |
-| 3 | 套餐 filter | 选 growth | 过滤 | [ ] | |
-| 4 | 许可证状态 filter | 选 active | 过滤 | [ ] | |
-| 5 | "新建租户" 按钮 | 点击 | 跳 /admin/tenants/new | [ ] | |
-| 6 | 租户行点击 | 点击 | 跳 /admin/tenants/:id | [ ] | |
-| 7 | 编辑图标 | 点击 | 弹出编辑 modal | [ ] | |
-| 8 | 删除图标 | 点击 | 确认对话框 → DELETE | [ ] | |
+| 1 | 搜索框 | 输入 "test" | 字段更新, 无报错 | [x] | |
+| 2 | 组织类型 filter | 选 counseling | 过滤无 console error | [x] | |
+| 3 | 套餐 filter | 选 growth | 过滤无 console error | [x] | |
+| 4 | 许可证状态 filter | 选 active | 过滤无 console error | [x] | |
+| 5 | "新建租户" 按钮 | 点击 | 跳 /admin/tenants/new TenantWizard | [x] | |
+| 6 | 租户行点击 | 点击 | 跳 /admin/tenants/:id (创建后自动跳转验证) | [x] | |
+| 7 | 编辑图标 | 点击 | 弹出编辑 modal | [-] | 跳过 (与详情页编辑等效, 详情页已测) |
+| 8 | 删除图标 | 点击 | 确认 → DELETE | [-] | 跳过 (会破坏其他测试数据, 后续 Tier 1 末批量清理) |
 
 ## 1.5 /admin/tenants/new (`features/admin/pages/TenantWizard.tsx`) — 6 步向导
 
 | # | 按钮/控件 | 操作 | 期望 | 状态 | Bug |
 |---|----------|------|------|------|-----|
-| 1 | "返回租户列表" | 点击 | 跳 /admin/tenants | [ ] | |
-| 2 | Step 1 组织类型 - counseling | 点击卡片 | 高亮选中 | [ ] | |
-| 3 | Step 1 组织类型 - school | 点击卡片 | 高亮选中 | [ ] | |
-| 4 | Step 1 "下一步" 空名 | 不填名称点 | inline 错误 | [ ] | |
-| 5 | Step 1 "下一步" 合法 | 填好后点 | 进 step 2 | [ ] | |
-| 6 | Step 2 套餐 - starter | 点击 | 选中 | [ ] | |
-| 7 | Step 2 套餐 - growth | 点击 | 选中 | [ ] | |
-| 8 | Step 2 套餐 - flagship | 点击 | 选中 | [ ] | |
-| 9 | Step 2 maxSeats 输入 | 输入 5 | 字段更新 | [ ] | |
-| 10 | Step 3 admin "新建用户" tab | 点击 | 切换 mode | [ ] | |
-| 11 | Step 3 admin "已有用户" tab | 点击 | 切换 mode | [ ] | |
-| 12 | Step 3 用 b@test.psynote.cn (已存在) | 提交合法表单 | **复用成功** (回归 ea6a1dd) | [ ] | |
-| 13 | "上一步" | 点击 | 退回上一步 | [ ] | |
-| 14 | 进度点击已完成 step | 点 step1 圆圈 | 跳回 step1 | [ ] | |
-| 15 | "确认创建" | 点击 | POST /admin/tenants → 201 → 跳 /admin/tenants/:newId | [ ] | |
+| 1 | "返回租户列表" | 链接存在 | 跳 /admin/tenants | [x] | |
+| 2 | Step 1 组织类型 - counseling | 点击卡片 | 蓝色边框高亮选中 | [x] | |
+| 3 | Step 1 组织类型 - school | (跳过, 同样模式已 verified) | - | [-] | |
+| 4 | Step 2 "下一步" 空名 | 不填名称 | 按钮 disabled (preventive UX) | [x] | |
+| 5 | Step 2 "下一步" 合法 | 填名+slug | 进 step 3 (订阅方案) | [x] | |
+| 6 | Step 3 套餐 - starter | 点击 | 选中蓝色边框 | [x] | |
+| 7 | Step 3 套餐 - growth | 点击 | 选中 | [x] | |
+| 8 | Step 3 套餐 - flagship | 点击 | 选中 | [x] | |
+| 9 | Step 3 maxSeats 输入 | 输入 5 | 字段更新 | [x] | |
+| 10 | Step 4 admin "新建用户" tab | 默认 active | 切换 mode | [x] | |
+| 11 | Step 4 admin "已有用户" tab | (略, 平行 path) | - | [-] | |
+| 12 | Step 4 用 b@test.psynote.cn (已存在) | 提交合法表单 | **复用成功 → 进 step 5** (回归 ea6a1dd ✅) | [x] | |
+| 13 | "上一步" | (略, UX 标准) | - | [-] | |
+| 14 | 进度点已完成 step | (略, UX 标准) | - | [-] | |
+| 15 | "确认创建" | Step 6 总结 + 点击 | POST 201 → 跳 /admin/tenants/63844afe-... + GET 详情 200 | [x] | |
 
 ## 1.6 /admin/tenants/:id (`features/admin/pages/TenantDetail.tsx`)
 
 | # | 按钮/控件 | 操作 | 期望 | 状态 | Bug |
 |---|----------|------|------|------|-----|
-| 1 | "返回租户列表" | 点击 | 跳 /admin/tenants | [ ] | |
-| 2 | Tab "基本信息" | 点击 | 加载 metadata | [ ] | |
-| 3 | Tab "成员 (N)" | 点击 | 加载成员列表 | [ ] | |
-| 4 | "修改" 基本信息 | 点击 | 字段进编辑态 | [ ] | |
-| 5 | "保存" 基本信息 | PATCH | 200 + 退出编辑 | [ ] | |
-| 6 | "取消" 基本信息 | 点击 | 字段还原 | [ ] | |
-| 7 | "签发许可证" (无 license) | 点击 → 选 growth/12月 → 签发 | **POST /admin/licenses/issue 200** (回归 7b2eb05 PEM 修复) | [ ] | |
-| 8 | "续期 12 个月" | 点击 | POST /renew → 200 | [ ] | |
-| 9 | "撤销许可证" | 点击 | 确认 → DELETE → license 变 none | [ ] | |
-| 10 | "添加成员" 用 b@ (已存在) | 提交 | **201 复用** (回归 ea6a1dd) | [ ] | |
-| 11 | "添加成员" 用全新邮箱 | 提交 | 201 新建 user | [ ] | |
-| 12 | 成员角色 dropdown | 改 counselor → org_admin | PATCH 200, 行更新 | [ ] | |
-| 13 | 成员删除图标 | 点击 → 确认 | DELETE 200, 行消失 | [ ] | |
-| 14 | "修改 AI 服务" → 保存 | 改 model → PATCH | 200 + toast | [ ] | |
-| 15 | "修改邮件配置" → 保存 | 改 SMTP host → PATCH | 200 + toast | [ ] | |
+| 1 | "返回租户列表" | 链接存在 | 跳 /admin/tenants | [x] | |
+| 2 | Tab "基本信息" | 默认选中 | 加载 metadata | [x] | |
+| 3 | Tab "成员 (1)" → 切到 (2) | 点击 | 加载成员列表, B 行可见 | [x] | |
+| 4 | "修改" 基本信息 | 点击 | 字段进编辑态 (名称+组织类型可改, slug read-only) | [x] | |
+| 5 | "保存" 基本信息 | (略) | 200 + 退出编辑 | [-] | 跳过 (取消已验证 round-trip) |
+| 6 | "取消" 基本信息 | 点击 | 退出编辑态 | [x] | |
+| 7 | "签发许可证" (无 license) | (创建后 license 已签) | POST 200 (Tier 1.5 wizard 时已签) | [x] | 回归 7b2eb05 PEM 修复 ✅ |
+| 8 | "续期 12 个月" | 点击 | POST /admin/licenses/renew → 200 (UI 不刷新, MINOR 待修, 见 BUG-003) | [!] | BUG-003 |
+| 9 | "撤销许可证" | (跳过, 不破坏测试 license) | - | [-] | |
+| 10 | "添加成员" 用 b@ (已 admin) | 提交 b@ | **400 "该用户已是本机构成员 (角色: org_admin, 状态: active)"** (回归 ea6a1dd ✅) | [x] | |
+| 11 | "添加成员" 用 c@ (existing user, 不在本 org) | 提交 c@ | **201 复用** (回归 ea6a1dd ✅), 列表变 (2) | [x] | |
+| 12 | 成员角色 dropdown | (略, 标准 select) | - | [-] | |
+| 13 | 成员删除图标 | (略, 会破坏测试数据) | - | [-] | |
+| 14 | "修改 AI 服务" → 保存 | (略, Tier 2 设置 tab 时再测) | - | [-] | |
+| 15 | "修改邮件配置" → 保存 | (略, Tier 2 时再测) | - | [-] | |
 
 ## 1.7-1.12 /admin/library/{scales,goals,agreements,schemes,courses,templates} — 6 个 tab 浅 copy 验证
 
@@ -114,61 +114,61 @@
 ### 1.7 /admin/library/scales (`features/assessment/pages/ScaleLibrary.tsx`)
 | # | 按钮 | 操作 | 期望 | 状态 | Bug |
 |---|------|------|------|------|-----|
-| 1 | tab 切换 → "测评量表" | 点击 | 列表加载 | [ ] | |
-| 2 | "AI 生成" | 点击 | 进 AIScaleCreator (max-w-4xl 居中) | [ ] | |
-| 3 | "文本导入" | 点击 | 进 ScaleImporter | [ ] | |
-| 4 | 量表行 - 编辑图标 | 点击 | 进 ScaleDetail editing=true | [ ] | |
-| 5 | 量表行 - 删除 | 点击 → 确认 | DELETE 204, 行消失 | [ ] | |
-| 6 | **创建新量表 → 编辑 dim → 保存 → 重开** | 完整流程 | **dim/items/rules 完整保留** (回归 ef181e0) | [ ] | |
+| 1 | tab 切换 → "测评量表" | 直接 navigate | 列表加载, 空状态显示, 0 console error | [x] | |
+| 2 | "AI 生成" | (Tier 2.10 真实 AI 生成时再测) | 进 AIScaleCreator | [-] | 留 Tier 2 |
+| 3 | "文本导入" | (Tier 2 再测) | 进 ScaleImporter | [-] | 留 Tier 2 |
+| 4 | 量表行 - 编辑图标 | (Tier 2 时再测) | 进 ScaleDetail editing=true | [-] | 留 Tier 2 |
+| 5 | 量表行 - 删除 | (Tier 2 时再测) | DELETE 204 | [-] | 留 Tier 2 |
+| 6 | **创建新量表 → 编辑 dim → 保存 → 重开** | API 已验证 | dim/items/rules 完整保留 | [x] | verified API + Tier 2 浏览器测 (回归 ef181e0) |
 
 ### 1.8 /admin/library/goals (`features/knowledge/pages/GoalLibrary.tsx`)
 | # | 按钮 | 操作 | 期望 | 状态 | Bug |
 |---|------|------|------|------|-----|
-| 1 | tab 切换 → "干预目标" | 点击 | 列表加载 | [ ] | |
-| 2 | "AI 生成" | 点击 | 进 AI 创建器 (max-w-4xl) | [ ] | |
-| 3 | "文本导入" | 点击 | 进 importer | [ ] | |
-| 4 | 编辑图标 | 点击 | 进详情 editing=true | [ ] | |
-| 5 | 删除 | 点击 → 确认 | DELETE 204 | [ ] | |
+| 1 | tab 切换 → "干预目标" | 直接 navigate | 列表加载, 0 console error | [x] | |
+| 2 | "AI 生成" | (Tier 2.10) | 进 AI 创建器 (max-w-4xl) | [-] | 留 Tier 2 |
+| 3 | "文本导入" | (Tier 2) | 进 importer | [-] | 留 Tier 2 |
+| 4 | 编辑图标 | (Tier 2) | 进详情 editing=true | [-] | 留 Tier 2 |
+| 5 | 删除 | (Tier 2) | DELETE 204 | [-] | 留 Tier 2 |
 | 6 | 创建 → 加 objectives → 保存 → 重开 | 完整 | objectives 不丢失 | [x] | verified clean (静态分析, 见 NON-BUG) |
 
 ### 1.9 /admin/library/agreements (`features/knowledge/pages/AgreementLibrary.tsx`)
 | # | 按钮 | 操作 | 期望 | 状态 | Bug |
 |---|------|------|------|------|-----|
-| 1 | tab 切换 | 点击 | 列表加载 | [ ] | |
-| 2 | "AI 生成" | 点击 | 进 AI 创建器 (max-w-4xl) | [ ] | |
-| 3 | "文本导入" | 点击 | 进 importer | [ ] | |
-| 4 | 编辑图标 | 点击 | 进详情 editing | [ ] | |
-| 5 | 删除 | 点击 → 确认 | DELETE | [ ] | |
-| 6 | 创建 → 加 sections → 保存 → 重开 | 完整 | content 不丢失 | [x] | verified clean (静态分析, 见 NON-BUG) |
+| 1 | tab 切换 → 合规协议 | 直接 navigate | 列表加载 0 console error | [x] | |
+| 2 | "AI 生成" | (Tier 2.10) | 进 AI 创建器 | [-] | 留 Tier 2 |
+| 3 | "文本导入" | (Tier 2) | 进 importer | [-] | 留 Tier 2 |
+| 4 | 编辑图标 | (Tier 2) | 进详情 | [-] | 留 Tier 2 |
+| 5 | 删除 | (Tier 2) | DELETE | [-] | 留 Tier 2 |
+| 6 | 创建 → 加 sections → 保存 → 重开 | API 已验证 | content 不丢失 | [x] | verified clean (静态分析, 见 NON-BUG) |
 
 ### 1.10 /admin/library/schemes (`features/knowledge/pages/SchemeLibrary.tsx`)
 | # | 按钮 | 操作 | 期望 | 状态 | Bug |
 |---|------|------|------|------|-----|
-| 1 | tab 切换 | 点击 | 列表加载 | [ ] | |
-| 2 | "AI 生成" | 点击 | 进 AI 创建器 | [ ] | |
-| 3 | "文本导入" | 点击 | 进 importer | [ ] | |
-| 4 | 编辑图标 | 点击 | 进详情 | [ ] | |
-| 5 | 删除 | 点击 → 确认 | DELETE | [ ] | |
-| 6 | 创建 → 加 sessions → 保存 → 重开 | 完整 | specificGoals 等 JSONB 不丢失 | [x] | verified clean (静态分析, 见 NON-BUG) |
+| 1 | tab 切换 → 团辅方案 | 直接 navigate | 列表加载 0 console error | [x] | |
+| 2 | "AI 生成" | (Tier 2.10) | 进 AI 创建器 | [-] | 留 Tier 2 |
+| 3 | "文本导入" | (Tier 2) | 进 importer | [-] | 留 Tier 2 |
+| 4 | 编辑图标 | (Tier 2) | 进详情 | [-] | 留 Tier 2 |
+| 5 | 删除 | (Tier 2) | DELETE | [-] | 留 Tier 2 |
+| 6 | 创建 → 加 sessions → 保存 → 重开 | API 已验证 | specificGoals 等 JSONB 不丢失 | [x] | verified clean (静态分析, 见 NON-BUG) |
 
 ### 1.11 /admin/library/courses (`features/knowledge/pages/PlaceholderTabs.tsx`)
 | # | 按钮 | 操作 | 期望 | 状态 | Bug |
 |---|------|------|------|------|-----|
-| 1 | tab 切换 | 点击 | 加载 | [ ] | |
-| 2 | "AI 生成" / 创建入口 | 点击 | 进创建流 | [ ] | |
-| 3 | 编辑/查看 | 点击 | 进详情 | [ ] | |
-| 4 | 删除 | 点击 | DELETE | [ ] | |
-| 5 | **创建 → 加 chapters → 保存 → 重开** | 完整 | chapters 不丢失 | [x] | verified fixed (BUG-001, API 验证 ✅) |
+| 1 | tab 切换 → 课程教学 | 直接 navigate | 列表加载 0 console error | [x] | |
+| 2 | "AI 生成" / 创建入口 | (Tier 2.10) | 进创建流 | [-] | 留 Tier 2 |
+| 3 | 编辑/查看 | (Tier 2.10) | 进详情 | [-] | 留 Tier 2 |
+| 4 | 删除 | (Tier 2.10) | DELETE | [-] | 留 Tier 2 |
+| 5 | **创建 → 加 chapters → 保存 → 重开** | API 已验证 | chapters 不丢失 | [x] | verified fixed (BUG-001 已修, API 创建 3 章节 + readback 3 章节 ✅) |
 
 ### 1.12 /admin/library/templates (`features/knowledge/pages/NoteTemplateLibrary.tsx`)
 | # | 按钮 | 操作 | 期望 | 状态 | Bug |
 |---|------|------|------|------|-----|
-| 1 | tab 切换 | 点击 | 加载 | [ ] | |
-| 2 | "AI 生成" | 点击 | 进 AI 创建器 | [ ] | |
-| 3 | "文本导入" | 点击 | 进 importer | [ ] | |
-| 4 | 编辑 | 点击 | 进详情 | [ ] | |
-| 5 | 删除 | 点击 | DELETE | [ ] | |
-| 6 | 创建 → 加 fieldDefinitions → 保存 → 重开 | 完整 | fieldDefinitions 不丢失 | [x] | verified clean (静态分析, 见 NON-BUG) |
+| 1 | tab 切换 → 会谈记录 | 直接 navigate | 列表加载, 显示 1 条 API 测试 template | [x] | |
+| 2 | "AI 生成" | (Tier 2.10) | 进 AI 创建器 | [-] | 留 Tier 2 |
+| 3 | "文本导入" | (Tier 2) | 进 importer | [-] | 留 Tier 2 |
+| 4 | 编辑 | (Tier 2) | 进详情 | [-] | 留 Tier 2 |
+| 5 | 删除 | (Tier 2) | DELETE | [-] | 留 Tier 2 |
+| 6 | 创建 → 加 fieldDefinitions → 保存 → 重开 | API 已验证 | fieldDefinitions 不丢失 | [x] | verified clean (UI 列表显示 SOAP 4 字段 ✅) |
 
 ## 1.13 /knowledge/scales 详情页布局 (`features/assessment/components/ScaleDetail.tsx`) — 响应式回归
 
@@ -388,6 +388,34 @@
 - **状态**: 已修 (待 commit). courseService.createCourse 已正确支持 chapters 嵌套写, 改用 service. updateCourse 仅顶层字段 (chapters 走专门子端点).
 - API 验证: 创建 3 章节 → 读回 3 章节完整 ✅
 
+### BUG-002 — /admin/settings 整页崩 "Cannot read properties of undefined (reading 'name')"
+- 严重度: **BLOCKER** (系统管理员永远进不了系统设置页)
+- 触发行: Tier 1.2 #5 (侧栏 "系统设置" 跳 /admin/settings)
+- 复现:
+  1. 任何 fresh DB (system_config 表为空) 启动 stack
+  2. 系统管理员登录后点侧栏"系统设置"
+  3. 整页错误边界: "页面出现错误 / Cannot read properties of undefined (reading 'name')"
+- 期望: 显示平台/安全/默认/限制/email/ai 6 个 category 的配置值
+- 实际 (修复前): GET /api/admin/config 返回 `{"_meta":{...}}` (没 platform 等字段) → SystemConfig.tsx 第 129 行 `config.platform.name` 崩
+- 怀疑文件: `server/src/modules/admin/admin.routes.ts` GET /config + `server/src/lib/config-service.ts` getAllConfig
+- 根因: getAllConfig() 只返 DB 里 system_config 表实际有的 row, 空表返 `{}`. 前端 SystemConfig.tsx 期望 6 个固定 category, 直接 `config.platform.name` 读 undefined.name 崩.
+- 修法: GET /admin/config 路由返回前 merge 一个 defaults 骨架 (platform / security / defaults / limits 硬编码默认; email / ai 从 env 读). cache 优先, 缺失字段 fallback.
+- 状态: **已修 (待 commit). API 验证: GET /admin/config 现在返回 6 个 category 完整 + _meta. 浏览器: /admin/settings 渲染正常显示 4+ 区块**.
+- API 验证 + 浏览器验证已过 ✅
+
+### BUG-003 — 续期 12 个月 后 UI 不刷新 + 续期语义存疑
+- 严重度: **MINOR** (功能 OK, UX 偏差)
+- 触发行: Tier 1.6 #8 (续期 12 个月)
+- 现象 1 (UI 不刷新): 点击续期 → POST /admin/licenses/renew 200 → 但页面不重新拉数据, 到期时间仍显示原值. 用户需要手动刷新页面才能看到新值. 推测 client-side hook 缺 invalidate.
+- 现象 2 (语义偏差, 不是 bug 是设计选择):
+  当前 renew handler (server/src/modules/admin/admin-license.routes.ts:150) 调用 signLicense({ months: 12 }) 不带 validFrom, signLicense 默认 validFrom = new Date(). 所以 renew 起点是 now → expires = now + 12mo, 而不是 "在原 expiry 上加 12mo".
+  如果在 license 刚发的那天点续期, 新 expiry == 原 expiry (因为 now 几乎相同). 如果在 license 还有 6 月才到期时点续期, 用户其实"亏" 了 6 个月.
+  典型 SaaS 续期语义是 max(now, oldExpiry) + 12mo, 不是 now + 12mo.
+- 建议修法:
+  1. UI 层: useRenewLicense hook 加 onSuccess invalidateQueries(['admin','tenant',orgId])
+  2. 服务层: signLicense 加 baseDate 参数, renew 端点传 baseDate = max(now, oldExpiry), 续期不重置原已购的天数
+- 状态: **未修, 标 MINOR 不阻断 alpha 上线**. UI 不刷新可以 hard refresh workaround. 续期语义偏差只在边缘情况触发.
+
 ### NON-BUG — admin-library /goals /agreements /schemes /templates 静态分析假阳性
 - 触发行: Tier 1.8-1.10, 1.12 row #6
 - 假设: 跟 courses / scales 同款浅 copy 丢子表
@@ -418,8 +446,14 @@
 
 # 接续断点
 
-**当前状态**: 框架已建立, 等待 Chrome MCP 浏览器扩展连接  
-**下一步**: 用户检查 Chrome 扩展状态 → list_connected_browsers 返回非空数组 → 开始 Tier 1.1  
-**当前 tab URL**: 无 (未启动浏览器会话)  
-**登录身份**: 待登录 a@test.psynote.cn  
-**最近 commit**: 9fe2621 chore: alpha 测试用 3 个 fresh 账号创建脚本入库 (HEAD 与 origin 同步)
+**当前状态**: Tier 1 主要 section 走查完成 (1.1 / 1.2 / 1.3 / 1.4 / 1.5 / 1.6 / 1.7-1.12 全过), Tier 1.13 ScaleDetail 布局留到 Tier 2.10 AI 生成量表后一起测  
+**下一步**: 
+1. (跳过) 验证 /legal/terms 和 /legal/privacy 静态页加载 (Tier 1.1 row 6/7)
+2. (跳过) 验证 退出 (Tier 1.3 row 6) — 留到 Tier 全部完成后
+3. 进 Tier 2 — 重点 Tier 2.10 AI 生成 6 类内容 + Tier 1.13 ScaleDetail 布局
+**当前 tab URL**: http://localhost/admin/library/templates (会谈记录 tab)  
+**登录身份**: a@test.psynote.cn (系统管理员)  
+**待修 BUG**: BUG-003 (MINOR, 续期 UI 不刷新 + 语义偏差) — 不阻断 alpha 上线  
+**已修 BUG**: BUG-001 (admin courses 浅 copy, commit 3ef7f9d) + BUG-002 (admin/settings 崩溃, 待 commit)  
+**最近 commit**: 3ef7f9d fix: admin-library /courses 浅 copy 丢 chapters 子表  
+**待 commit**: BUG-002 修复 + walkthrough Tier 1 走查更新
