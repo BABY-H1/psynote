@@ -403,6 +403,24 @@
 - 状态: **已修 (待 commit). API 验证: GET /admin/config 现在返回 6 个 category 完整 + _meta. 浏览器: /admin/settings 渲染正常显示 4+ 区块**.
 - API 验证 + 浏览器验证已过 ✅
 
+### BUG-004 — admin scope ScaleDetail 横向滚动条 (a0fd40b 回归不完全)
+- 严重度: **MAJOR** (UX 差, 但功能正常)
+- 触发行: Tier 1.13 #9 + Tier 2.10 量表生成后保存
+- 复现: 系统管理员 /admin/library/scales → AI 生成量表 → 保存进编辑页 → 页面底部出现横向滚动, 顶部子 tab pill (总览/维度/题目/选项配置) 部分被裁切, 右上角操作按钮 (取消/保存/编辑/PanelRightOpen) 与右侧 AI 助手 header 重叠
+- 与之前 a0fd40b 修复的关系: 之前的修复在 ScaleDetail 内层加了 overflow-hidden + 让 AI panel 360px + topbar 响应式. 但 admin scope 下的父容器 AdminLibrary (`max-w-7xl mx-auto p-6`) 跟 ScaleDetail 的 `-m-6` 撑出语义有冲突, 总宽度仍 > viewport
+- 怀疑文件: `client/src/features/assessment/components/ScaleDetail.tsx` 外层 `<div className="flex -m-6 overflow-hidden">` + `client/src/features/admin/pages/AdminLibrary.tsx` 父 wrapper
+- 浏览器验证证据: AI panel 折叠后横向 scrollbar 仍在, 说明不是 panel 宽度问题
+- 状态: 未修, 标 MAJOR. 建议 dedicated session 调查: AdminLibrary container 加 overflow-x-hidden, 或 ScaleDetail 不再 `-m-6` 而是 `w-full`
+- 不阻断 alpha 上线 (功能完整, 仅视觉/UX 问题, 用户能正常编辑保存)
+
+### BUG-005 — AI course creator 系统管理员 scope 一律 404
+- 严重度: **BLOCKER** (系统管理员永远无法用 AI 创建课程)
+- 触发行: Tier 2.10 课程
+- 复现: A 登录 → /admin/library/courses → AI 生成 → 输入需求点发送 → 返回 404
+- 根因: `client/src/api/useCourseAuthoring.ts` 的 `aiPrefix()` 函数没处理 system admin scope, 直接拼 `/orgs/null/ai/`. 跟 useAI.ts 的 `orgPrefix()` 模式不对齐
+- 修法: aiPrefix() 加 `if (!currentOrgId && isSystemAdmin) return '/admin/ai'` fallback (跟 orgPrefix 一致)
+- 状态: **已修 (待 commit). 浏览器验证: 修后 AI 生成课程成功, POST /api/admin/ai/create-course-chat 200, 保存 → POST /api/admin/library/courses 201 → 进入蓝图编辑器, 6 章节加载正确 ✅**
+
 ### BUG-003 — 续期 12 个月 后 UI 不刷新 + 续期语义存疑
 - 严重度: **MINOR** (功能 OK, UX 偏差)
 - 触发行: Tier 1.6 #8 (续期 12 个月)

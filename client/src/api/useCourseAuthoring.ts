@@ -3,9 +3,18 @@ import type { CourseBlueprintData, CourseRequirementsConfig } from '@psynote/sha
 import { api } from './client';
 import { useAuthStore } from '../stores/authStore';
 
+/**
+ * AI 端点前缀: 系统管理员 (无 currentOrgId) 走 /admin/ai (mounted on
+ * adminAiRoutes which includes course authoring). 普通用户走 /orgs/:id/ai.
+ *
+ * 历史 BUG-005: 该函数原本不区分 system admin scope, 直接拼 `/orgs/null/ai/`
+ * 导致系统管理员用 AI 创建课程一律 404. 跟 useAI.ts 的 orgPrefix() 模式
+ * 对齐.
+ */
 function aiPrefix() {
-  const orgId = useAuthStore.getState().currentOrgId;
-  return `/orgs/${orgId}/ai`;
+  const { currentOrgId, isSystemAdmin } = useAuthStore.getState();
+  if (!currentOrgId && isSystemAdmin) return '/admin/ai';
+  return `/orgs/${currentOrgId}/ai`;
 }
 
 export type CreateCourseChatResponse =
