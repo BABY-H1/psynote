@@ -61,7 +61,8 @@ export async function getCourseById(courseId: string) {
 }
 
 export async function createCourse(input: {
-  orgId: string;
+  /** orgId null = platform-level (system admin library) course, visible to all orgs via isPublic / isTemplate. */
+  orgId: string | null;
   title: string;
   description?: string;
   category?: string;

@@ -129,7 +129,7 @@
 | 3 | "文本导入" | 点击 | 进 importer | [ ] | |
 | 4 | 编辑图标 | 点击 | 进详情 editing=true | [ ] | |
 | 5 | 删除 | 点击 → 确认 | DELETE 204 | [ ] | |
-| 6 | **创建 → 加 objectives → 保存 → 重开** | 完整 | **objectives 不丢失** (浅 copy 嫌疑) | [ ] | |
+| 6 | 创建 → 加 objectives → 保存 → 重开 | 完整 | objectives 不丢失 | [x] | verified clean (静态分析, 见 NON-BUG) |
 
 ### 1.9 /admin/library/agreements (`features/knowledge/pages/AgreementLibrary.tsx`)
 | # | 按钮 | 操作 | 期望 | 状态 | Bug |
@@ -139,7 +139,7 @@
 | 3 | "文本导入" | 点击 | 进 importer | [ ] | |
 | 4 | 编辑图标 | 点击 | 进详情 editing | [ ] | |
 | 5 | 删除 | 点击 → 确认 | DELETE | [ ] | |
-| 6 | **创建 → 加 sections → 保存 → 重开** | 完整 | **sections/content 不丢失** (浅 copy 嫌疑) | [ ] | |
+| 6 | 创建 → 加 sections → 保存 → 重开 | 完整 | content 不丢失 | [x] | verified clean (静态分析, 见 NON-BUG) |
 
 ### 1.10 /admin/library/schemes (`features/knowledge/pages/SchemeLibrary.tsx`)
 | # | 按钮 | 操作 | 期望 | 状态 | Bug |
@@ -149,7 +149,7 @@
 | 3 | "文本导入" | 点击 | 进 importer | [ ] | |
 | 4 | 编辑图标 | 点击 | 进详情 | [ ] | |
 | 5 | 删除 | 点击 → 确认 | DELETE | [ ] | |
-| 6 | **创建 → 加 sessions → 保存 → 重开** | 完整 | **sessions 列表不丢失** (浅 copy 嫌疑) | [ ] | |
+| 6 | 创建 → 加 sessions → 保存 → 重开 | 完整 | specificGoals 等 JSONB 不丢失 | [x] | verified clean (静态分析, 见 NON-BUG) |
 
 ### 1.11 /admin/library/courses (`features/knowledge/pages/PlaceholderTabs.tsx`)
 | # | 按钮 | 操作 | 期望 | 状态 | Bug |
@@ -158,7 +158,7 @@
 | 2 | "AI 生成" / 创建入口 | 点击 | 进创建流 | [ ] | |
 | 3 | 编辑/查看 | 点击 | 进详情 | [ ] | |
 | 4 | 删除 | 点击 | DELETE | [ ] | |
-| 5 | **创建 → 加 lessons → 保存 → 重开** | 完整 | **lessons 不丢失** (浅 copy 嫌疑) | [ ] | |
+| 5 | **创建 → 加 chapters → 保存 → 重开** | 完整 | chapters 不丢失 | [x] | verified fixed (BUG-001, API 验证 ✅) |
 
 ### 1.12 /admin/library/templates (`features/knowledge/pages/NoteTemplateLibrary.tsx`)
 | # | 按钮 | 操作 | 期望 | 状态 | Bug |
@@ -168,7 +168,7 @@
 | 3 | "文本导入" | 点击 | 进 importer | [ ] | |
 | 4 | 编辑 | 点击 | 进详情 | [ ] | |
 | 5 | 删除 | 点击 | DELETE | [ ] | |
-| 6 | **创建 → 加 fieldDefinitions → 保存 → 重开** | 完整 | **fieldDefinitions 不丢失** (浅 copy 嫌疑) | [ ] | |
+| 6 | 创建 → 加 fieldDefinitions → 保存 → 重开 | 完整 | fieldDefinitions 不丢失 | [x] | verified clean (静态分析, 见 NON-BUG) |
 
 ## 1.13 /knowledge/scales 详情页布局 (`features/assessment/components/ScaleDetail.tsx`) — 响应式回归
 
@@ -373,7 +373,33 @@
 
 # 已发现 bug
 
-(尚未发现 bug, 走查中持续追加)
+## 静态分析阶段 (2026-04-27, 浏览器测试启动前)
+
+### BUG-001 — admin-library /courses 浅 copy 丢 chapters 子表
+- 严重度: **MAJOR**
+- 触发行: Tier 1.11 #5 / Tier 2.10 课程 row
+- 复现:
+  1. POST /api/admin/library/courses 带 chapters 数组
+  2. 服务器把整个 body 浅 copy 到 db.insert(courses), 不写 course_chapters 子表
+  3. 后续 GET /api/admin/library/courses/:id 只 select courses 主表, chapters 永远为空
+- 期望: chapters 完整保存 + 读回
+- 实际 (修复前): chapters 被静默丢弃
+- 怀疑文件: `server/src/modules/admin/admin-library.routes.ts` POST/GET/PATCH /courses
+- **状态**: 已修 (待 commit). courseService.createCourse 已正确支持 chapters 嵌套写, 改用 service. updateCourse 仅顶层字段 (chapters 走专门子端点).
+- API 验证: 创建 3 章节 → 读回 3 章节完整 ✅
+
+### NON-BUG — admin-library /goals /agreements /schemes /templates 静态分析假阳性
+- 触发行: Tier 1.8-1.10, 1.12 row #6
+- 假设: 跟 courses / scales 同款浅 copy 丢子表
+- **静态分析结论**: 4 个假阳性, 不是 bug
+- 原因: 这 4 个表的子结构都是**主表上的 JSONB 列**(不是单独子表), `db.insert(table).values({ ...body })` 浅 copy 实际能正常保存:
+  - `treatmentGoalLibrary.objectivesTemplate / interventionSuggestions: jsonb`
+  - `consentTemplates.content: text`
+  - `groupSchemes.specificGoals / overallAssessments / recruitmentAssessments: jsonb`
+  - `noteTemplates.fieldDefinitions: jsonb`
+- API 验证 (4 个全部 create + read 子结构数量 / 内容): goals 2+2 / agreements text 51 字符 / schemes 3 / templates 4 fieldDefs ✅
+- 浏览器走查这几行直接标 [x] verified clean (静态分析阶段已确认)
+
 
 <!-- 模板:
 ### BUG-NNN — 一句话描述

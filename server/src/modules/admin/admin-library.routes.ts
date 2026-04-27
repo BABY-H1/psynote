@@ -24,6 +24,7 @@ import { requireSystemAdmin } from '../../middleware/system-admin.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError, NotFoundError } from '../../lib/errors.js';
 import * as scaleService from '../assessment/scale.service.js';
+import * as courseService from '../course/course.service.js';
 
 export async function adminLibraryRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
@@ -159,31 +160,96 @@ export async function adminLibraryRoutes(app: FastifyInstance) {
 
   app.get('/courses/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const [row] = await db
-      .select()
+    // 先做平台级存在性 (orgId IS NULL) 校验防跨 scope 泄漏
+    const [shell] = await db
+      .select({ id: courses.id })
       .from(courses)
       .where(and(eq(courses.id, id), isNull(courses.orgId)))
       .limit(1);
-    if (!row) return reply.status(404).send({ message: 'Course not found' });
-    return row;
+    if (!shell) return reply.status(404).send({ message: 'Course not found' });
+    // 用 service 加载完整嵌套 (含 chapters 子表) — 之前只 select courses 一张表,
+    // chapters 永远不可见, 编辑页空骨架.
+    return courseService.getCourseById(id);
   });
 
+  /**
+   * 平台级 course 创建.
+   *
+   * 历史 bug: 原代码 db.insert(courses).values({ ...body }) 浅 copy, 完全不
+   * 写 course_chapters 子表 — AI 生成的章节 / 视频 / 内容全部丢. 跟 admin
+   * scale save fix (commit ef181e0) 同款问题, 同款修法.
+   *
+   * 改用 courseService.createCourse 做 chapters 嵌套写入. 平台级 course 用
+   * orgId=null + isTemplate=true 让所有 org 可见.
+   */
   app.post('/courses', async (request, reply) => {
-    const body = request.body as Record<string, unknown>;
-    const [item] = await db.insert(courses).values({
-      ...body,
+    const body = request.body as {
+      title: string;
+      description?: string;
+      category?: string;
+      coverUrl?: string;
+      duration?: string;
+      status?: string;
+      courseType?: string;
+      targetAudience?: string;
+      scenario?: string;
+      responsibleId?: string;
+      sourceTemplateId?: string;
+      creationMode?: string;
+      requirementsConfig?: Record<string, any>;
+      blueprintData?: Record<string, any>;
+      tags?: string[];
+      chapters?: Array<{
+        title: string;
+        content?: string;
+        videoUrl?: string;
+        duration?: string;
+        sortOrder?: number;
+        relatedAssessmentId?: string;
+        sessionGoal?: string;
+        coreConcepts?: string;
+        interactionSuggestions?: string;
+        homeworkSuggestion?: string;
+      }>;
+    };
+
+    if (!body.title) throw new ValidationError('title is required');
+
+    const course = await courseService.createCourse({
       orgId: null,
       isTemplate: true,
+      isPublic: true,
       createdBy: request.user!.id,
-    } as any).returning();
-    await logAudit(request, 'create', 'courses', item.id);
-    return reply.status(201).send(item);
+      title: body.title,
+      description: body.description,
+      category: body.category,
+      coverUrl: body.coverUrl,
+      duration: body.duration,
+      status: body.status,
+      courseType: body.courseType,
+      targetAudience: body.targetAudience,
+      scenario: body.scenario,
+      responsibleId: body.responsibleId,
+      sourceTemplateId: body.sourceTemplateId,
+      creationMode: body.creationMode,
+      requirementsConfig: body.requirementsConfig,
+      blueprintData: body.blueprintData,
+      tags: body.tags,
+      chapters: body.chapters,
+    });
+    await logAudit(request, 'create', 'courses', course.id);
+    return reply.status(201).send(course);
   });
 
+  /**
+   * 平台级 course PATCH 只更新顶层字段 (title / description / category 等).
+   * 章节增删改走专门的 /courses/:id/chapters/* 端点 (course-chapter
+   * routes), 不在这条 PATCH 上.
+   */
   app.patch('/courses/:id', async (request) => {
     const { id } = request.params as { id: string };
-    const body = request.body as Record<string, unknown>;
-    const [updated] = await db.update(courses).set(body as any).where(eq(courses.id, id)).returning();
+    const body = request.body as Parameters<typeof courseService.updateCourse>[1];
+    const updated = await courseService.updateCourse(id, body);
     await logAudit(request, 'update', 'courses', id);
     return updated;
   });
