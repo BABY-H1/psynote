@@ -240,14 +240,20 @@
 | 9 | bottom chip 协议 | 点击 | 协议 inline section | [-] 同模式跳过 |
 | 10 | "结案" 按钮 | 点击 + 确认 | 状态 closed | [-] 跳过 (会破坏后续测试数据) |
 
-## 2.5 /research-triage
+## 2.5 /research-triage — 真实 fixture 走通 ✅
+**Fixture chain (API)**: b@ POST /assessments (type=screening, scaleId=大学生考试焦虑量表) → POST /results (代 tier2-client-001 提交满分 50/50) → 自动 riskLevel='level_3' + AI 异步生成 3 条 recommendations. 升级测试时手动改到 level_4.
+
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | bucket 一般/关注/严重/危机/未分级 | 默认全部 | 5 bucket + count 显示 | [x] ✅ |
+| 1 | bucket 一般/关注/严重/危机/未分级 | 默认全部 | 5 bucket + count 显示 | [x] ✅ 严重 1, 后改为 危机 1 |
 | 2 | top filter 筛查测评/手工候选/全部 | 默认筛查测评 | toggle 正常 | [x] |
-| 3 | 候选行点击 | 空状态 | "当前筛选范围内没有待研判对象" | [-] 空状态 |
-| 4 | "覆写风险等级" | - | - | [-] fixture 缺失 |
-| 5 | AI 建议面板 (回归 23f94e6) | - | - | [-] fixture 缺失, 但 API 在 alpha-e2e-walkthrough.mjs 已覆盖 |
+| 3 | 候选行点击 | 点击 "测试来访者 Tier2 严重 总分 34" | 详情面板展开 | [x] ✅ |
+| 4 | 详情面板 - 基本信息 | 默认 | 来源=筛查测评, 创建时间正确 | [x] ✅ |
+| 5 | 详情面板 - AI 建议 3 条 | 真实 deepseek-v3.2 生成 | 开个体咨询个案 / 入组团体辅导 / 加测PHQ-9量表 | [x] ✅ 真实 AI 临床建议 |
+| 6 | "确认/调整级别" 按钮 | 点击 | inline 展开 4 级选项 (一般/关注/严重/危机) | [x] ✅ |
+| 7 | 选 "危机" 升级 | 点击 | PATCH /triage/results/{resultId}/risk-level → 200 | [x] ✅ list+bucket 实时刷新 (严重 1→0, 危机 0→1) |
+| 8 | Audit log | /audit 验证 | 显示 'triage.risk_level.updated' | [x] ✅ 完整 audit chain (assessments→results→risk_level updated) |
+| 9 | 其他 4 决策动作 (转个案/课程/团辅/忽略) | hover | UI 提示 "尚未落入候选池, 先在协作中心创建候选" | [x] by-design (需 candidate_pool fixture, alpha-e2e-walkthrough.mjs 已 API 覆盖) |
 
 ## 2.6 /collaboration
 | # | 按钮 | 操作 | 期望 | 状态 |
@@ -530,6 +536,7 @@
 
 1. **Episode 写笔记 AI** — 输入完整会谈描述, AI 真实回应输出 SOAP S 段, 点 "采纳" 写入右侧表单 ✅
 2. **干预目标 AI 生成** — 多轮对话 (需求 → AI 反问澄清 → 确认 → 生成草稿 → 保存到库 → reload 验证), 7 个参考目标 + 6 个建议干预共 13 条 nested 数据全部完整持久化 ✅. 这是对"NON-BUG 静态分析判断 4 类 JSONB 端点无浅 copy"的实测确认.
-3. **AI provider 性能** — deepseek-v3.2 模型, 简单段落生成 ~25-30s, 多轮对话总响应 ~30-40s. 在 alpha 可接受范围.
+3. **研判分流 AI 风险评级 + 临床建议** — 高分 (50/50) 筛查测评提交 → autoTriageAndNotify 异步运行 → 自动评 riskLevel='level_3' + AI 生成 3 条临床建议 (开个咨/入组团辅/加测 PHQ-9). 候选自动出现在 /research-triage list, 详情面板显示 AI 建议. 测试人工覆写 L3→L4 (PATCH risk-level), list+bucket 实时刷新. 完整 audit chain (ai_call/create assessment/create result/triage.risk_level.updated) 全部记录 ✅
+4. **AI provider 性能** — deepseek-v3.2 模型, 简单段落生成 ~25-30s, 多轮对话总响应 ~30-40s, 异步 triage 推荐 ~15-30s. 在 alpha 可接受范围.
 
 **最近 commit**: 653ed20 fix(dashboard): make all 5 KPI cards clickable in OrgAdminDashboard
