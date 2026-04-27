@@ -291,11 +291,18 @@
 | 类型 | 入口 | 验证点 | 状态 | Bug |
 |------|------|-------|------|-----|
 | **量表 scale** | /admin/library/scales → AI 生成 | 完整对话 → 保存 → 进编辑页看到 dim/items/rules | [x] Tier 1 已验 ✅ | |
-| **目标 goal** | /admin/library/goals → AI 生成 | 完整 → 保存 → 进编辑页看到完整 objectives | [-] static 验 NON-BUG (objectives JSONB), API e2e 覆盖 | |
-| **协议 agreement** | /admin/library/agreements → AI 生成 | 完整 → 保存 → 进编辑页看到 sections/content | [-] static 验 NON-BUG (sections JSONB) | |
+| **目标 goal** | /knowledge/goals → AI 生成 | 多轮对话 → 保存 → reload 看到 nested 完整 | [x] 真实跑通 ✅ b@ 视角生成 "大学生考试焦虑8周认知行为方案", **参考目标 (7)** + **建议干预 (6)** 全部 13 条完整持久化, 无 silent drop | NON-BUG 静态分析判断正确 ✅ |
+| **协议 agreement** | /admin/library/agreements → AI 生成 | 完整 → 保存 → 进编辑页看到 sections/content | [-] static 验 NON-BUG (sections JSONB) + 同 goal 模式 | |
 | **方案 scheme** | /admin/library/schemes → AI 生成 | 完整 → 保存 → 进编辑页看到 sessions | [-] static 验 NON-BUG (sessions JSONB) | |
 | **课程 course** | /admin/library/courses → AI 生成 | 完整 → 保存 → 进编辑页看到 lessons/章节 | [x] Tier 1 已验 ✅ + BUG-001 已修 | |
 | **笔记模板 template** | /admin/library/templates → AI 生成 | 完整 → 保存 → 进编辑页看到 fieldDefinitions | [-] static 验 NON-BUG (fields JSONB) | |
+
+### 2.10.1 Episode 内 AI 写笔记 (临床 AI 核心) — 真实跑通 ✅
+- 进 /episodes/{id} 写笔记 mode
+- 输入会谈描述 (大学生 Tier2 考试焦虑首次会谈, 包含躯体症状 + 历史 + 风险筛查)
+- AI 真实回应 (~25-30s) 输出结构化 "subjective" 段落 + 解释
+- 点 "✓ 采纳到右侧" → 右侧 SOAP S-主观资料 textarea 立即填充 125 字 ✅
+- 验证: AI 临床笔记工作流端到端通畅, 是 Psynote 最关键临床 AI 功能
 
 ---
 
@@ -495,9 +502,9 @@
 | BUG-003 | MINOR | 不修 | 续期 UI 不刷新 + 语义存疑 (workaround: hard refresh) |
 | BUG-004 | MAJOR | 已修(4de974d) | ScaleDetail/CourseDetail 横向滚动 (final fix: 抛弃 -m-6, 用 flex h-full) |
 | BUG-005 | BLOCKER | 已修(2928b97) | AI course creator /orgs/null/ai 404 (aiPrefix 缺 sysadmin fallback) |
-| BUG-006 | MINOR | ship-with-known-issue | OrgAdminDashboard 5 KPI 卡只有 2 个可点 (UX 不一致) |
+| BUG-006 | MINOR | 已修(653ed20) | OrgAdminDashboard 5 KPI 卡只有 2 个可点 (UX 不一致) — 全部加 onClick 跳到对应 /delivery?type=* |
 
-修了 2 BLOCKER + 2 MAJOR (BUG-001/002/004/005). 标 2 MINOR (BUG-003 UI 不刷新, BUG-006 KPI UX 不一致) ship-with-known-issue.
+修了 2 BLOCKER + 2 MAJOR + 1 MINOR (BUG-001/002/004/005/006). 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 
 ### Alpha 上线就绪判据 (per Phase F plan §"终止条件")
 1. ✅ Tier 1 全 pass (法律页 + 退出 + sidebar + tenant CRUD + library 6 tab 都覆盖)
@@ -518,4 +525,11 @@
 
 **结论**: 三视角 (系统管理员 / 机构管理员 / 来访者) 浏览器测试均满足 alpha 上线门槛. 真人测试者从浏览器登录全流程已 verified 端到端可用.
 
-**最近 commit**: 4de974d fix(detail): align ScaleDetail/CourseDetail with standard h-full layout
+### AI 功能真实使用验证 (深度补测 2026-04-27)
+基于用户反馈"目前是不是只完成了页面查看, 没真用 AI 功能", 补充深度交互测试:
+
+1. **Episode 写笔记 AI** — 输入完整会谈描述, AI 真实回应输出 SOAP S 段, 点 "采纳" 写入右侧表单 ✅
+2. **干预目标 AI 生成** — 多轮对话 (需求 → AI 反问澄清 → 确认 → 生成草稿 → 保存到库 → reload 验证), 7 个参考目标 + 6 个建议干预共 13 条 nested 数据全部完整持久化 ✅. 这是对"NON-BUG 静态分析判断 4 类 JSONB 端点无浅 copy"的实测确认.
+3. **AI provider 性能** — deepseek-v3.2 模型, 简单段落生成 ~25-30s, 多轮对话总响应 ~30-40s. 在 alpha 可接受范围.
+
+**最近 commit**: 653ed20 fix(dashboard): make all 5 KPI cards clickable in OrgAdminDashboard
