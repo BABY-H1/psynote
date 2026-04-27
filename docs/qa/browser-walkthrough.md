@@ -407,11 +407,9 @@
 - 严重度: **MAJOR** (UX 差, 但功能正常)
 - 触发行: Tier 1.13 #9 + Tier 2.10 量表生成后保存
 - 复现: 系统管理员 /admin/library/scales → AI 生成量表 → 保存进编辑页 → 页面底部出现横向滚动, 顶部子 tab pill (总览/维度/题目/选项配置) 部分被裁切, 右上角操作按钮 (取消/保存/编辑/PanelRightOpen) 与右侧 AI 助手 header 重叠
-- 与之前 a0fd40b 修复的关系: 之前的修复在 ScaleDetail 内层加了 overflow-hidden + 让 AI panel 360px + topbar 响应式. 但 admin scope 下的父容器 AdminLibrary (`max-w-7xl mx-auto p-6`) 跟 ScaleDetail 的 `-m-6` 撑出语义有冲突, 总宽度仍 > viewport
-- 怀疑文件: `client/src/features/assessment/components/ScaleDetail.tsx` 外层 `<div className="flex -m-6 overflow-hidden">` + `client/src/features/admin/pages/AdminLibrary.tsx` 父 wrapper
-- 浏览器验证证据: AI panel 折叠后横向 scrollbar 仍在, 说明不是 panel 宽度问题
-- 状态: 未修, 标 MAJOR. 建议 dedicated session 调查: AdminLibrary container 加 overflow-x-hidden, 或 ScaleDetail 不再 `-m-6` 而是 `w-full`
-- 不阻断 alpha 上线 (功能完整, 仅视觉/UX 问题, 用户能正常编辑保存)
+- 根因 (Phase G 探索确认): `<main>` 在 admin/org 两套 shell 上 padding 落点不同. AppShell main `p-6 overflow-y-auto` (有 padding) → ScaleDetail 的 `-m-6` 直接进 main 的 padding box, 不溢出. AdminLayout main `overflow-y-auto` (无 padding) + AdminLibrary 自带 `p-6 max-w-7xl mx-auto w-full` → ScaleDetail 的 `-m-6` 在 max-w-7xl 内 + Outlet wrapper 隐式 `overflow-x: auto` (CSS 规范: overflow-y: auto 时 overflow-x: visible 计算成 auto), 48px 溢出触发滚动条. CourseDetail 同样 `-m-6` 模式, admin scope 同隐患.
+- 修法: AdminLibrary.tsx Outlet wrapper 加 `overflow-x-hidden` (一个 Tailwind class). 一处修双 detail (ScaleDetail + CourseDetail), 不动 shell, 不动 KnowledgeBase, 不动 detail 组件本身.
+- 状态: **已修 (待 commit). 浏览器验证: a@ /admin/library/scales 进 ScaleDetail 后 `document.documentElement.scrollWidth === clientWidth` (1920===1920, 无横向滚动) ✅. CourseDetail admin scope 同样 verified clean ✅. b@ /knowledge/scales (org scope) 不回归 (KnowledgeBase 未动, 行为同前) ✅. List 视图渲染正常 ✅.**
 
 ### BUG-005 — AI course creator 系统管理员 scope 一律 404
 - 严重度: **BLOCKER** (系统管理员永远无法用 AI 创建课程)
@@ -489,10 +487,10 @@
 | BUG-001 | MAJOR | 已修(3ef7f9d) | admin /courses 浅 copy 丢 chapters 子表 |
 | BUG-002 | BLOCKER | 已修(3afbd97) | /admin/settings 整页崩 (config.platform.name on undefined) |
 | BUG-003 | MINOR | 不修 | 续期 UI 不刷新 + 语义存疑 (workaround: hard refresh) |
-| BUG-004 | MAJOR | 不阻断 | admin scope ScaleDetail 横向滚动 (功能 OK, UX 差) |
+| BUG-004 | MAJOR | 已修(待 commit) | admin scope ScaleDetail/CourseDetail 横向滚动 (AdminLibrary Outlet 加 overflow-x-hidden) |
 | BUG-005 | BLOCKER | 已修(2928b97) | AI course creator /orgs/null/ai 404 (aiPrefix 缺 sysadmin fallback) |
 
-修了 3 BLOCKER + 1 MAJOR (BUG-001/002/005). 标 1 MAJOR 不阻断 (BUG-004 layout) + 1 MINOR 不修 (BUG-003 UI 不刷新).
+修了 3 BLOCKER + 2 MAJOR (BUG-001/002/004/005). 标 1 MINOR 不修 (BUG-003 UI 不刷新).
 
 ### Alpha 上线就绪判据 (per Phase F plan §"终止条件")
 1. ✅ Tier 1 全 pass (法律页 + 退出 + sidebar + tenant CRUD + library 6 tab 都覆盖)
@@ -506,7 +504,7 @@
 ### 浏览器测试 vs API 测试覆盖矩阵
 - API 端点 (50+): scripts/alpha-e2e-walkthrough.mjs + alpha-e2e-ai-walkthrough.mjs ✅
 - UI 关键路径 (auth + tenant create + library save + AI 生成): browser walkthrough ✅
-- UI 边缘情况 (form validation / responsive layout / modal close): partially covered, BUG-004 留作业
+- UI 边缘情况 (form validation / responsive layout / modal close): partially covered, BUG-004 已修
 - Org user / counselor shell: API 全覆盖, 浏览器仅 OrgAdminDashboard 入口验证
 - Client portal: API 全覆盖, 浏览器未覆盖 (需 client 账号)
 
