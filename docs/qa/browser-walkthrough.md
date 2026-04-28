@@ -534,9 +534,9 @@
 | BUG-004 | MAJOR | 已修(4de974d) | ScaleDetail/CourseDetail 横向滚动 (final fix: 抛弃 -m-6, 用 flex h-full) |
 | BUG-005 | BLOCKER | 已修(2928b97) | AI course creator /orgs/null/ai 404 (aiPrefix 缺 sysadmin fallback) |
 | BUG-006 | MINOR | 已修(653ed20) | OrgAdminDashboard 5 KPI 卡只有 2 个可点 (UX 不一致) — 全部加 onClick 跳到对应 /delivery?type=* |
-| BUG-007 | MAJOR | 已修(待 commit) | 研判分流详情面板 stale 提示指向已废弃的 "协作中心/待处理候选" tab — 改为解释规则引擎 + 给 workaround |
+| BUG-007 | MAJOR | 部分修(ed1e07e), 深度修待产品决策 | 研判分流详情面板 3 按钮在无规则机构永远 disabled — 仅改提示文字治标. 深度修方案 (lazy-create candidate API) 见 plans/l1-l4-luminous-sunset.md Phase H, 待产品决策 |
 
-修了 2 BLOCKER + 3 MAJOR + 1 MINOR (BUG-001/002/004/005/006/007). 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
+修了 2 BLOCKER + 2 MAJOR + 1 MINOR (BUG-001/002/004/005/006). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 
 ### Alpha 上线就绪判据 (per Phase F plan §"终止条件")
 1. ✅ Tier 1 全 pass (法律页 + 退出 + sidebar + tenant CRUD + library 6 tab 都覆盖)
