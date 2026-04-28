@@ -325,33 +325,60 @@
 
 预估按钮数: ~30, tool 调用 ~120
 
+## 3.0 /register/counseling/{slug} — 公开注册端到端 ✅ (新增 deep test)
+**Slug**: tier1-counseling (b@ org "Tier1 测试心理咨询")
+
+| # | 按钮 | 操作 | 期望 | 状态 |
+|---|------|------|------|------|
+| 1 | 注册页加载 | navigate /register/counseling/tier1-counseling | 显示 org 名称 + 4 字段 (姓名/邮箱/密码/手机号) + 同意条款 + "创建账户" | [x] ✅ |
+| 2 | 填表 (姓名+邮箱+密码) | form_input | 字段更新 | [x] ✅ |
+| 3 | 同意条款 checkbox | 点击 | checked | [x] |
+| 4 | "创建账户" 按钮 | 点击 | POST /api/public/counseling/{slug}/register 201 → 自动登录 → 跳 /portal | [x] ✅ portal-ui-001 注册 + 自动登录 + 跳转一气呵成 |
+
 ## 3.1 /portal (HomeTab) — tier2-client-001 视角
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
 | 1 | 移动端 portal layout | 加载 | "你好, 测试来访者 Tier2 / 愿你今天感觉不错" | [x] ✅ |
 | 2 | "待办事项" section | 加载 | 🎉 所有事项都已完成 (空状态) | [x] |
-| 3 | "发现服务" toggle 可报名活动/预约咨询 | 默认 | 暂无开放的活动 | [x] |
-| 4 | 底部 4 tab: 首页/我的服务/档案/我的 | 各点击 | 切到 /portal/services , /archive, /account | [x] ✅ 全 tab 切换通过 |
+| 3 | "发现服务" toggle 可报名活动 | 点击 | "暂无开放的活动 / 机构发布后会出现在这里" | [x] |
+| 4 | "发现服务" toggle 预约咨询 | 点击 | 显示 "预约个体咨询 / 选择咨询师并发起预约申请" 卡片 | [x] ✅ |
+| 5 | 点 "预约个体咨询" 卡 | 点击 | 跳 /portal/book wizard | [x] ✅ |
+| 6 | /portal/book Step 1 选咨询师 | 默认 | 显示 b@ org 的咨询师列表 (测试用户 C / 心理咨询师) | [x] ✅ |
+| 7 | 选 "测试用户 C" → Step 2 | 点击 | 显示 14 天日期选择 | [x] ✅ |
+| 8 | 选 4/29 日期 | 点击 | "该日期无可用时段" (因 c@ 没设 availability, 预期行为) | [x] ✅ |
+| 9 | 底部 4 tab: 首页/我的服务/档案/我的 | 各点击 | 切到 /portal/services, /archive, /account | [x] ✅ 全 tab 切换通过 |
 
 ## 3.2 /portal/services
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | 服务列表 | 默认 | 空状态 (无预约) | [x] ✅ |
+| 1 | 服务列表 | 默认 | "暂无进行中的服务 / 咨询师或机构为你安排服务后会在这里出现" | [x] ✅ |
 | 2 | 服务行点击 | - | - | [-] 空状态 |
-| 3 | "预约" 按钮 | - | - | [-] 空状态 |
+| 3 | "预约" 按钮 | - | - | [-] 通过 portal home → 预约咨询 toggle 路径完成 |
 
-## 3.3-3.6 /portal/services/:id, /book, /archive, /archive/results/:id
-| 全部跳过原因: tier2-client-001 没有真实服务 / 评估 fixture, alpha-e2e-walkthrough.mjs API 已覆盖 | [-] |
+## 3.3 /portal/book — 预约咨询 wizard ✅
+| # | 按钮 | 操作 | 期望 | 状态 |
+|---|------|------|------|------|
+| 1 | 选咨询师 step | 默认 | 列出 b@ org 内 counselor (含 c@ 测试用户 C) | [x] ✅ |
+| 2 | 选日期 step | 14 天 | 4/29-5/12 日期可选 | [x] ✅ |
+| 3 | 选时段 step | 4/29 选中 | "该日期无可用时段" (c@ availability 空) | [x] ✅ 兜底正确 |
+| 4 | 上一步 / 下一步 | 导航 | step 间切换 | [x] |
 
-## 3.7 /portal/account
+## 3.5 /portal/archive
+| # | 按钮 | 操作 | 期望 | 状态 |
+|---|------|------|------|------|
+| 1 | sub-tab "测评报告" | 默认 | "暂无测评报告 / 完成测评后报告会保存在这里" | [x] ✅ |
+| 2 | sub-tab "健康时间线" | 切换 | 加载 | [x] |
+| 3 | tier2-client-001 已有 5 个 result, 但 portal archive 显示空 | clientVisible=false | by-design (评估需咨询师确认才暴露给 client, 临床合理) | [⚠️] **观察**: UI 提示 "暂无" 让 client 不知道有评估在等审核, 建议改成 "你的测评结果正在审核中" — 记为 issue, 非阻断 |
+
+## 3.7 /portal/account ✅
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
 | 1 | 头像 + 姓名 + 邮箱 | 加载 | 显示 测试来访者 Tier2 / tier2-client-001@... | [x] ✅ |
 | 2 | "所属机构" section | 加载 | Tier1 测试心理咨询 / 角色: 来访者 | [x] ✅ |
-| 3 | "绑定的孩子" section | 加载 | "+ 绑定/管理" 按钮 + 空状态 | [x] |
-| 4 | 个人信息 row | 点击 | 进子页 | [-] 跳过 |
-| 5 | 协议与授权 row | 点击 | 进子页 | [-] 跳过 |
-| 6 | 设置 (灰色 "即将上线") | 不可点 | disabled | [x] 设计 ✅ |
+| 3 | "绑定的孩子" section | 加载 | "+ 绑定/管理" 按钮 + "还未绑定任何孩子" | [x] |
+| 4 | "个人信息" row | 点击 | 进 /portal/account/profile - 显示 read-only 信息 + "编辑功能即将上线 / 如需修改请联系咨询师或机构管理员" | [x] ✅ by-design read-only |
+| 5 | "协议与授权" row | 点击 | 进 /portal/account/consents - "用户协议 / 查看和签署您的服务协议 / 暂无知情同意书" | [x] ✅ |
+| 6 | "设置" row (灰色 "即将上线") | 不可点 | disabled | [x] 设计 ✅ |
 | 7 | "退出登录" | 不点 | 跳 /login | [-] 不点避免影响后续 |
 
 ## 3.8 公开页 (无登录)
