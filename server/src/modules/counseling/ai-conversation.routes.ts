@@ -55,6 +55,8 @@ export async function aiConversationRoutes(app: FastifyInstance) {
       messages?: any[];
       title?: string;
       summary?: string;
+      // Phase I Issue 1: bind/unbind to sessionNote (mode='note' workflow)
+      sessionNoteId?: string | null;
     };
     return service.updateConversation(id, body);
   });

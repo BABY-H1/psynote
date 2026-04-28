@@ -482,6 +482,28 @@
 - 浏览器走查这几行直接标 [x] verified clean (静态分析阶段已确认)
 
 
+### BUG-010 — 写笔记 mode 对话归到"AI 对话"区而非"会谈记录"区 (Phase I Issue 1)
+- 严重度: **MAJOR** (语义错位 + 用户找不到关联)
+- 触发行: Tier 2.10.1 写笔记 mode 归档后, 用户反馈 "笔记应该放在会谈记录部分"
+- 根因: BUG-009 修复让 4 mode 都自动归档到 ai_conversations, 但 LeftPanel 一刀切显示在 "AI 对话" 区. 写笔记 mode 的产物 (sessionNote) 与中间过程 (chat) 在数据库分两个表 (session_notes / ai_conversations), UI 也分两个区域显示, 用户找不到对应关联.
+- 修法 (Phase I Issue 1):
+  1. **Server**: ai_conversations 加 session_note_id FK (migration 028). 用户保存 sessionNote 时 ChatWorkspace 调 PATCH /ai-conversations/{id} 把当前 note-mode 对话关联过去.
+  2. **Client**: LeftPanel 重组渲染:
+     - "会谈记录" 区: 未保存的 note 草稿 (sessionNoteId IS NULL) 列在最上面 (浅灰底 + 虚线 border + "未保存"标记); 已保存的 sessionNote 主行下展开 "📄 AI 草稿过程" 子条目.
+     - "AI 对话" 区只显示 plan/simulate/supervise (note 全部移到上面).
+- 状态: **已修 (待 commit). 浏览器验证: 保存笔记后, "未保存草稿"消失, sessionNote 下面出现 "AI 草稿过程 · 2 条" 子条目 ✅**
+
+### BUG-011 — Sidebar AI 对话点击只读 viewer 不能续写 (Phase I Issue 2)
+- 严重度: **MAJOR** (用户期待的核心交互缺失)
+- 触发行: Tier 2.10.1 用户反馈 "左边的 ai 笔记是否可以重新载入"
+- 根因: EpisodeDetail 的 onSelectConversation callback 触发 setViewingConversation, OutputPanel 渲染只读 ConversationViewer modal, 用户只能看不能改. 上下文丢失, 续写需手动复制粘贴.
+- 修法 (Phase I Issue 2):
+  1. ChatWorkspace 用 forwardRef + useImperativeHandle 暴露 `loadConversation(mode, messages, convId)` 方法
+  2. EpisodeDetail 持 chatWsRef, onSelectConversation 改为 `chatWsRef.current?.loadConversation(...)` (而不是打开 viewer)
+  3. ChatWorkspace 内部强制 setMode → setMessages → setConversationIds 顺序, 防 state 错乱
+- 效果: 点 sidebar 任何对话条目 (草稿 / 方案讨论 / 督导 / 模拟) → ChatWorkspace 切到对应 mode + 注入历史消息, 用户可续写
+- 状态: **已修 (待 commit). 浏览器验证: 点笔记草稿 → ChatWorkspace 切 "写笔记" mode + 历史消息完整恢复 (用户绿气泡 + AI 黄气泡都在), 输入框可继续输入 ✅**
+
 ### BUG-009 — Episode AI 4 mode 归档不一致, 仅 simulate/supervise 入档
 - 严重度: **MAJOR** (UX 不一致 + 督导 mode 失去 context)
 - 触发行: Tier 2.10.1 写笔记 mode 后 sidebar 不显示对话归档
@@ -614,9 +636,11 @@
 | BUG-006 | MINOR | 已修(653ed20) | OrgAdminDashboard 5 KPI 卡只有 2 个可点 (UX 不一致) — 全部加 onClick 跳到对应 /delivery?type=* |
 | BUG-007 | MAJOR | 部分修(ed1e07e), 深度修待产品决策 | 研判分流详情面板 3 按钮在无规则机构永远 disabled — 仅改提示文字治标. 深度修方案 (lazy-create candidate API) 见 plans/l1-l4-luminous-sunset.md Phase H, 待产品决策 |
 | BUG-008 | MAJOR | 已修(4bc5953) | Portal 页面高度不统一, 底部 nav 浮在内容下方 — html/body/root 没 height + `h-[100dvh]` Tailwind 没编译. 修法: index.css 加 height:100% + h-screen 替换 |
-| BUG-009 | MAJOR | 已修(待 commit) | Episode AI 4 mode 仅 simulate/supervise 自动归档, note/plan 漏档. 督导 mode 因此拿不到笔记 context. 修法: `if (mode !== 'crisis')` 全归档 + 扩展 mode→label 映射 |
+| BUG-009 | MAJOR | 已修(305c685) | Episode AI 4 mode 仅 simulate/supervise 自动归档, note/plan 漏档. 督导 mode 因此拿不到笔记 context. 修法: `if (mode !== 'crisis')` 全归档 + 扩展 mode→label 映射 |
+| BUG-010 | MAJOR | 已修(待 commit) | 写笔记 mode 对话归"AI 对话"区错位. 修法 (Phase I Issue 1): ai_conversations 加 sessionNoteId FK, 保存笔记时关联, LeftPanel 重组为草稿+主记录+草稿子项 |
+| BUG-011 | MAJOR | 已修(待 commit) | Sidebar AI 对话点击只读 viewer 不能续写. 修法 (Phase I Issue 2): forwardRef + loadConversation, 点击载入 ChatWorkspace 切 mode + 注入消息 |
 
-修了 2 BLOCKER + 4 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008/009). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
+修了 2 BLOCKER + 6 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008/009/010/011). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 
 ### Alpha 上线就绪判据 (per Phase F plan §"终止条件")
 1. ✅ Tier 1 全 pass (法律页 + 退出 + sidebar + tenant CRUD + library 6 tab 都覆盖)

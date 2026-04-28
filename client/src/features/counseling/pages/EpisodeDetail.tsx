@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useEpisode, useCloseEpisode, useReopenEpisode,
@@ -10,7 +10,7 @@ import { useResults } from '../../../api/useAssessments';
 import { useCrisisCaseByEpisode } from '../../../api/useCrisisCase';
 
 import { WorkspaceLayout } from '../components/WorkspaceLayout';
-import { ChatWorkspace, type WorkMode } from '../components/ChatWorkspace';
+import { ChatWorkspace, type WorkMode, type ChatWorkspaceHandle } from '../components/ChatWorkspace';
 import { OutputPanel } from '../components/OutputPanel';
 import { LeftPanel } from '../components/LeftPanel';
 
@@ -97,6 +97,11 @@ export function EpisodeDetail() {
   const [viewingNote, setViewingNote] = useState<SessionNote | null>(null);
   const [viewingResult, setViewingResult] = useState<any>(null);
   const [viewingConversation, setViewingConversation] = useState<any>(null);
+  /*
+   * Phase I: chatWsRef 让 EpisodeDetail 能 imperatively 调 ChatWorkspace 的
+   * loadConversation (Issue 2 续写) + bindCurrentNoteToSession (Issue 1 关联).
+   */
+  const chatWsRef = useRef<ChatWorkspaceHandle>(null);
 
   // Build rich AI context from all available data (hooks must be before early return)
   const clientContext = useMemo(() => {
@@ -206,11 +211,24 @@ export function EpisodeDetail() {
             clientId={episode.clientId}
             onSelectNote={(note) => { setViewingNote(note); setViewingResult(null); setViewingConversation(null); }}
             onSelectResult={(result) => { setViewingResult(result); setViewingNote(null); setViewingConversation(null); }}
-            onSelectConversation={(conv) => { setViewingConversation(conv); setViewingNote(null); setViewingResult(null); }}
+            onSelectConversation={(conv) => {
+              /*
+               * Phase I Issue 2: 续写交互 — 默认行为从打开只读 viewer 改成
+               * 把对话载入 ChatWorkspace, 用户可继续输入. 关闭其他 viewer
+               * (note/result), 但不打开 conversation viewer 了.
+               * 保留 ConversationViewer 在 OutputPanel 里用作 viewingConversation
+               * 渲染兜底 (例如未来已结案 episode 的只读访问), 但默认不触发.
+               */
+              setViewingNote(null);
+              setViewingResult(null);
+              setViewingConversation(null);
+              chatWsRef.current?.loadConversation(conv.mode, conv.messages || [], conv.id);
+            }}
           />
         }
         center={
           <ChatWorkspace
+            ref={chatWsRef}
             episodeId={episode.id}
             clientId={episode.clientId}
             chiefComplaint={episode.chiefComplaint}
@@ -242,6 +260,21 @@ export function EpisodeDetail() {
             episode={episode}
             noteFields={noteFields}
             noteFormat={noteFormat}
+            onNoteSaved={(savedNote) => {
+              /*
+               * Phase I Issue 1: 把当前 mode='note' 的 ai_conversation 关联
+               * 到刚保存的 sessionNote. ChatWorkspace 内部会:
+               *   1. PATCH /ai-conversations/{noteConvId} { sessionNoteId }
+               *   2. 清空本地 noteConvId 和 messages.note (下次写新笔记开新对话)
+               * 关联后 LeftPanel 把这条 conversation 显示在"会谈记录"区
+               * 该 sessionNote 的子条目, 而不是"AI 对话"区.
+               */
+              chatWsRef.current?.bindCurrentNoteToSession(savedNote.id);
+              // sessionNote 列表也清空 viewingNote, 防止用户保存后还停在"编辑"态
+              setViewingNote(null);
+              // 清 noteFields, 让下次写新笔记从空表单开始
+              setNoteFields({});
+            }}
             onNoteFieldChange={(key, val) => setNoteFields((prev) => ({ ...prev, [key]: val }))}
             onNoteFormatChange={(format) => { setNoteFormat(format); setNoteFields({}); }}
             planSuggestion={planSuggestion}

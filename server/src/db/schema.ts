@@ -565,10 +565,19 @@ export const aiConversations = pgTable('ai_conversations', {
   title: text('title'),
   messages: jsonb('messages').notNull().default([]), // ChatMessage[]
   summary: text('summary'),
+  /*
+   * Phase I Issue 1: mode='note' 的对话在用户点 "保存笔记" 后被关联到
+   * 新建的 sessionNote. NULL = 草稿尚未保存; 非 NULL = 该对话是某个
+   * sessionNote 的 AI 草稿过程. LeftPanel 用此字段把草稿显示在
+   * "会谈记录" 区而不是 "AI 对话" 区. plan/simulate/supervise 的对话
+   * 字段恒 NULL (它们不绑定 sessionNote).
+   */
+  sessionNoteId: uuid('session_note_id').references(() => sessionNotes.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('idx_ai_conversations_episode').on(t.careEpisodeId, t.mode),
+  index('idx_ai_conversations_session_note').on(t.sessionNoteId),
 ]);
 
 // ─── Group Domain ─────────────────────────────────────────────────

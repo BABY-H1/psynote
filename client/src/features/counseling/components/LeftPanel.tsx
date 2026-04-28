@@ -119,25 +119,73 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
 
       {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto">
-        <SectionHeader icon={<FileText className="w-3.5 h-3.5" />} title="会谈记录" count={sessionNotes?.length} />
-        <div className="px-3 pb-2 space-y-1">
-          {(!sessionNotes || sessionNotes.length === 0) ? (
-            <div className="text-xs text-slate-400 py-2">暂无会谈记录</div>
-          ) : (
-            sessionNotes.map((note, i) => (
-              <button key={note.id}
-                onClick={() => onSelectNote(note)}
-                className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-emerald-50">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-xs font-medium">{sessionNotes.length - i}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-slate-700 truncate">{note.summary || `${(note.noteFormat || 'soap').toUpperCase()} 记录`}</div>
-                  <div className="text-slate-400">{note.sessionDate}</div>
-                </div>
-                <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
-              </button>
-            ))
-          )}
-        </div>
+        {/*
+          Phase I Issue 1: 会谈记录区按 sessionNote 渲染主行 + 关联的 note-mode
+          AI 对话作为子条目 (草稿过程). 没保存为 sessionNote 的 note 草稿
+          (sessionNoteId IS NULL) 单独作为 "未保存的笔记草稿" 列在最上面.
+        */}
+        {(() => {
+          const noteDrafts = (aiConversations || []).filter((c: any) => c.mode === 'note' && !c.sessionNoteId);
+          const noteDraftBySessionId = new Map<string, any>();
+          for (const c of (aiConversations || [])) {
+            if (c.mode === 'note' && c.sessionNoteId) {
+              noteDraftBySessionId.set(c.sessionNoteId, c);
+            }
+          }
+          const totalCount = (sessionNotes?.length || 0) + noteDrafts.length;
+          return (
+            <>
+              <SectionHeader icon={<FileText className="w-3.5 h-3.5" />} title="会谈记录" count={totalCount} />
+              <div className="px-3 pb-2 space-y-1">
+                {noteDrafts.length === 0 && (!sessionNotes || sessionNotes.length === 0) ? (
+                  <div className="text-xs text-slate-400 py-2">暂无会谈记录</div>
+                ) : (
+                  <>
+                    {/* 未保存的笔记草稿 — 浅灰底, 点击载入 ChatWorkspace 续写 */}
+                    {noteDrafts.map((draft: any) => (
+                      <button key={draft.id}
+                        onClick={() => onSelectConversation?.(draft)}
+                        className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-emerald-50 bg-slate-50/60 border border-dashed border-slate-200">
+                        <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center flex-shrink-0 text-xs">📝</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-slate-600 truncate italic">{draft.title || '笔记草稿'} <span className="text-slate-400 not-italic">(未保存)</span></div>
+                          <div className="text-slate-400">{(draft.messages as any[])?.length || 0} 条 · {new Date(draft.updatedAt).toLocaleDateString('zh-CN')}</div>
+                        </div>
+                        <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
+                      </button>
+                    ))}
+                    {/* 已保存的 sessionNote — 主行 + 可选关联草稿子行 */}
+                    {sessionNotes && sessionNotes.map((note, i) => {
+                      const linkedDraft = noteDraftBySessionId.get(note.id);
+                      return (
+                        <div key={note.id} className="space-y-1">
+                          <button
+                            onClick={() => onSelectNote(note)}
+                            className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-emerald-50">
+                            <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-xs font-medium">{sessionNotes.length - i}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-slate-700 truncate">{note.summary || `${(note.noteFormat || 'soap').toUpperCase()} 记录`}</div>
+                              <div className="text-slate-400">{note.sessionDate}</div>
+                            </div>
+                            <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
+                          </button>
+                          {linkedDraft && (
+                            <button
+                              onClick={() => onSelectConversation?.(linkedDraft)}
+                              className="w-full text-left flex items-center gap-2 px-2 py-1 ml-5 rounded text-[11px] text-slate-500 hover:bg-slate-50 transition">
+                              <span>📝</span>
+                              <span className="flex-1 truncate">AI 草稿过程 · {(linkedDraft.messages as any[])?.length || 0} 条</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+            </>
+          );
+        })()}
 
         <SectionHeader icon={<BarChart3 className="w-3.5 h-3.5" />} title="评估记录" count={assessmentResults?.length} />
         <div className="px-3 pb-2 space-y-1">
@@ -169,23 +217,20 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
           )}
         </div>
 
-        {/* AI Conversations */}
-        {aiConversations && aiConversations.length > 0 && (
+        {/*
+          Phase I Issue 1: AI 对话区只显示 plan/simulate/supervise.
+          mode='note' 的对话都已经移到上面"会谈记录"区 (草稿或关联子项).
+        */}
+        {aiConversations && aiConversations.filter((c: any) => c.mode !== 'note').length > 0 && (
           <>
-            <SectionHeader icon={<MessageSquare className="w-3.5 h-3.5" />} title="AI 对话" count={aiConversations.length} />
+            <SectionHeader icon={<MessageSquare className="w-3.5 h-3.5" />} title="AI 对话" count={aiConversations.filter((c: any) => c.mode !== 'note').length} />
             <div className="px-3 pb-2 space-y-1">
-              {aiConversations.map((conv: any) => {
-                /*
-                 * BUG-009: 之前只渲染 simulate/supervise 两种 mode 的 emoji 和
-                 * 默认标题, note/plan 走到这里会显示成 supervise 的 🎓 + "督导
-                 * 对话" — 误导. 现在 4 mode 都归档, 扩展映射表.
-                 */
+              {aiConversations.filter((c: any) => c.mode !== 'note').map((conv: any) => {
                 const modeMeta = ({
-                  note: { emoji: '📝', label: '笔记草稿', tone: 'brand' },
                   plan: { emoji: '🎯', label: '方案讨论', tone: 'teal' },
                   simulate: { emoji: '🗣️', label: '模拟练习', tone: 'violet' },
                   supervise: { emoji: '🎓', label: '督导对话', tone: 'amber' },
-                } as const)[conv.mode as 'note' | 'plan' | 'simulate' | 'supervise'] ?? { emoji: '💬', label: 'AI 对话', tone: 'slate' };
+                } as const)[conv.mode as 'plan' | 'simulate' | 'supervise'] ?? { emoji: '💬', label: 'AI 对话', tone: 'slate' };
                 const msgCount = (conv.messages as any[])?.length || 0;
                 return (
                   <button key={conv.id}

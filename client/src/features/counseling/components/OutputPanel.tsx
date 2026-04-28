@@ -40,6 +40,12 @@ interface Props {
   // Phase 13: crisis case (only passed when episode is a crisis episode)
   crisisCase?: CrisisCase | null;
   clientName?: string;
+  /*
+   * Phase I Issue 1: 用户保存 sessionNote 后调用, EpisodeDetail 用此 hook
+   * 通过 chatWsRef.current?.bindCurrentNoteToSession(savedNote.id) 把当前
+   * mode='note' 的 ai_conversation 关联到该 sessionNote.
+   */
+  onNoteSaved?: (savedNote: SessionNote) => void;
 }
 
 export function OutputPanel({
@@ -51,6 +57,7 @@ export function OutputPanel({
   viewingResult, onCloseResult,
   viewingConversation, onCloseConversation,
   crisisCase, clientName,
+  onNoteSaved,
 }: Props) {
   const createNote = useCreateSessionNote();
   const updateGoalStatus = useUpdateGoalStatus();
@@ -118,8 +125,10 @@ export function OutputPanel({
                 } else {
                   data.fields = noteFields;
                 }
-                await createNote.mutateAsync(data);
+                const saved = await createNote.mutateAsync(data);
                 toast('笔记已保存', 'success');
+                // Phase I Issue 1: 触发关联当前 ai_conversation 到这个 sessionNote
+                onNoteSaved?.(saved as SessionNote);
               } catch {
                 toast('保存失败', 'error');
               }
