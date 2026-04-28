@@ -62,7 +62,7 @@ export function EpisodeDetail() {
   const { episodeId } = useParams<{ episodeId: string }>();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { data: episode } = useEpisode(episodeId);
+  const { data: episode, error: episodeError, isLoading: episodeLoading } = useEpisode(episodeId);
   const { data: plans } = useTreatmentPlans(episodeId);
   const { data: sessionNotes } = useSessionNotes({ careEpisodeId: episodeId });
   const { data: profile } = useClientProfile(episode?.clientId);
@@ -146,7 +146,53 @@ export function EpisodeDetail() {
       .join('\n');
   }, [assessmentResults]);
 
-  if (!episode) return <PageLoading />;
+  // 显式处理 fetch 失败的情况, 否则之前的 `if (!episode) return <PageLoading />`
+  // 在 403 / 404 时永远卡在加载状态. 典型场景: clinic_admin 在研判分流点
+  // "开危机处置" 创建了 episode 但 Phase 1.5 strict compliance 默认不让 admin
+  // 读 phi_full episode → GET /episodes/:id 返回 403. 之前页面无限 loading,
+  // 现在显示明确错误 + 出路.
+  if (episodeError) {
+    const status = (episodeError as any)?.status;
+    const isForbidden = status === 403;
+    const isNotFound = status === 404;
+    return (
+      <div className="p-6 max-w-2xl mx-auto">
+        <button
+          onClick={() => navigate(-1)}
+          className="text-sm text-slate-500 hover:text-slate-700 mb-4"
+        >
+          ← 返回
+        </button>
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 space-y-3">
+          <div className="text-amber-900 font-medium">
+            {isForbidden ? '权限不足，无法查看此个案'
+              : isNotFound ? '个案不存在或已删除'
+              : '加载个案失败'}
+          </div>
+          {isForbidden && (
+            <div className="text-sm text-amber-800 space-y-2">
+              <p>
+                你的角色 (诊所管理员) 默认不能查看个案的咨询全文 (phi_full)。
+                如果你是老板兼咨询师, 请让系统管理员在
+                <span className="font-mono mx-1 px-1 bg-amber-100 rounded">租户管理 → 成员</span>
+                里给你打开"临床执业身份"开关, 即可恢复访问。
+              </p>
+              <p className="text-xs text-amber-700">
+                这是合规要求 (Phase 1.5 严格合规): 管理员默认仅看脱敏摘要,
+                不读咨询逐字稿。
+              </p>
+            </div>
+          )}
+          {!isForbidden && !isNotFound && (
+            <div className="text-sm text-amber-800">
+              {(episodeError as any)?.message || '请稍后重试'}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  if (episodeLoading || !episode) return <PageLoading />;
 
   const activePlan = plans?.find((p) => p.status === 'active');
   const goals = (activePlan?.goals as any[]) || [];
