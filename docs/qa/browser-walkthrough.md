@@ -473,6 +473,28 @@
 - 浏览器走查这几行直接标 [x] verified clean (静态分析阶段已确认)
 
 
+### BUG-008 — Portal 页面高度不统一, 底部 nav 浮在内容下方而非 viewport 底部
+- 严重度: **MAJOR** (移动端核心 UX 缺陷, 不像小程序更像普通网页)
+- 触发行: Tier 3 portal 多页 (/portal /portal/services /portal/archive /portal/account 各子页)
+- 复现:
+  1. tier2-client-001 登录 portal
+  2. 进短内容页 (如 /portal/account/consents, 显示 "暂无知情同意书")
+  3. **底部 4-tab nav (首页/我的服务/档案/我的) 浮在内容刚结束的位置, 不在屏幕底部**
+  4. 下面是大片 slate-100 空白
+  5. 不同页面 nav 位置随内容高度跳动
+- 根因: 双重问题
+  1. `packages/client-portal/index.html` 的 `<html>`/`<body>` 没设 height; `index.css` 也没. CSS 默认 `height: auto` (按内容高度)
+  2. `PortalAppShell.tsx:70` 用 `h-[100dvh]` arbitrary value, 但 Tailwind JIT 没把它编译进 bundle (CSS 表里 foundRule: null), 元素 fallback 到 height: auto
+  - 双重塌陷: html/body/root 链全是 345px (= 内容高度), 整个 portal phone shell 跟着塌
+- 怀疑文件:
+  - `packages/client-portal/src/index.css` (缺全局 height: 100% 设置)
+  - `packages/client-portal/src/PortalAppShell.tsx:70` (h-[100dvh] 不工作)
+- 修法:
+  1. `index.css` 加 `html, body, #root { height: 100% }`
+  2. `PortalAppShell.tsx:70` `h-[100dvh]` → `h-screen` (Tailwind 内置, 100% 编译)
+- 状态: **已修 (待 commit). 浏览器验证: 修复后 phoneShell.h = 911 (= viewport), nav.bottom = vh (贴底). /portal /portal/services /portal/account /portal/account/consents 4 页全部通过.**
+- 影响: 100% portal 用户在桌面浏览器看到的视觉问题. 移动端 Safari/Chrome 100vh URL bar 遮挡问题留作 future polish (alpha 可接受)
+
 ### BUG-007 — 研判分流提示指向已废弃的 "协作中心/待处理候选" tab
 - 严重度: **MAJOR** (UX 死循环, 用户找不到提示让做的事)
 - 触发行: Tier 2.5 #15 (TriageActionBar.tsx)
@@ -562,8 +584,9 @@
 | BUG-005 | BLOCKER | 已修(2928b97) | AI course creator /orgs/null/ai 404 (aiPrefix 缺 sysadmin fallback) |
 | BUG-006 | MINOR | 已修(653ed20) | OrgAdminDashboard 5 KPI 卡只有 2 个可点 (UX 不一致) — 全部加 onClick 跳到对应 /delivery?type=* |
 | BUG-007 | MAJOR | 部分修(ed1e07e), 深度修待产品决策 | 研判分流详情面板 3 按钮在无规则机构永远 disabled — 仅改提示文字治标. 深度修方案 (lazy-create candidate API) 见 plans/l1-l4-luminous-sunset.md Phase H, 待产品决策 |
+| BUG-008 | MAJOR | 已修(待 commit) | Portal 页面高度不统一, 底部 nav 浮在内容下方 — html/body/root 没 height + `h-[100dvh]` Tailwind 没编译. 修法: index.css 加 height:100% + h-screen 替换 |
 
-修了 2 BLOCKER + 2 MAJOR + 1 MINOR (BUG-001/002/004/005/006). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
+修了 2 BLOCKER + 3 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 
 ### Alpha 上线就绪判据 (per Phase F plan §"终止条件")
 1. ✅ Tier 1 全 pass (法律页 + 退出 + sidebar + tenant CRUD + library 6 tab 都覆盖)

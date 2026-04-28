@@ -67,13 +67,23 @@ export function PortalAppShell() {
   };
 
   return (
-    <div className="h-[100dvh] bg-slate-100 flex justify-center overflow-hidden">
-      {/* Phone-shaped container — uses `100dvh` (dynamic viewport height)
-          instead of `100vh` so iOS Safari / Android Chrome don't hide the
-          bottom tab bar behind the browser URL bar. The inner flex column
-          is exactly the visible viewport height, letting <main>'s
-          overflow-y-auto scroll internally and pinning the tab bar to the
-          visible bottom of the shell on every device. */}
+    <div className="h-screen bg-slate-100 flex justify-center overflow-hidden">
+      {/*
+        Use Tailwind built-in `h-screen` (= 100vh) for a guaranteed-compiled
+        utility. Earlier this was `h-[100dvh]` to handle iOS Safari URL bar
+        hiding behind the bottom tab, but that arbitrary-value class wasn't
+        being emitted into the bundle (BUG-008 root cause: phoneShell
+        collapsed to 345px on desktop, tab bar floated in mid-screen).
+
+        100vh fallback works on every desktop browser and on mobile Safari
+        the URL bar overlap is a minor visual nit — alpha-acceptable. If we
+        re-need 100dvh for mobile production polish, add it as a custom
+        height utility in tailwind.config.ts theme.extend.height instead of
+        an arbitrary value (so it's guaranteed to compile).
+
+        Combined with `html, body, #root { height: 100% }` in index.css,
+        this anchors the entire layout chain to the real viewport height.
+      */}
       <div className="w-full max-w-md h-full bg-slate-50 flex flex-col relative shadow-sm">
         {/* Sticky header */}
         <header className="sticky top-0 z-30 bg-slate-50/95 backdrop-blur-sm h-14 flex items-center px-4 border-b border-slate-200">
