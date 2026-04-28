@@ -17,6 +17,14 @@
 		reverse_proxy app:4000
 	}
 
+	# Uploaded files reverse-proxy (PDFs, audio, video for content blocks)
+	# Files live on app container at /app/uploads (process.cwd()/uploads).
+	# Without this, /uploads/* falls into the SPA fallback below and returns
+	# index.html instead of the file (BUG-013).
+	handle /uploads/* {
+		reverse_proxy app:4000
+	}
+
 	# 静态资源 + SPA fallback
 	handle {
 		root * /srv/client

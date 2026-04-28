@@ -27,7 +27,7 @@ export type EnrollmentType = 'course' | 'group';
  * Assert that the caller (as a learner) owns this enrollment.
  * Used when the client portal submits a response.
  */
-async function assertEnrollmentOwnedByUser(
+export async function assertEnrollmentOwnedByUser(
   enrollmentId: string,
   enrollmentType: EnrollmentType,
   userId: string,

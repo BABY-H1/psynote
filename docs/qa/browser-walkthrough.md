@@ -471,6 +471,31 @@
   2. 服务层: signLicense 加 baseDate 参数, renew 端点传 baseDate = max(now, oldExpiry), 续期不重置原已购的天数
 - 状态: **未修, 标 MINOR 不阻断 alpha 上线**. UI 不刷新可以 hard refresh workaround. 续期语义偏差只在边缘情况触发.
 
+### BUG-012 — Portal CourseReader 整体不可用 (rejectClient 阻断 GET)
+- 严重度: **BLOCKER** (Portal C 端的核心功能"看课程"完全不工作)
+- 触发: 用户问"上传一份 PDF 到课程章节, 做端到端 C 端验证"时, scripts/alpha-pdf-c-end-test.mjs 第 10/11/12 步发现 client 拿到 3 个 403
+- 根因 (3 处 rejectClient 阻断 client 读取):
+  1. `course.routes.ts` L15: `app.addHook('preHandler', rejectClient)` 阻断 client GET `/api/orgs/:orgId/courses/:courseId` (Portal CourseReader.useCourse 调的)
+  2. `content-block.routes.ts` L21: 同款 hook 阻断 client GET `/content-blocks?parentType=course&parentId=...` (ContentBlockRenderer 调的)
+  3. `enrollment-response/response.routes.ts` L26: 同款 hook 阻断 client GET 自己的响应记录 (ContentBlockRenderer 用来标记完成态的)
+- 修法 (2 个文件 + 1 个新前端 hook):
+  1. **新建 portal 端点** `/api/orgs/:orgId/client/courses/:courseId` (`client-groups-courses.routes.ts`): 验证用户已 enrollment, 返回 `{enrollment, course, chapters: [{...chapter, contentBlocks: [...filtered to participant-visible]}]}`
+  2. **content-block.routes.ts**: 移除 hook 级 `rejectClient`, GET 内联检查 `request.org!.role === 'client'` 时 filter 到 visibility ∈ {participant, both}; POST/PATCH/DELETE 仍由 `requireRole('org_admin','counselor')` 自然排除 client
+  3. **enrollment-response/response.routes.ts** (counselor 侧): 同样移除 hook 级, GET 内联检查 client 时调用 `assertEnrollmentOwnedByUser` 验证 enrollment 归属, 然后返回所有 responses
+  4. **CourseReader.tsx**: 新增 `useClientCourse` hook 调 portal 端点, 替换 `useCourse`. ContentBlockRenderer 不变 (其 GET 现在 client 可达)
+- 状态: **已修. E2E 全绿:**
+  - script 第 11 步: client GET /content-blocks 200 + 返回 PDF block ✅
+  - script 第 14 步: portal /client/courses/:id 返回 chapters=1 content_blocks=1 + PDF visible ✅
+  - **浏览器验证 (tier2-client-001 视角)**: `/portal/services/course/{id}` 渲染章节列表 + "文档 alpha-test-handout.pdf 下载" 链接, href 指向 `/uploads/.../alpha-test-handout.pdf`, 0 console errors ✅
+  - script 第 10/12 步 (org library / lesson-blocks) 仍 403 — 这是 defense-in-depth, 不应再开 (lesson plan 是咨询师备课笔记, 不发 C 端)
+
+### BUG-013 — Caddy /uploads 路由缺失, 上传文件返回 SPA index.html
+- 严重度: **BLOCKER** (即使前端能拿到 fileUrl, 浏览器请求该 URL 拿到的是 HTML 不是文件)
+- 触发: scripts/alpha-pdf-c-end-test.mjs 第 13 步发现 PDF URL 返回 `Content-Type: text/html; charset=utf-8` size 454 (是 index.html 不是上传的 PDF)
+- 根因: `Caddyfile` 只有 `handle /api/*` 反代到 app:4000, `/uploads/*` 落到默认 SPA fallback handler `try_files {path} /index.html`. 由于 `/srv/client/uploads/...` 不存在, 所有上传文件请求都返回 SPA HTML.
+- 修法: `Caddyfile` 加 `handle /uploads/* { reverse_proxy app:4000 }` (Fastify 已经在 `app.ts:137` 用 `@fastify/static` 服务 `/uploads/` 前缀, 直接 proxy 即可)
+- 状态: **已修. 验证: `curl -sI /uploads/.../foo.pdf` → `Content-Type: application/pdf` size 534 ✅**
+
 ### FINDING-001 — 团辅/课程 instance wizard 没有"附件"字段, 用户期待的 C 端附件需走模板层
 - 触发: 用户在 alpha 测试前提"团辅/课程的创建需要检查, 尤其是增加的附件, 发给 C 端看的部分, 需要检查是不是实现了的"
 - 调研结论 (2026-04-28):
@@ -662,6 +687,8 @@
 | BUG-011 | MAJOR | 已修(bc60dc6) | Sidebar AI 对话点击只读 viewer 不能续写. 修法 (Phase I Issue 2): forwardRef + loadConversation, 点击载入 ChatWorkspace 切 mode + 注入消息 |
 | ENH-001 | enhancement | 已实施(待 commit) | LeftPanel "AI 对话" 平铺改为 3 mode 各自独立 section (治疗方案/模拟练习/督导对话). 跟会谈记录/评估记录的"按内容类型分组" pattern 一致, 用户找特定 mode 历史不需 scan |
 | FINDING-001 | architectural | 文档化, 不修 | 团辅/课程 instance wizard 无附件字段; "宣传海报" 仅本地下载. 附件流是模板层 `courseContentBlocks`/scheme session blocks (video/audio/pdf 都已可上传可在 Portal 渲染). 孤儿表 `course_attachments` 应清理 (alpha 后) |
+| BUG-012 | BLOCKER | 已修(待 commit) | Portal CourseReader 整体不可用: 3 个 rejectClient hook 阻断 client GET. 修法: 新建 `/client/courses/:id` portal 端点 + 移除 content-block + enrollment-response 的 hook 级 reject (改成 GET handler 内联 client 过滤) + CourseReader 改用新 hook. 浏览器验证 PDF 章节渲染 + 下载链接可用 ✅ |
+| BUG-013 | BLOCKER | 已修(待 commit) | Caddy /uploads 路由缺失, 所有上传文件返回 SPA index.html. 修法: Caddyfile 加 `handle /uploads/* { reverse_proxy app:4000 }`. Fastify 已用 @fastify/static 服务该前缀, 一行 Caddy 配置即可. 验证 curl -sI 返回 application/pdf 534 字节 ✅ |
 
 修了 2 BLOCKER + 6 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008/009/010/011). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 

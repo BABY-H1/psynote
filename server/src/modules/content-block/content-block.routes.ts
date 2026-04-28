@@ -18,13 +18,20 @@ import { rejectClient } from '../../middleware/reject-client.js';
 export async function contentBlockRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
-  app.addHook('preHandler', rejectClient);
+  // NOTE (BUG-012 fix): rejectClient is NOT applied at the hook level so
+  // enrolled clients can GET content blocks via the portal CourseReader /
+  // GroupDetailView (ContentBlockRenderer). Clients still cannot create /
+  // update / delete (those routes have rejectClient in their preHandler).
+  // For client GETs we filter visibility to participant-only below.
 
   // ─── List ────────────────────────────────────────────────────────
 
   /**
    * GET /api/orgs/:orgId/content-blocks?parentType=course&parentId=<chapterId>
    * or  ?parentType=group&parentId=<schemeSessionId>
+   *
+   * For client callers, results are filtered to visibility ∈ {participant, both}
+   * so facilitator-only blocks are never exposed.
    */
   app.get('/', async (request) => {
     const q = request.query as { parentType?: string; parentId?: string };
@@ -34,11 +41,14 @@ export async function contentBlockRoutes(app: FastifyInstance) {
     if (!q.parentId) throw new ValidationError('parentId is required');
 
     const orgId = request.org!.orgId;
-    if (q.parentType === 'course') {
-      return service.listBlocksForCourseChapter(q.parentId, orgId);
-    } else {
-      return service.listBlocksForGroupSession(q.parentId, orgId);
+    const isClient = request.org!.role === 'client';
+    const blocks = q.parentType === 'course'
+      ? await service.listBlocksForCourseChapter(q.parentId, orgId)
+      : await service.listBlocksForGroupSession(q.parentId, orgId);
+    if (isClient) {
+      return blocks.filter((b) => b.visibility === 'participant' || b.visibility === 'both');
     }
+    return blocks;
   });
 
   /**

@@ -23,17 +23,34 @@ import { rejectClient } from '../../middleware/reject-client.js';
 export async function enrollmentResponseRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authGuard);
   app.addHook('preHandler', orgContextGuard);
-  app.addHook('preHandler', rejectClient);
+  // NOTE (BUG-012 fix): rejectClient is NOT applied at the hook level so the
+  // portal CourseReader / GroupDetailView (ContentBlockRenderer) can fetch the
+  // client's own responses. For client callers we filter results to only
+  // responses authored by the requesting user (handler-level scope check).
+  // Mutation routes below (/pending-safety, /:responseId/review) keep their
+  // own requireRole guards which already exclude clients.
 
   /**
    * GET /api/orgs/:orgId/enrollment-responses?enrollmentId=...&enrollmentType=course
    * List all responses for an enrollment.
+   *
+   * Client callers see only their own responses; counselors see all.
    */
   app.get('/', async (request) => {
     const q = request.query as { enrollmentId?: string; enrollmentType?: string };
     if (!q.enrollmentId) throw new ValidationError('enrollmentId is required');
     if (q.enrollmentType !== 'course' && q.enrollmentType !== 'group') {
       throw new ValidationError('enrollmentType must be course or group');
+    }
+    // For clients: verify the enrollment belongs to them before returning.
+    // (enrollment_block_responses doesn't store userId directly; ownership is
+    // transitive via the enrollment row.)
+    if (request.org!.role === 'client') {
+      await service.assertEnrollmentOwnedByUser(
+        q.enrollmentId,
+        q.enrollmentType as EnrollmentType,
+        request.user!.id,
+      );
     }
     return service.listResponsesForEnrollment(q.enrollmentId, q.enrollmentType as EnrollmentType);
   });
