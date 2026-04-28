@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2, X, BookOpen, Users, Plus } from 'lucide-react';
+import { Loader2, BookOpen, Users, Plus } from 'lucide-react';
 import { useGroupInstances, useEnrollInGroup } from '../../../api/useGroups';
 import {
   useCourseInstances,
@@ -62,7 +62,6 @@ export function InstancePickerPanel({
   const [picking, setPicking] = useState<string | null>(null);
 
   const Icon = isCourse ? BookOpen : Users;
-  const title = isCourse ? '选择课程' : '选择团辅';
   const candidateKind: CandidateKind = isCourse ? 'course_candidate' : 'group_candidate';
   const resolvedRefType = isCourse ? 'course_enrollment' : 'group_enrollment';
 
@@ -115,26 +114,11 @@ export function InstancePickerPanel({
   }
 
   return (
-    <div className="h-full flex flex-col bg-slate-50/50">
-      {/* Picker header — 测评结果在上方仍然可见, 这里用 × 关闭 (toggle picker) */}
-      <div className="px-4 py-2.5 border-b border-slate-200 flex items-center gap-2 flex-shrink-0 bg-white">
-        <Icon className="w-4 h-4 text-slate-500" />
-        <h3 className="text-sm font-bold text-slate-900">{title}</h3>
-        <span className="text-[11px] text-slate-400">
-          {isLoading ? '加载中…' : `${items.length} 个`}
-        </span>
-        <div className="flex-1" />
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-slate-400 hover:text-slate-600 p-1"
-          aria-label="关闭"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      {/* List */}
+    // 不再渲染 header — 按钮 active 态已经表明"在选什么", 关闭 picker 通过
+    // 再次点 active 按钮 (toggle, TriageDetailPanel 控制). 跟 ActionBar
+    // 的 bg-slate-50/70 一致, 视觉上跟按钮区在同一个框内.
+    <div className="h-full flex flex-col bg-slate-50/70">
+      {/* List 直接占满 */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
         {isLoading ? (
           <div className="flex items-center justify-center py-12 text-slate-400 text-sm">

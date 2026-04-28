@@ -142,7 +142,10 @@ export function TriageActionBar({
           </button>
         </div>
       ) : (
-        <div className="grid grid-cols-2 gap-2">
+        // 4 按钮一行 (grid-cols-4), 横排紧凑. 课程/团辅 active 时高亮,
+        // picker 在按钮下方紧贴展开 (TriageDetailPanel 控制), 视觉上跟下方
+        // list 是同一框内的 tab.
+        <div className="grid grid-cols-4 gap-2">
           <ActionButton
             icon={<CheckCircle2 className="w-3.5 h-3.5" />}
             label="确认/调整级别"

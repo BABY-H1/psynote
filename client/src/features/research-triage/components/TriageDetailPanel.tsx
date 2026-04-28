@@ -288,9 +288,11 @@ export function TriageDetailPanel({
         activePickerMode={pickerMode}
       />
 
-      {/* 下半部 — picker (仅 pickerMode 非 null), flex-1 跟上方平分剩余高度 */}
+      {/* 下半部 — picker 紧贴在 ActionBar 按钮下方, 视觉上跟按钮区在同一框
+          (无 border 分隔, 共用 bg-slate-50/70 浅灰底). 用户感觉是 "tab 切到
+          某个动作 → 下方展开对应 list". */}
       {pickerMode && (
-        <div className="flex-1 min-h-0 border-t-2 border-slate-200">
+        <div className="flex-1 min-h-0">
           <InstancePickerPanel
             kind={pickerMode}
             row={row}
