@@ -28,16 +28,18 @@ export function TriageActionBar({
   onActionDone,
   onCrisisStarted,
   onPickerOpen,
+  activePickerMode,
 }: {
   row: TriageCandidateRow;
   onActionDone: () => void;
   onCrisisStarted?: (episodeId: string) => void;
   /**
    * 课程 / 团辅按钮被点 → 通知上层 detail panel 切到对应 inline picker.
-   * 注意: 实际 "选哪个具体 instance + 报名 + accept candidate" 由 picker 处理,
-   * ActionBar 只负责开 picker.
+   * 同 kind 再点一次 → 关闭 picker (toggle).
    */
   onPickerOpen?: (kind: 'course' | 'group') => void;
+  /** 当前哪个 picker 打开, 让对应按钮显示选中态. */
+  activePickerMode?: 'course' | 'group' | null;
 }) {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -161,6 +163,7 @@ export function TriageActionBar({
             onClick={() => onPickerOpen?.('course')}
             disabled={busy || !row.resultId || !row.userId}
             tone="teal"
+            active={activePickerMode === 'course'}
           />
           <ActionButton
             icon={<Users className="w-3.5 h-3.5" />}
@@ -168,6 +171,7 @@ export function TriageActionBar({
             onClick={() => onPickerOpen?.('group')}
             disabled={busy || !row.resultId || !row.userId}
             tone="violet"
+            active={activePickerMode === 'group'}
           />
         </div>
       )}
@@ -182,27 +186,36 @@ export function TriageActionBar({
 }
 
 function ActionButton({
-  icon, label, onClick, disabled, tone,
+  icon, label, onClick, disabled, tone, active,
 }: {
   icon: React.ReactNode;
   label: string;
   onClick: () => void;
   disabled?: boolean;
   tone: 'slate' | 'blue' | 'rose' | 'teal' | 'violet';
+  active?: boolean;
 }) {
-  const toneClass = {
+  // 默认: border + 透明底; active: 实色底 + 白字, 让用户清楚"哪个 picker 在开".
+  const toneIdle = {
     slate: 'border-slate-300 text-slate-700 hover:bg-slate-100',
     blue: 'border-blue-400 text-blue-700 hover:bg-blue-50',
     rose: 'border-rose-400 text-rose-700 hover:bg-rose-50',
     teal: 'border-teal-400 text-teal-700 hover:bg-teal-50',
     violet: 'border-violet-400 text-violet-700 hover:bg-violet-50',
   }[tone];
+  const toneActive = {
+    slate: 'border-slate-700 bg-slate-700 text-white',
+    blue: 'border-blue-600 bg-blue-600 text-white',
+    rose: 'border-rose-600 bg-rose-600 text-white',
+    teal: 'border-teal-600 bg-teal-600 text-white',
+    violet: 'border-violet-600 bg-violet-600 text-white',
+  }[tone];
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`flex items-center justify-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${toneClass}`}
+      className={`flex items-center justify-center gap-1.5 px-3 py-2 border rounded-lg text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed ${active ? toneActive : toneIdle}`}
     >
       {icon}
       {label}

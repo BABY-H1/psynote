@@ -213,22 +213,15 @@ export function TriageDetailPanel({
         </button>
       </div>
 
-      {/* Body — pickerMode 决定显示测评结果 / 课程 picker / 团辅 picker */}
-      {pickerMode ? (
-        <InstancePickerPanel
-          kind={pickerMode}
-          row={row}
-          onClose={() => setPickerMode(null)}
-          onPickDone={() => {
-            // 报名 + accept 成功后, 触发 list / buckets refetch 让 row 状态
-            // 反映到列表 (变 "已处理")
-            onActionDone();
-            // setSelectedRow(null) 由父级 onActionDone 之外控制, 这里不主动清
-          }}
-        />
-      ) : (
-      <>
-      <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
+      {/*
+        上下两部分布局:
+          上 = 测评结果 (始终可见, 滚动条独立)
+          中 = 4 个动作按钮 (TriageActionBar, 紧贴底部)
+          下 = 课程/团辅 picker (仅 pickerMode 非 null 时显示, 跟上方平分剩余高度)
+        用户从上方读测评结果决策, 中部按钮触发动作, 下方 picker 选具体 instance,
+        全程不离开右栏. result + picker 同时可见, 互相不替换.
+      */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 text-sm">
         <Section title="基本信息" icon={<FileText className="w-3.5 h-3.5" />}>
           <dl className="grid grid-cols-2 gap-y-1 text-xs">
             <Dt>来源</Dt>
@@ -283,20 +276,31 @@ export function TriageDetailPanel({
           </>
         )}
       </div>
-      </>
-      )}
 
-      {/* Action bar — picker 打开时也保留, 用户可以再点别的按钮切到不同 picker */}
+      {/* Action bar — 上下两部分中间的固定按钮区. 不参与 flex grow. */}
       <TriageActionBar
         row={row}
         onActionDone={onActionDone}
         onCrisisStarted={(episodeId) => {
-          // Phase J: 接 ActionBar 上抛, 立即切到 inline 危机视图. 等 row reload
-          // 拿到 row.resolvedRefId 后, derive 优先用持久化字段, 不依赖此 state.
           setFreshCrisisEpisodeId(episodeId);
         }}
-        onPickerOpen={(kind) => setPickerMode(kind)}
+        onPickerOpen={(kind) => setPickerMode((prev) => (prev === kind ? null : kind))}
+        activePickerMode={pickerMode}
       />
+
+      {/* 下半部 — picker (仅 pickerMode 非 null), flex-1 跟上方平分剩余高度 */}
+      {pickerMode && (
+        <div className="flex-1 min-h-0 border-t-2 border-slate-200">
+          <InstancePickerPanel
+            kind={pickerMode}
+            row={row}
+            onClose={() => setPickerMode(null)}
+            onPickDone={() => {
+              onActionDone();
+            }}
+          />
+        </div>
+      )}
     </div>
   );
 }

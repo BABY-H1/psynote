@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Loader2, ArrowLeft, BookOpen, Users, Plus } from 'lucide-react';
+import { Loader2, X, BookOpen, Users, Plus } from 'lucide-react';
 import { useGroupInstances, useEnrollInGroup } from '../../../api/useGroups';
 import {
   useCourseInstances,
@@ -115,22 +115,23 @@ export function InstancePickerPanel({
   }
 
   return (
-    <div className="h-full flex flex-col">
-      {/* Picker header — 返回 + 标题 */}
-      <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2 flex-shrink-0">
-        <button
-          type="button"
-          onClick={onClose}
-          className="text-slate-400 hover:text-slate-600 p-1"
-          aria-label="返回测评结果"
-        >
-          <ArrowLeft className="w-4 h-4" />
-        </button>
+    <div className="h-full flex flex-col bg-slate-50/50">
+      {/* Picker header — 测评结果在上方仍然可见, 这里用 × 关闭 (toggle picker) */}
+      <div className="px-4 py-2.5 border-b border-slate-200 flex items-center gap-2 flex-shrink-0 bg-white">
         <Icon className="w-4 h-4 text-slate-500" />
         <h3 className="text-sm font-bold text-slate-900">{title}</h3>
         <span className="text-[11px] text-slate-400">
           {isLoading ? '加载中…' : `${items.length} 个`}
         </span>
+        <div className="flex-1" />
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-slate-400 hover:text-slate-600 p-1"
+          aria-label="关闭"
+        >
+          <X className="w-4 h-4" />
+        </button>
       </div>
 
       {/* List */}
