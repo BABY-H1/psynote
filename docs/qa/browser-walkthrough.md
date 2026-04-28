@@ -212,8 +212,10 @@
 | 7 | 搜索框 | 输入 | 过滤 | [-] 空状态无可搜内容, 跳过 |
 | 8 | 卡片点击 | 点击 | 跳 detail | [-] 空状态, 跳过 |
 | 9 | "新建个案" | 点击 | 跳 /episodes/new | [x] 通过 /episodes/new 验证 (Tier 2.3) |
-| 10 | "新建团辅" | 点击 | wizard | [-] 跳过, 暂未实测 |
-| 11 | "新建课程" | 点击 | wizard | [-] 跳过, AI 生成已 verified clean |
+| 10 | "+ 发布活动" 团辅 | 点击 | GroupWizard 模态打开, 5 section (方案模板/基本信息/发布模式/宣传海报/筛选与入组量表) | [x] ✅ 2026-04-28 |
+| 10b | 团辅 wizard 填表 + 保存草稿 | 选模板/填活动名/简介/地点/容量/起始日期/排期 → 保存草稿 | 草稿创建成功, list 计数 0→1, 显示在 草稿 filter | [x] ✅ Alpha-测试团辅-压力调节 |
+| 11 | "+ 创建实例" 课程 | 点击 | CourseWizard 打开, 4 section (课程模板/基本信息/发布模式/入学量表) | [x] ✅ wizard 渲染正常但 b@ org 无已发布课程模板, 无法继续 |
+| 11b | 课程 wizard 模板列表 | 默认 | "暂无已发布课程, 请先在课程教学创建并发布" | [x] ✅ |
 | 12 | "新建测评" | 点击 | wizard | [-] 跳过 |
 
 ## 2.3 /episodes/new (CreateEpisodeWizard 5 step) — 全程跑通
@@ -469,6 +471,25 @@
   2. 服务层: signLicense 加 baseDate 参数, renew 端点传 baseDate = max(now, oldExpiry), 续期不重置原已购的天数
 - 状态: **未修, 标 MINOR 不阻断 alpha 上线**. UI 不刷新可以 hard refresh workaround. 续期语义偏差只在边缘情况触发.
 
+### FINDING-001 — 团辅/课程 instance wizard 没有"附件"字段, 用户期待的 C 端附件需走模板层
+- 触发: 用户在 alpha 测试前提"团辅/课程的创建需要检查, 尤其是增加的附件, 发给 C 端看的部分, 需要检查是不是实现了的"
+- 调研结论 (2026-04-28):
+  - **Group instance wizard** (`features/groups/pages/group-wizard/BeforePhase.tsx`): 5 section, 含"宣传海报"但**只是单次 html2canvas → PNG 下载**, 不持久化, 不上传服务器, 不关联 instance.
+  - **Course instance wizard** (`features/courses/pages/course-wizard/BeforePhase.tsx`): 4 section, **没有海报也没有附件入口**.
+  - **groupInstances / courseInstances schema**: 0 个文件 / 海报 / 附件字段, 仅 title/description/schedule/location/capacity 等元数据.
+  - **`course_attachments` 表**: 存在 (chapter 级 FK), 但**全代码库零引用** (server 0 routes / client 0 UI / DB 0 rows). 完全孤儿.
+- **真正能流到 C 端的附件路径** (架构上):
+  - `知识库 → 课程教学 → 章节内容块` (`courseContentBlocks` 表) — 含 video/audio/pdf/rich_text/quiz/reflection/worksheet/check_in 八种 block, 上传 UI 在 `client/src/features/knowledge/components/ContentBlockPanel/editors/MediaBlockEditors.tsx` (含真实 `<input type="file">` + `useMediaUpload` → POST `/api/orgs/:orgId/upload`).
+  - `知识库 → 团辅方案 → 节次内容块` 同款流程.
+  - **Portal**: `CourseReader.tsx` + `GroupDetailView.tsx` 都用 `ContentBlockRenderer` 完整渲染这 8 类 block (PDF 在线查看 / 视频音频内嵌播放).
+  - 服务端: `/api/orgs/:orgId/upload` 通用上传 (multipart, fastify) ✅; `/api/orgs/:orgId/content-blocks` CRUD ✅.
+- **gap**: instance 创建时**不能临时上传一份额外资料发给本期学员**. 想给学员发 PDF/视频, 必须先在模板层 (课程教学/团辅方案) 加内容块, 所有用此模板的 instance 都会带上. 这是 by-design (template 复用), 不是 bug.
+- DB 现状: `course_content_blocks` 0 rows. 模板层附件功能存在但暂无人录入数据, alpha 测试者上传第一份内容块即可端到端验证 C 端可见性.
+- **alpha 上线评估**:
+  - ✅ 上传基础设施 ready (UI + API + Portal 渲染) — 直接可用
+  - ❌ orphan `course_attachments` 表应清理或挂上 (alpha 后清理)
+  - ⚠️ 用户期待的 instance 级临时附件 (如本期专属讲义) 需产品层决策, 当前一律走模板. 推荐 alpha 先按模板模式跑通.
+
 ### NON-BUG — admin-library /goals /agreements /schemes /templates 静态分析假阳性
 - 触发行: Tier 1.8-1.10, 1.12 row #6
 - 假设: 跟 courses / scales 同款浅 copy 丢子表
@@ -640,6 +661,7 @@
 | BUG-010 | MAJOR | 已修(待 commit) | 写笔记 mode 对话归"AI 对话"区错位. 修法 (Phase I Issue 1): ai_conversations 加 sessionNoteId FK, 保存笔记时关联, LeftPanel 重组为草稿+主记录+草稿子项 |
 | BUG-011 | MAJOR | 已修(bc60dc6) | Sidebar AI 对话点击只读 viewer 不能续写. 修法 (Phase I Issue 2): forwardRef + loadConversation, 点击载入 ChatWorkspace 切 mode + 注入消息 |
 | ENH-001 | enhancement | 已实施(待 commit) | LeftPanel "AI 对话" 平铺改为 3 mode 各自独立 section (治疗方案/模拟练习/督导对话). 跟会谈记录/评估记录的"按内容类型分组" pattern 一致, 用户找特定 mode 历史不需 scan |
+| FINDING-001 | architectural | 文档化, 不修 | 团辅/课程 instance wizard 无附件字段; "宣传海报" 仅本地下载. 附件流是模板层 `courseContentBlocks`/scheme session blocks (video/audio/pdf 都已可上传可在 Portal 渲染). 孤儿表 `course_attachments` 应清理 (alpha 后) |
 
 修了 2 BLOCKER + 6 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008/009/010/011). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 
