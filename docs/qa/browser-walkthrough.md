@@ -638,7 +638,8 @@
 | BUG-008 | MAJOR | 已修(4bc5953) | Portal 页面高度不统一, 底部 nav 浮在内容下方 — html/body/root 没 height + `h-[100dvh]` Tailwind 没编译. 修法: index.css 加 height:100% + h-screen 替换 |
 | BUG-009 | MAJOR | 已修(305c685) | Episode AI 4 mode 仅 simulate/supervise 自动归档, note/plan 漏档. 督导 mode 因此拿不到笔记 context. 修法: `if (mode !== 'crisis')` 全归档 + 扩展 mode→label 映射 |
 | BUG-010 | MAJOR | 已修(待 commit) | 写笔记 mode 对话归"AI 对话"区错位. 修法 (Phase I Issue 1): ai_conversations 加 sessionNoteId FK, 保存笔记时关联, LeftPanel 重组为草稿+主记录+草稿子项 |
-| BUG-011 | MAJOR | 已修(待 commit) | Sidebar AI 对话点击只读 viewer 不能续写. 修法 (Phase I Issue 2): forwardRef + loadConversation, 点击载入 ChatWorkspace 切 mode + 注入消息 |
+| BUG-011 | MAJOR | 已修(bc60dc6) | Sidebar AI 对话点击只读 viewer 不能续写. 修法 (Phase I Issue 2): forwardRef + loadConversation, 点击载入 ChatWorkspace 切 mode + 注入消息 |
+| ENH-001 | enhancement | 已实施(待 commit) | LeftPanel "AI 对话" 平铺改为 3 mode 各自独立 section (治疗方案/模拟练习/督导对话). 跟会谈记录/评估记录的"按内容类型分组" pattern 一致, 用户找特定 mode 历史不需 scan |
 
 修了 2 BLOCKER + 6 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008/009/010/011). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 

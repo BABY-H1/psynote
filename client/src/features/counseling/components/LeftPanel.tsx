@@ -10,6 +10,7 @@ import { useToast } from '../../../shared/components';
 import {
   FileText, BarChart3, ChevronDown, MessageSquare,
   ArrowRightLeft, ClipboardList, FileCheck, Download,
+  Target, Users, GraduationCap,
 } from 'lucide-react';
 import { ReferralForm } from './ReferralForm';
 import { ReferralCard } from './ReferralCard';
@@ -218,36 +219,43 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
         </div>
 
         {/*
-          Phase I Issue 1: AI 对话区只显示 plan/simulate/supervise.
-          mode='note' 的对话都已经移到上面"会谈记录"区 (草稿或关联子项).
+          Phase I follow-up: 之前 plan/simulate/supervise 平铺在 "AI 对话" 区,
+          用户反馈混在一起不易找特定 mode 历史. 改成 3 mode 各自独立 section
+          (跟"会谈记录" / "评估记录" 的"按内容类型分组"一致). 空 mode 隐藏
+          整个 section, 避免占空间. 第一次产生该 mode 的 conversation 时
+          section 自动出现.
         */}
-        {aiConversations && aiConversations.filter((c: any) => c.mode !== 'note').length > 0 && (
-          <>
-            <SectionHeader icon={<MessageSquare className="w-3.5 h-3.5" />} title="AI 对话" count={aiConversations.filter((c: any) => c.mode !== 'note').length} />
-            <div className="px-3 pb-2 space-y-1">
-              {aiConversations.filter((c: any) => c.mode !== 'note').map((conv: any) => {
-                const modeMeta = ({
-                  plan: { emoji: '🎯', label: '方案讨论', tone: 'teal' },
-                  simulate: { emoji: '🗣️', label: '模拟练习', tone: 'violet' },
-                  supervise: { emoji: '🎓', label: '督导对话', tone: 'amber' },
-                } as const)[conv.mode as 'plan' | 'simulate' | 'supervise'] ?? { emoji: '💬', label: 'AI 对话', tone: 'slate' };
-                const msgCount = (conv.messages as any[])?.length || 0;
-                return (
-                  <button key={conv.id}
-                    onClick={() => onSelectConversation?.(conv)}
-                    className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-slate-50">
-                    <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0 text-xs">{modeMeta.emoji}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-slate-700 truncate">{conv.title || modeMeta.label}</div>
-                      <div className="text-slate-400">{msgCount}条 · {new Date(conv.updatedAt).toLocaleDateString('zh-CN')}</div>
-                    </div>
-                    <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
-                  </button>
-                );
-              })}
-            </div>
-          </>
-        )}
+        {(['plan', 'simulate', 'supervise'] as const).map((targetMode) => {
+          const meta = ({
+            plan: { emoji: '🎯', label: '治疗方案', icon: <Target className="w-3.5 h-3.5" />, hoverBg: 'hover:bg-teal-50' },
+            simulate: { emoji: '🗣️', label: '模拟练习', icon: <Users className="w-3.5 h-3.5" />, hoverBg: 'hover:bg-violet-50' },
+            supervise: { emoji: '🎓', label: '督导对话', icon: <GraduationCap className="w-3.5 h-3.5" />, hoverBg: 'hover:bg-amber-50' },
+          } as const)[targetMode];
+          const filtered = (aiConversations || []).filter((c: any) => c.mode === targetMode);
+          if (filtered.length === 0) return null;
+          return (
+            <React.Fragment key={targetMode}>
+              <SectionHeader icon={meta.icon} title={meta.label} count={filtered.length} />
+              <div className="px-3 pb-2 space-y-1">
+                {filtered.map((conv: any) => {
+                  const msgCount = (conv.messages as any[])?.length || 0;
+                  return (
+                    <button key={conv.id}
+                      onClick={() => onSelectConversation?.(conv)}
+                      className={`w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition ${meta.hoverBg}`}>
+                      <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0 text-xs">{meta.emoji}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-slate-700 truncate">{conv.title || meta.label}</div>
+                        <div className="text-slate-400">{msgCount}条 · {new Date(conv.updatedAt).toLocaleDateString('zh-CN')}</div>
+                      </div>
+                      <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
+                    </button>
+                  );
+                })}
+              </div>
+            </React.Fragment>
+          );
+        })}
 
         {sessionNotes && sessionNotes.length > 0 && (
           <div className="px-3 pb-2">
