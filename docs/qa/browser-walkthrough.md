@@ -482,6 +482,26 @@
 - 浏览器走查这几行直接标 [x] verified clean (静态分析阶段已确认)
 
 
+### BUG-009 — Episode AI 4 mode 归档不一致, 仅 simulate/supervise 入档
+- 严重度: **MAJOR** (UX 不一致 + 督导 mode 失去 context)
+- 触发行: Tier 2.10.1 写笔记 mode 后 sidebar 不显示对话归档
+- 复现:
+  1. b@ 进 episode, 写笔记 mode 输入会谈描述, AI 回应 SOAP 建议
+  2. 切到 sidebar 看 "AI 对话" 区, **没有"笔记草稿"条目**
+  3. 同样讨论方案 mode 的 "方案讨论" 也没归档
+  4. 仅模拟来访 + 督导 2 个 mode 自动归档
+- 根因: `client/src/features/counseling/components/ChatWorkspace.tsx:247`
+  ```
+  if (mode === 'simulate' || mode === 'supervise') { /* auto-save */ }
+  ```
+  显式只对 2 个 mode 归档. note/plan 的对话只存在前端内存, 切 mode 或刷页面就丢. 而且督导 mode 右侧 panel 取 "最近笔记" 时 always 显示 "暂无会谈记录" — 因 note 对话没归档, 督导拿不到上下文.
+- 影响:
+  1. UX 不一致 (4 mode 共用 chat UI 但只 2 个保留历史)
+  2. 督导 context 缺失 (依赖前面 note 对话内容)
+  3. 用户无法回看 AI 推理过程
+- 修法: 改成 `if (mode !== 'crisis')` 全归档 + 扩展 modeLabel 映射表 (note='笔记草稿', plan='方案讨论'). 同步更新 LeftPanel.tsx (sidebar emoji+label 渲染) 和 OutputPanel.tsx (ConversationViewer mode 显示) 的 mode→label 映射, 防止旧代码把 note 显示成 supervise 的 🎓.
+- 状态: **已修 (待 commit). 浏览器验证: 修后 sidebar AI 对话 (4) 含全部 4 mode 归档, 各自 emoji 不同 (📝/🎯/🎓/🗣️) ✅**
+
 ### BUG-008 — Portal 页面高度不统一, 底部 nav 浮在内容下方而非 viewport 底部
 - 严重度: **MAJOR** (移动端核心 UX 缺陷, 不像小程序更像普通网页)
 - 触发行: Tier 3 portal 多页 (/portal /portal/services /portal/archive /portal/account 各子页)
@@ -593,9 +613,10 @@
 | BUG-005 | BLOCKER | 已修(2928b97) | AI course creator /orgs/null/ai 404 (aiPrefix 缺 sysadmin fallback) |
 | BUG-006 | MINOR | 已修(653ed20) | OrgAdminDashboard 5 KPI 卡只有 2 个可点 (UX 不一致) — 全部加 onClick 跳到对应 /delivery?type=* |
 | BUG-007 | MAJOR | 部分修(ed1e07e), 深度修待产品决策 | 研判分流详情面板 3 按钮在无规则机构永远 disabled — 仅改提示文字治标. 深度修方案 (lazy-create candidate API) 见 plans/l1-l4-luminous-sunset.md Phase H, 待产品决策 |
-| BUG-008 | MAJOR | 已修(待 commit) | Portal 页面高度不统一, 底部 nav 浮在内容下方 — html/body/root 没 height + `h-[100dvh]` Tailwind 没编译. 修法: index.css 加 height:100% + h-screen 替换 |
+| BUG-008 | MAJOR | 已修(4bc5953) | Portal 页面高度不统一, 底部 nav 浮在内容下方 — html/body/root 没 height + `h-[100dvh]` Tailwind 没编译. 修法: index.css 加 height:100% + h-screen 替换 |
+| BUG-009 | MAJOR | 已修(待 commit) | Episode AI 4 mode 仅 simulate/supervise 自动归档, note/plan 漏档. 督导 mode 因此拿不到笔记 context. 修法: `if (mode !== 'crisis')` 全归档 + 扩展 mode→label 映射 |
 
-修了 2 BLOCKER + 3 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
+修了 2 BLOCKER + 4 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008/009). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 
 ### Alpha 上线就绪判据 (per Phase F plan §"终止条件")
 1. ✅ Tier 1 全 pass (法律页 + 退出 + sidebar + tenant CRUD + library 6 tab 都覆盖)

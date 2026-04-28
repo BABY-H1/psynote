@@ -175,15 +175,25 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
             <SectionHeader icon={<MessageSquare className="w-3.5 h-3.5" />} title="AI 对话" count={aiConversations.length} />
             <div className="px-3 pb-2 space-y-1">
               {aiConversations.map((conv: any) => {
-                const modeLabel = conv.mode === 'simulate' ? '🗣️' : '🎓';
+                /*
+                 * BUG-009: 之前只渲染 simulate/supervise 两种 mode 的 emoji 和
+                 * 默认标题, note/plan 走到这里会显示成 supervise 的 🎓 + "督导
+                 * 对话" — 误导. 现在 4 mode 都归档, 扩展映射表.
+                 */
+                const modeMeta = ({
+                  note: { emoji: '📝', label: '笔记草稿', tone: 'brand' },
+                  plan: { emoji: '🎯', label: '方案讨论', tone: 'teal' },
+                  simulate: { emoji: '🗣️', label: '模拟练习', tone: 'violet' },
+                  supervise: { emoji: '🎓', label: '督导对话', tone: 'amber' },
+                } as const)[conv.mode as 'note' | 'plan' | 'simulate' | 'supervise'] ?? { emoji: '💬', label: 'AI 对话', tone: 'slate' };
                 const msgCount = (conv.messages as any[])?.length || 0;
                 return (
                   <button key={conv.id}
                     onClick={() => onSelectConversation?.(conv)}
-                    className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-violet-50">
-                    <div className="w-5 h-5 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center flex-shrink-0 text-xs">{modeLabel}</div>
+                    className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-slate-50">
+                    <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0 text-xs">{modeMeta.emoji}</div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-slate-700 truncate">{conv.title || (conv.mode === 'simulate' ? '模拟练习' : '督导对话')}</div>
+                      <div className="text-slate-700 truncate">{conv.title || modeMeta.label}</div>
                       <div className="text-slate-400">{msgCount}条 · {new Date(conv.updatedAt).toLocaleDateString('zh-CN')}</div>
                     </div>
                     <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />

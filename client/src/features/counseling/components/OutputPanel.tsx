@@ -532,8 +532,15 @@ function ConversationViewer({ conversation, onClose }: { conversation: any; onCl
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState(conversation.title || '');
   const messages = (conversation.messages as any[]) || [];
-  const modeLabel = conversation.mode === 'simulate' ? '模拟练习' : '督导对话';
-  const modeIcon = conversation.mode === 'simulate' ? '🗣️' : '🎓';
+  // BUG-009: 之前只识别 simulate/supervise, 4 mode 归档后扩展.
+  const modeMeta = ({
+    note: { label: '笔记草稿', icon: '📝' },
+    plan: { label: '方案讨论', icon: '🎯' },
+    simulate: { label: '模拟练习', icon: '🗣️' },
+    supervise: { label: '督导对话', icon: '🎓' },
+  } as const)[conversation.mode as 'note' | 'plan' | 'simulate' | 'supervise'] ?? { label: 'AI 对话', icon: '💬' };
+  const modeLabel = modeMeta.label;
+  const modeIcon = modeMeta.icon;
 
   const handleSaveTitle = async () => {
     try {

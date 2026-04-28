@@ -243,14 +243,28 @@ export function ChatWorkspace({
       const finalMsgs = [...newMsgs, { role: 'assistant' as const, content: assistantContent }];
       setMessages({ ...messages, [mode]: finalMsgs });
 
-      // Auto-save for simulate/supervise
-      if (mode === 'simulate' || mode === 'supervise') {
+      /*
+       * BUG-009: 之前只对 simulate/supervise 归档, note/plan 漏归档:
+       * 1. 4 mode 共用 chat UI 但只 2 个保留对话历史 — UX 不一致
+       * 2. 督导 mode 右侧 panel 取 "最近笔记 / session history" 时, 因
+       *    note 对话没存, 始终显示 "暂无会谈记录", 失去 context
+       * 3. 用户无法回看 AI 推理过程 (e.g. "AI 当时为啥建议这个 SOAP 字段?")
+       *
+       * 改成 4 mode 全归档. 每个 mode 一条独立 ai_conversations 行,
+       * 同 mode 多次发送追加到同一条 (conversationIds 内存 map 跟踪).
+       */
+      if (mode !== 'crisis') {
         const saveMsgs = finalMsgs.map((m) => ({ role: m.role, content: m.content }));
         const convId = conversationIds[mode];
         if (convId) {
           updateConversation.mutate({ id: convId, messages: saveMsgs });
         } else {
-          const modeLabel = mode === 'simulate' ? '模拟练习' : '督导对话';
+          const modeLabel = ({
+            note: '笔记草稿',
+            plan: '方案讨论',
+            simulate: '模拟练习',
+            supervise: '督导对话',
+          } as const)[mode];
           const title = `${modeLabel} · ${new Date().toLocaleDateString('zh-CN')}`;
           createConversation.mutateAsync({ careEpisodeId: episodeId, mode, title }).then((conv) => {
             setConversationIds((prev) => ({ ...prev, [mode]: conv.id }));

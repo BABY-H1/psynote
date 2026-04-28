@@ -561,7 +561,7 @@ export const aiConversations = pgTable('ai_conversations', {
   orgId: uuid('org_id').notNull().references(() => organizations.id),
   careEpisodeId: uuid('care_episode_id').notNull().references(() => careEpisodes.id, { onDelete: 'cascade' }),
   counselorId: uuid('counselor_id').notNull().references(() => users.id),
-  mode: text('mode').notNull(), // 'simulate' | 'supervise'
+  mode: text('mode').notNull(), // 'note' | 'plan' | 'simulate' | 'supervise' (BUG-009: 之前只 simulate/supervise 归档)
   title: text('title'),
   messages: jsonb('messages').notNull().default([]), // ChatMessage[]
   summary: text('summary'),
