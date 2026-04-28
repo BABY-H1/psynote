@@ -152,7 +152,13 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
                 onToggle={toggleSession}
               />
               {!sessionCollapsed && (
-              <div className="px-3 pb-2 space-y-1">
+              /*
+               * 每段 max-h-[40vh] + 内部 overflow-y-auto: 长内容 section
+               * (例如 50 条 sessionNote) 不挤压下面的 section, 只在自己
+               * 上限内滚. LeftPanel 整体仍 overflow-y-auto 兜底, 但 5
+               * section 都给 max-h 后通常不再需要外层滚.
+               */
+              <div className="px-3 pb-2 space-y-1 max-h-[40vh] overflow-y-auto">
                 {noteDrafts.length === 0 && (!sessionNotes || sessionNotes.length === 0) ? (
                   <div className="text-xs text-slate-400 py-2">暂无会谈记录</div>
                 ) : (
@@ -213,7 +219,7 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
           onToggle={toggleAssessment}
         />
         {!assessmentCollapsed && (
-        <div className="px-3 pb-2 space-y-1">
+        <div className="px-3 pb-2 space-y-1 max-h-[40vh] overflow-y-auto">
           {(!assessmentResults || assessmentResults.length === 0) ? (
             <div className="text-xs text-slate-400 py-2">暂无评估记录</div>
           ) : (
@@ -272,7 +278,7 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
                 onToggle={onToggle}
               />
               {!collapsed && (
-              <div className="px-3 pb-2 space-y-1">
+              <div className="px-3 pb-2 space-y-1 max-h-[40vh] overflow-y-auto">
                 {filtered.map((conv: any) => {
                   const msgCount = (conv.messages as any[])?.length || 0;
                   return (
