@@ -366,7 +366,7 @@ export const ChatWorkspace = forwardRef<ChatWorkspaceHandle, Props>(function Cha
       {mode === 'crisis' ? (
         // Crisis mode: the chat area shows static guidance; the real action
         // happens in OutputPanel → CrisisChecklistPanel (right column).
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-center text-center">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 flex flex-col items-center justify-center text-center">
           <div className="text-4xl mb-3">⚠️</div>
           <div className="text-sm font-medium text-red-700 mb-1">危机处置模式</div>
           <div className="text-xs text-slate-500 max-w-xs">
@@ -375,7 +375,7 @@ export const ChatWorkspace = forwardRef<ChatWorkspaceHandle, Props>(function Cha
         </div>
       ) : (
       /* Chat messages */
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3">
         {currentMessages.length === 0 && (
           <div className="text-center py-8">
             <div className="text-3xl mb-2">
