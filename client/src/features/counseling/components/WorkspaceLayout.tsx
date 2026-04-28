@@ -7,6 +7,12 @@ interface Props {
   defaultLeftWidth?: number;
   defaultRightWidth?: number;
   minWidth?: number;
+  /**
+   * 单栏可拉到的最大比例 (相对 container 宽度). 默认 0.4 让 center 至少能占
+   * 20% 宽度. 研判分流右栏需要更宽的空间显示 picker / 危机清单, 传 0.5
+   * 让右栏可达 "三栏一半" 宽.
+   */
+  maxRatio?: number;
 }
 
 export function WorkspaceLayout({
@@ -14,6 +20,7 @@ export function WorkspaceLayout({
   defaultLeftWidth = 280,
   defaultRightWidth = 260,
   minWidth = 180,
+  maxRatio = 0.4,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
@@ -32,10 +39,10 @@ export function WorkspaceLayout({
       const rect = containerRef.current.getBoundingClientRect();
 
       if (dragging === 'left') {
-        const newWidth = Math.max(minWidth, Math.min(e.clientX - rect.left, rect.width * 0.4));
+        const newWidth = Math.max(minWidth, Math.min(e.clientX - rect.left, rect.width * maxRatio));
         setLeftWidth(newWidth);
       } else {
-        const newWidth = Math.max(minWidth, Math.min(rect.right - e.clientX, rect.width * 0.4));
+        const newWidth = Math.max(minWidth, Math.min(rect.right - e.clientX, rect.width * maxRatio));
         setRightWidth(newWidth);
       }
     };
@@ -48,7 +55,7 @@ export function WorkspaceLayout({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragging, minWidth]);
+  }, [dragging, minWidth, maxRatio]);
 
   /*
    * 之前 root 用 `h-[calc(100vh-5rem)]` 硬编码 viewport 减 shell header,

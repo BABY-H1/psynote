@@ -13,6 +13,7 @@ import {
 import { useCrisisCase, useCrisisCaseByEpisode } from '../../../api/useCrisisCase';
 import { TriageActionBar } from './TriageActionBar';
 import { CrisisChecklistPanel } from '../../counseling/components/CrisisChecklistPanel';
+import { InstancePickerPanel } from './InstancePickerPanel';
 
 interface ResultDetail {
   id: string;
@@ -52,8 +53,12 @@ export function TriageDetailPanel({
   // Phase J: 接 ActionBar 上抛的 episodeId (本次刚 accept 立即生效).
   // row reload 完成后会被 row.resolvedRefId (crisisCaseId) 覆盖.
   const [freshCrisisEpisodeId, setFreshCrisisEpisodeId] = useState<string | null>(null);
+  // Phase J 后续: inline picker 模式. null = 默认显示测评结果, 否则 body
+  // 区域切到对应 picker (用户从 ActionBar 点 "课程" / "团辅" 触发).
+  const [pickerMode, setPickerMode] = useState<'course' | 'group' | null>(null);
   useEffect(() => {
     setFreshCrisisEpisodeId(null);
+    setPickerMode(null);
   }, [row?.resultId, row?.candidateId]);
 
   // 两条 lookup 路径:
@@ -208,7 +213,21 @@ export function TriageDetailPanel({
         </button>
       </div>
 
-      {/* Body */}
+      {/* Body — pickerMode 决定显示测评结果 / 课程 picker / 团辅 picker */}
+      {pickerMode ? (
+        <InstancePickerPanel
+          kind={pickerMode}
+          row={row}
+          onClose={() => setPickerMode(null)}
+          onPickDone={() => {
+            // 报名 + accept 成功后, 触发 list / buckets refetch 让 row 状态
+            // 反映到列表 (变 "已处理")
+            onActionDone();
+            // setSelectedRow(null) 由父级 onActionDone 之外控制, 这里不主动清
+          }}
+        />
+      ) : (
+      <>
       <div className="flex-1 overflow-y-auto p-4 space-y-4 text-sm">
         <Section title="基本信息" icon={<FileText className="w-3.5 h-3.5" />}>
           <dl className="grid grid-cols-2 gap-y-1 text-xs">
@@ -264,8 +283,10 @@ export function TriageDetailPanel({
           </>
         )}
       </div>
+      </>
+      )}
 
-      {/* Action bar */}
+      {/* Action bar — picker 打开时也保留, 用户可以再点别的按钮切到不同 picker */}
       <TriageActionBar
         row={row}
         onActionDone={onActionDone}
@@ -274,6 +295,7 @@ export function TriageDetailPanel({
           // 拿到 row.resolvedRefId 后, derive 优先用持久化字段, 不依赖此 state.
           setFreshCrisisEpisodeId(episodeId);
         }}
+        onPickerOpen={(kind) => setPickerMode(kind)}
       />
     </div>
   );

@@ -79,6 +79,9 @@ export function ResearchTriagePage() {
           defaultLeftWidth={240}
           defaultRightWidth={520}
           minWidth={180}
+          /* 让右栏 (含 picker / 危机清单) 可拖到三栏一半 = container 50%, 不再被
+             默认 40% max 卡住, 用户能用更宽空间挑课程/团辅或处理危机清单. */
+          maxRatio={0.5}
           left={
             <LevelBucketSidebar
               levels={levels}
