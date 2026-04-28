@@ -782,19 +782,11 @@ export const courseTemplateTags = pgTable('course_template_tags', {
   uniqueIndex('uq_course_template_tags_org_name').on(t.orgId, t.name),
 ]);
 
-export const courseAttachments = pgTable('course_attachments', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  chapterId: uuid('chapter_id').notNull().references(() => courseChapters.id, { onDelete: 'cascade' }),
-  fileName: text('file_name').notNull(),
-  fileUrl: text('file_url').notNull(),
-  fileType: text('file_type').notNull(),
-  fileSize: integer('file_size'),
-  sortOrder: integer('sort_order').notNull().default(0),
-  uploadedBy: uuid('uploaded_by').references(() => users.id),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  index('idx_course_attachments_chapter').on(t.chapterId),
-]);
+// REMOVED 2026-04-28 (migration 029): courseAttachments was a Phase-7 orphan
+// table — created but never wired into any route or UI. Real chapter
+// attachments live in `courseContentBlocks` (PDF / video / audio block
+// types) which is end-to-end verified through to the portal CourseReader.
+// See server/src/db/migrations/029-drop-orphan-course-attachments.ts.
 
 /**
  * Phase 9α — C-facing consumable content blocks attached to course chapters.

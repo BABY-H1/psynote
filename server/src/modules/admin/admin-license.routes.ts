@@ -146,12 +146,21 @@ export async function adminLicenseRoutes(app: FastifyInstance) {
     const current = await verifyLicense(org.licenseKey, orgId);
     if (!current.payload) throw new ValidationError('Current license is invalid, issue a new one instead');
 
-    // Sign new license with same tier/seats but extended expiry
-    const result = await signLicense({
+    // BUG-003 fix: extend FROM the existing expiry (not from now), so renewing
+    // early doesn't forfeit unused days. SaaS-standard semantics:
+    //   newExpiry = max(now, oldExpiry) + months
+    // If the license already expired, base on now (so renew also unblocks).
+    const now = new Date();
+    const oldExpiry = new Date(current.payload.expiresAt);
+    const baseDate = oldExpiry > now ? oldExpiry : now;
+    const newExpiry = new Date(baseDate);
+    newExpiry.setMonth(newExpiry.getMonth() + months);
+
+    const result = await signLicenseWithExpiry({
       orgId,
       tier: current.payload.tier,
       maxSeats: current.payload.maxSeats,
-      months,
+      expiresAt: newExpiry,
     });
 
     await db

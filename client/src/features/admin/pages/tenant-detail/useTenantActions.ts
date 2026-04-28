@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { OrgTier } from '@psynote/shared';
 import { api } from '../../../../api/client';
+import { useToast } from '../../../../shared/components';
 import type { BasicInfoDraft, ServiceConfig } from './types';
 
 /**
@@ -16,6 +17,7 @@ export function useTenantActions(opts: {
   reloadServices: () => Promise<void>;
 }) {
   const { orgId, reloadTenant, reloadServices } = opts;
+  const { toast } = useToast();
 
   const addMember = useCallback(
     async (
@@ -61,22 +63,30 @@ export function useTenantActions(opts: {
         await api.post('/admin/licenses/issue', { orgId, ...form });
         onSuccess();
         await reloadTenant();
+        toast('许可证已签发', 'success');
       } catch (err: any) { setError(err?.message || '签发失败'); }
     },
-    [orgId, reloadTenant],
+    [orgId, reloadTenant, toast],
   );
 
   const renewLicense = useCallback(async () => {
     if (!orgId) return;
-    try { await api.post('/admin/licenses/renew', { orgId, months: 12 }); await reloadTenant(); }
-    catch (err: any) { alert(err?.message || '续期失败'); }
-  }, [orgId, reloadTenant]);
+    try {
+      const res = await api.post<{ expiresAt: string }>('/admin/licenses/renew', { orgId, months: 12 });
+      await reloadTenant();
+      const newExpiry = res?.expiresAt ? new Date(res.expiresAt).toLocaleDateString('zh-CN') : '';
+      toast(newExpiry ? `续期成功，新到期日：${newExpiry}` : '续期成功', 'success');
+    } catch (err: any) { toast(err?.message || '续期失败', 'error'); }
+  }, [orgId, reloadTenant, toast]);
 
   const revokeLicense = useCallback(async () => {
     if (!orgId || !confirm('确定撤销该租户的许可证？')) return;
-    try { await api.post('/admin/licenses/revoke', { orgId }); await reloadTenant(); }
-    catch (err: any) { alert(err?.message || '撤销失败'); }
-  }, [orgId, reloadTenant]);
+    try {
+      await api.post('/admin/licenses/revoke', { orgId });
+      await reloadTenant();
+      toast('许可证已撤销', 'success');
+    } catch (err: any) { toast(err?.message || '撤销失败', 'error'); }
+  }, [orgId, reloadTenant, toast]);
 
   const modifyLicense = useCallback(
     async (
@@ -90,9 +100,10 @@ export function useTenantActions(opts: {
         await api.post('/admin/licenses/modify', { orgId, ...form });
         onSuccess();
         await reloadTenant();
+        toast('许可证已修改', 'success');
       } catch (err: any) { setError(err?.message || '修改失败'); }
     },
-    [orgId, reloadTenant],
+    [orgId, reloadTenant, toast],
   );
 
   /**

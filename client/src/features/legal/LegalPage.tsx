@@ -36,6 +36,17 @@ const CONTENT: Record<LegalKind, { title: string; body: string }> = {
   },
 };
 
+// Build-time stamp so the "更新于" date reflects the actual deploy/build,
+// not a hardcoded value that goes stale. Vite injects build env vars at
+// build time; we fall back to the current date if running in dev.
+const BUILD_DATE: string = (() => {
+  try {
+    const d = (import.meta as any).env?.VITE_BUILD_DATE;
+    if (d) return d;
+  } catch { /* ignore */ }
+  return new Date().toISOString().slice(0, 10);
+})();
+
 function LegalPage({ kind }: { kind: LegalKind }) {
   const { title, body } = CONTENT[kind];
   return (
@@ -48,7 +59,7 @@ function LegalPage({ kind }: { kind: LegalKind }) {
         <div className="mt-8 pt-6 border-t border-slate-100 flex items-center justify-between text-sm">
           <Link to="/login" className="text-brand-600 hover:underline">返回登录</Link>
           <span className="text-slate-400">
-            更新于 2026-04-24 · 占位版本
+            更新于 {BUILD_DATE} · 占位版本(待法务出具正式版)
           </span>
         </div>
       </div>

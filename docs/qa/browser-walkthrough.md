@@ -469,7 +469,10 @@
 - 建议修法:
   1. UI 层: useRenewLicense hook 加 onSuccess invalidateQueries(['admin','tenant',orgId])
   2. 服务层: signLicense 加 baseDate 参数, renew 端点传 baseDate = max(now, oldExpiry), 续期不重置原已购的天数
-- 状态: **未修, 标 MINOR 不阻断 alpha 上线**. UI 不刷新可以 hard refresh workaround. 续期语义偏差只在边缘情况触发.
+- 状态: **已修(待 commit, alpha minor cleanup batch).**
+  - **服务端**: signLicense → signLicenseWithExpiry, baseDate = max(now, oldExpiry), newExpiry = baseDate + months. 提前续期不再丢失原已购天数.
+  - **客户端**: useTenantActions 接入 useToast, renew/issue/revoke/modify 都加 success 通知. 用户能看到操作结果. (现有的 reloadTenant() 实际上一直在刷数据, 只是没有视觉反馈, 看起来像没刷新.)
+  - **验证**: scripts/verify-renew-semantic.mjs — login as a@, 续期前 expiresAt 2027-04-28, 续期后 2028-04-28, diff = 12.20 months ✅
 
 ### BUG-012 — Portal CourseReader 整体不可用 (rejectClient 阻断 GET)
 - 严重度: **BLOCKER** (Portal C 端的核心功能"看课程"完全不工作)
@@ -690,6 +693,9 @@
 | BUG-012 | BLOCKER | 已修(待 commit) | Portal CourseReader 整体不可用: 3 个 rejectClient hook 阻断 client GET. 修法: 新建 `/client/courses/:id` portal 端点 + 移除 content-block + enrollment-response 的 hook 级 reject (改成 GET handler 内联 client 过滤) + CourseReader 改用新 hook. 浏览器验证 PDF 章节渲染 + 下载链接可用 ✅ |
 | BUG-013 | BLOCKER | 已修(待 commit) | Caddy /uploads 路由缺失, 所有上传文件返回 SPA index.html. 修法: Caddyfile 加 `handle /uploads/* { reverse_proxy app:4000 }`. Fastify 已用 @fastify/static 服务该前缀, 一行 Caddy 配置即可. 验证 curl -sI 返回 application/pdf 534 字节 ✅ |
 | ENH-002 | enhancement | 已实施(待 commit) | PDF 内嵌 iframe 预览 + 视频/音频端到端验证. PdfBlockView 根据 payload.mode='view' 内嵌 iframe (浏览器原生 PDF 查看器) + 提供"新窗口打开"+"下载". E2E 脚本扩展 4b/4c 步上传 mp3/mp4 + 创建 audio/video content block. 浏览器验证 tier2-client-001 视角 chapter 渲染 1 iframe + 1 video + 1 audio (controls), 0 console errors ✅ |
+| FINDING-001 | architectural | 已清理(待 commit) | 孤儿表 course_attachments 已通过 migration 029 (`server/src/db/migrations/029-drop-orphan-course-attachments.ts`) 删除 + schema.ts 移除定义. 真正的章节附件流走 courseContentBlocks (b16dcf2 已端到端). |
+| BUG-003 | MINOR → 已修 | 已修(待 commit) | License 续期改用 max(now, oldExpiry) + months (SaaS 标准语义), 提前续期不丢天数. UI 加 toast 通知 (renew/issue/revoke/modify 全部). verify-renew-semantic.mjs 验证 ✅ |
+| LEGAL-PAGES | docs cleanup | 已清理(待 commit) | LegalPage 日期改为 build-time stamp (VITE_BUILD_DATE 或 fallback to current date), 文案添加 "(待法务出具正式版)" 明示状态. 浏览器验证 /legal/privacy + /legal/terms 都正常渲染 ✅ |
 
 修了 2 BLOCKER + 6 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008/009/010/011). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 
