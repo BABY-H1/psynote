@@ -46,13 +46,12 @@ export const ROLE_DATA_CLASS_POLICY: Record<RoleV2, readonly DataClass[]> = {
   parent: ['guardian_scope'],
 
   // ─── Counseling ──────────────────────────────
-  clinic_admin: ['phi_full', 'phi_summary', 'de_identified', 'aggregate'],
+  // 严格合规默认:clinic_admin 仅看摘要+脱敏+聚合,不直读 phi_full。
+  // 单人小诊所"老板兼咨询师"场景通过 org_members.access_profile.dataClasses
+  // 单点放开 phi_full(管理后台 UI 提供"标记为临床执业身份"按钮)。
+  clinic_admin: ['phi_summary', 'de_identified', 'aggregate'],
   supervisor: ['phi_full', 'phi_summary', 'de_identified', 'aggregate'],
   counselor: ['phi_full', 'phi_summary', 'de_identified', 'aggregate'],
-  // 实习咨询师:全文但督导在场;这里允许,scope 层在督导模型里收紧
-  intern: ['phi_full', 'phi_summary', 'de_identified', 'aggregate'],
-  // 前台不碰临床
-  receptionist: ['aggregate'],
   client: ['self_only'],
 
   // ─── Enterprise ──────────────────────────────

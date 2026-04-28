@@ -61,10 +61,6 @@ export const ROLE_ACTION_WHITELIST: Record<RoleV2, readonly Action[]> = {
   counselor: [
     'view', 'edit', 'create', 'publish', 'override_risk_level',
   ],
-  // 实习:不能签字、不能派单
-  intern: ['view', 'edit', 'create'],
-  // 前台:看预约、建预约,不碰临床
-  receptionist: ['view', 'create'],
   client: ['view'],
 
   // ─── Enterprise ──────────────────────────────

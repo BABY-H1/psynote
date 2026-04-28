@@ -3,6 +3,7 @@ import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { dataScopeGuard } from '../../middleware/data-scope.js';
+import { assertAuthorized } from '../../middleware/authorize.js';
 import { logAudit, logPhiAccess } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as sessionNoteService from './session-note.service.js';
@@ -26,6 +27,14 @@ export async function sessionNoteRoutes(app: FastifyInstance) {
   app.get('/:noteId', async (request) => {
     const { noteId } = request.params as { noteId: string };
     const note = await sessionNoteService.getSessionNoteById(noteId);
+
+    // Phase 1.5 严格合规: session_notes 是 phi_full,clinic_admin 默认禁读,
+    // 走 access_profile 单点开通(在 org-context.ts 已合并到 allowedDataClasses)。
+    assertAuthorized(request, 'view', {
+      type: 'session_note',
+      dataClass: 'phi_full',
+      ownerUserId: note.clientId,
+    });
 
     await logPhiAccess(request, note.clientId, 'session_notes', 'view', note.id);
     return note;
@@ -94,6 +103,15 @@ export async function sessionNoteRoutes(app: FastifyInstance) {
       summary: string;
       tags: string[];
     }>;
+
+    // Phase 1.5: edit 也是 phi_full 操作,clinic_admin 默认禁。先取出 note
+    // 拿 ownerUserId 再走 authorize。多 1 个 SELECT 是合规代价。
+    const existing = await sessionNoteService.getSessionNoteById(noteId);
+    assertAuthorized(request, 'edit', {
+      type: 'session_note',
+      dataClass: 'phi_full',
+      ownerUserId: existing.clientId,
+    });
 
     const updated = await sessionNoteService.updateSessionNote(noteId, body);
     await logAudit(request, 'update', 'session_notes', noteId);

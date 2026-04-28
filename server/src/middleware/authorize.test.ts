@@ -88,22 +88,68 @@ describe('requireAction — Role × Action gate', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('intern 无法 sign_off(角色本身被拒)', async () => {
-    const guard = requireAction('sign_off', {
-      type: 'crisis_case',
+  it('clinic_admin 无法 view phi_full(密级被拒,Phase 1.5 严格合规默认)', async () => {
+    const guard = requireAction('view', {
+      type: 'session_note',
       dataClass: 'phi_full',
       extractOwnerUserId: (r) => (r.params as { clientId: string }).clientId,
     });
     await expect(
       guard(
         makeReq({
-          org: { role: 'counselor', roleV2: 'intern' },
+          org: {
+            role: 'org_admin',
+            roleV2: 'clinic_admin',
+            // 模拟 org-context.ts 真实运行: clinic_admin 默认策略不含 phi_full
+            allowedDataClasses: ['phi_summary', 'de_identified', 'aggregate'],
+          },
+          params: { clientId: 'c-1' },
+          dataScope: { type: 'all' },
+        }),
+        reply,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenError);
+  });
+
+  it('clinic_admin + access_profile patch 可以 view phi_full', async () => {
+    const guard = requireAction('view', {
+      type: 'session_note',
+      dataClass: 'phi_full',
+      extractOwnerUserId: (r) => (r.params as { clientId: string }).clientId,
+    });
+    await expect(
+      guard(
+        makeReq({
+          org: {
+            role: 'org_admin',
+            roleV2: 'clinic_admin',
+            // 单点开通: access_profile.dataClasses 把 phi_full 加进来
+            allowedDataClasses: ['phi_full', 'phi_summary', 'de_identified', 'aggregate'],
+          },
+          params: { clientId: 'c-1' },
+          dataScope: { type: 'all' },
+        }),
+        reply,
+      ),
+    ).resolves.toBeUndefined();
+  });
+
+  it('counselor 可以 view phi_full(自己客户 + 密级允许)', async () => {
+    const guard = requireAction('view', {
+      type: 'session_note',
+      dataClass: 'phi_full',
+      extractOwnerUserId: (r) => (r.params as { clientId: string }).clientId,
+    });
+    await expect(
+      guard(
+        makeReq({
+          org: { role: 'counselor', roleV2: 'counselor' },
           params: { clientId: 'c-1' },
           dataScope: { type: 'assigned', allowedClientIds: ['c-1'] },
         }),
         reply,
       ),
-    ).rejects.toBeInstanceOf(ForbiddenError);
+    ).resolves.toBeUndefined();
   });
 });
 
@@ -285,7 +331,7 @@ describe('requireAction — system admin bypass', () => {
       guard(
         makeReq({
           user: { id: 'sys', isSystemAdmin: true },
-          org: { role: 'counselor', roleV2: 'intern' },
+          org: { role: 'counselor', roleV2: 'counselor' },
         }),
         reply,
       ),

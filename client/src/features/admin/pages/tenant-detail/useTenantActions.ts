@@ -48,6 +48,23 @@ export function useTenantActions(opts: {
     catch (err) { console.error('Failed to change role:', err); }
   }, [orgId, reloadTenant]);
 
+  // Phase 1.5: 单点开通"临床执业身份" — 把 phi_full 加进/移出该成员的
+  // access_profile.dataClasses。clinic_admin 默认不读 phi_full,但小诊所
+  // 老板兼咨询师可以打开此开关恢复全文访问。
+  const setClinicalPractitioner = useCallback(
+    async (memberId: string, on: boolean) => {
+      if (!orgId) return;
+      try {
+        await api.patch(`/admin/tenants/${orgId}/members/${memberId}`, { clinicalPractitioner: on });
+        await reloadTenant();
+        toast(on ? '已标记为临床执业身份(可读 phi_full)' : '已取消临床执业身份', 'success');
+      } catch (err: any) {
+        toast(err?.message || '操作失败', 'error');
+      }
+    },
+    [orgId, reloadTenant, toast],
+  );
+
   const issueLicense = useCallback(
     async (
       form: { tier: OrgTier; maxSeats: number; months: number; validFrom?: string },
@@ -166,6 +183,7 @@ export function useTenantActions(opts: {
     addMember,
     removeMember,
     changeMemberRole,
+    setClinicalPractitioner,
     issueLicense,
     renewLicense,
     revokeLicense,

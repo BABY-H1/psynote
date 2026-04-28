@@ -28,6 +28,16 @@ export interface Actor {
   userId: string;
   /** 是否督导身份(派生自 role + 业务规则;Phase 1 保留此 flag 兼容 legacy fullPracticeAccess) */
   isSupervisor?: boolean;
+  /**
+   * 此成员实际可触达的 data class 集合 = role 默认策略 ∪ access_profile.dataClasses 补丁。
+   *
+   * 若提供则优先使用,优先级高于 ROLE_DATA_CLASS_POLICY[role]。这是为了
+   * 支持单点开通场景(例如:clinic_admin 默认不读 phi_full,但单人小诊所
+   * 的"老板兼咨询师"通过 access_profile 单点开通)。
+   *
+   * 当不提供时(纯函数调用 / 单元测试)按 role 默认策略走。
+   */
+  effectiveDataClasses?: readonly DataClass[];
 }
 
 export interface Resource {
@@ -84,7 +94,14 @@ export function authorize(
   }
 
   // ── 2. Data Class 匹配
-  if (!roleAllowsDataClass(actor.role, resource.dataClass)) {
+  // 优先用 actor.effectiveDataClasses(已经合并 access_profile 补丁),
+  // 没有则回落到 role 默认策略。这样 access_profile 单点开通能在请求
+  // 热路径生效,而单元测试可以只传 role 走默认策略。
+  const allowedClasses = actor.effectiveDataClasses;
+  const dataClassAllowed = allowedClasses
+    ? allowedClasses.includes(resource.dataClass)
+    : roleAllowsDataClass(actor.role, resource.dataClass);
+  if (!dataClassAllowed) {
     return {
       allowed: false,
       reason: `role_data_class_not_allowed:${actor.role}/${resource.dataClass}`,

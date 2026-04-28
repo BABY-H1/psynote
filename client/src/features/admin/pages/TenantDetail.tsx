@@ -148,6 +148,7 @@ export function TenantDetail() {
           members={tenant.members}
           onAddMember={() => setShowAddMember(true)}
           onChangeRole={actions.changeMemberRole}
+          onSetClinicalPractitioner={actions.setClinicalPractitioner}
           onRemoveMember={actions.removeMember}
         />
       )}

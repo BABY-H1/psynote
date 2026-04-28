@@ -30,18 +30,21 @@ export const SCHOOL_ROLES = [
 export type SchoolRole = (typeof SCHOOL_ROLES)[number];
 
 // ─── Counseling (咨询中心) ────────────────────────────────────────
-//   clinic_admin       — 诊所/中心管理员
+//   clinic_admin       — 诊所/中心管理员(默认不直接读 phi_full,
+//                         需走 access_profile 单点开通)
 //   supervisor         — 督导
 //   counselor          — 咨询师
-//   intern             — 实习咨询师,受督导
-//   receptionist       — 前台/接待,不触达临床数据
 //   client             — 来访者(subject)
+//
+// 说明:Phase 1.5 严格合规化时,intern + receptionist 两个角色被删除
+//   - intern: 现实中实习生应作为临床执业人员之一管理,与 counselor 走
+//     同一角色 + 督导链;独立 role 在 alpha 没用例
+//   - receptionist: 与"前台只看预约不碰临床"的需求重叠 client 视角,
+//     未来如确需独立运营岗位再引入
 export const COUNSELING_ROLES = [
   'clinic_admin',
   'supervisor',
   'counselor',
-  'intern',
-  'receptionist',
   'client',
 ] as const;
 export type CounselingRole = (typeof COUNSELING_ROLES)[number];

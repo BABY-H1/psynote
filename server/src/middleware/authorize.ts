@@ -77,6 +77,50 @@ export function requireAction(action: Action, selector: ResourceSelector) {
   };
 }
 
+/**
+ * assertAuthorized —— 在路由 handler 内联调用的版本。
+ *
+ * 用于"资源 ownerUserId 必须先查 DB 才知道"的场景(例如 session-note 的 clientId
+ * 来自查到的 note 行)。preHandler 阶段没法预知 ownerUserId,所以 requireAction
+ * 不适用 —— 改在 handler 里查到资源后调用本函数。
+ *
+ * 跟 requireAction 行为完全一致(同一个 authorize 决策器),只是 ownerUserId
+ * 由调用方显式传入而不是从 request 抽取。
+ */
+export function assertAuthorized(
+  request: FastifyRequest,
+  action: Action,
+  selector: Omit<ResourceSelector, 'extractOwnerUserId'> & {
+    ownerUserId: string | null;
+  },
+): void {
+  // System admin bypass
+  if (request.user?.isSystemAdmin) return;
+
+  const org = request.org;
+  if (!org) throw new ForbiddenError('org context required');
+
+  const actor = resolveActor(request);
+  if (!actor) throw new ForbiddenError('no resolvable role for actor');
+
+  const orgId = selector.extractOrgId?.(request) ?? org.orgId;
+  const resource: Resource = {
+    type: selector.type,
+    dataClass: selector.dataClass,
+    ownerUserId: selector.ownerUserId,
+    orgId,
+  };
+
+  const scope = resolveScope(request, actor, selector.ownerUserId);
+
+  const decision = authorize(actor, action, resource, scope);
+  if (!decision.allowed) {
+    throw new ForbiddenError(
+      `action_denied:${action}/${selector.type}:${decision.reason ?? 'unknown'}`,
+    );
+  }
+}
+
 // ─── helpers ──────────────────────────────────────────────────────
 
 function resolveActor(request: FastifyRequest): Actor | null {
@@ -94,11 +138,20 @@ function resolveActor(request: FastifyRequest): Actor | null {
     (org as unknown as { isSupervisor?: boolean }).isSupervisor ??
     (org.role === 'counselor' && org.fullPracticeAccess);
 
+  // org-context 已经把 ROLE_DATA_CLASS_POLICY[role] 与 access_profile.dataClasses
+  // union 后写到 allowedDataClasses 上 —— 透传给 policy 让 access_profile 单点
+  // 开通能生效(例如:clinic_admin 默认不读 phi_full,但被打了"临床执业身份"
+  // 标签的成员通过 access_profile patch 拿到 phi_full)。
+  const effectiveDataClasses = (
+    org as unknown as { allowedDataClasses?: readonly DataClass[] }
+  ).allowedDataClasses;
+
   return {
     orgType: org.orgType,
     role,
     userId,
     isSupervisor,
+    effectiveDataClasses,
   };
 }
 

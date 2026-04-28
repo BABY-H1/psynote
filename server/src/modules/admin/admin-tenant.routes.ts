@@ -101,10 +101,12 @@ export async function adminTenantRoutes(app: FastifyInstance) {
         id: orgMembers.id,
         userId: orgMembers.userId,
         role: orgMembers.role,
+        roleV2: orgMembers.roleV2,
         status: orgMembers.status,
         createdAt: orgMembers.createdAt,
         userName: users.name,
         userEmail: users.email,
+        accessProfile: orgMembers.accessProfile,
       })
       .from(orgMembers)
       .innerJoin(users, eq(users.id, orgMembers.userId))
@@ -345,11 +347,36 @@ export async function adminTenantRoutes(app: FastifyInstance) {
   // ─── Update Member ──────────────────────────────────────────────
   app.patch('/:orgId/members/:memberId', async (request) => {
     const { orgId, memberId } = request.params as { orgId: string; memberId: string };
-    const body = request.body as { role?: string; status?: string };
+    const body = request.body as {
+      role?: string;
+      status?: string;
+      // Phase 1.5: 单点放开 phi_full 给 clinic_admin(老板兼咨询师场景)
+      clinicalPractitioner?: boolean;
+    };
 
     const updates: Record<string, unknown> = {};
     if (body.role && VALID_ROLES.includes(body.role as any)) updates.role = body.role;
     if (body.status) updates.status = body.status;
+
+    // Phase 1.5: clinicalPractitioner 开关写入 access_profile.dataClasses
+    if (typeof body.clinicalPractitioner === 'boolean') {
+      const [existing] = await db
+        .select({ accessProfile: orgMembers.accessProfile })
+        .from(orgMembers)
+        .where(eq(orgMembers.id, memberId))
+        .limit(1);
+      const profile = (existing?.accessProfile as Record<string, unknown> | null) ?? {};
+      if (body.clinicalPractitioner) {
+        profile.dataClasses = ['phi_full', 'phi_summary', 'de_identified', 'aggregate'];
+        profile.reason = 'clinical_practitioner_patch';
+        profile.grantedAt = new Date().toISOString();
+      } else {
+        delete profile.dataClasses;
+        delete profile.reason;
+        delete profile.grantedAt;
+      }
+      updates.accessProfile = profile;
+    }
 
     const [updated] = await db
       .update(orgMembers)

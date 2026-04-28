@@ -91,8 +91,6 @@ describe('principalOf', () => {
     expect(principalOf('clinic_admin')).toBe('staff');
     expect(principalOf('supervisor')).toBe('staff');
     expect(principalOf('counselor')).toBe('staff');
-    expect(principalOf('intern')).toBe('staff');
-    expect(principalOf('receptionist')).toBe('staff');
     expect(principalOf('hr_admin')).toBe('staff');
     expect(principalOf('eap_consultant')).toBe('staff');
     expect(principalOf('owner')).toBe('staff');

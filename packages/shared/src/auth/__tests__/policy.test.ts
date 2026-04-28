@@ -79,31 +79,35 @@ describe('authorize: Role × Action 粗筛', () => {
     expect(d.reason).toMatch(/role_cannot_perform_action/);
   });
 
-  it('intern 不能 sign_off(需督导)', () => {
+  it('clinic_admin 默认无法 view phi_full(严格合规默认 — 需 access_profile patch)', () => {
     const d = authorize(
-      { orgType: 'counseling', role: 'intern', userId: 'u' },
-      'sign_off',
+      { orgType: 'counseling', role: 'clinic_admin', userId: 'u' },
+      'view',
       resource('phi_full', CLIENT_ID),
       { allowedClientIds: [CLIENT_ID] },
     );
     expect(d.allowed).toBe(false);
-    expect(d.reason).toMatch(/role_cannot_perform_action/);
+    expect(d.reason).toMatch(/role_data_class_not_allowed/);
   });
 
-  it('receptionist 可以 view(预约本)但不能 edit 临床', () => {
-    const view = authorize(
-      { orgType: 'counseling', role: 'receptionist', userId: 'u' },
+  it('clinic_admin 可以 view phi_summary(摘要级)', () => {
+    const d = authorize(
+      { orgType: 'counseling', role: 'clinic_admin', userId: 'u' },
       'view',
-      resource('aggregate'),
+      resource('phi_summary', CLIENT_ID),
+      { allowedClientIds: [CLIENT_ID] },
     );
-    expect(view.allowed).toBe(true);
+    expect(d.allowed).toBe(true);
+  });
 
-    const edit = authorize(
-      { orgType: 'counseling', role: 'receptionist', userId: 'u' },
-      'edit',
+  it('counselor 可以 view phi_full(自己的客户)', () => {
+    const d = authorize(
+      { orgType: 'counseling', role: 'counselor', userId: 'u' },
+      'view',
       resource('phi_full', CLIENT_ID),
+      { allowedClientIds: [CLIENT_ID] },
     );
-    expect(edit.allowed).toBe(false);
+    expect(d.allowed).toBe(true);
   });
 
   it('supervisor 可以 sign_off', () => {
