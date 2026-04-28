@@ -1,11 +1,18 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { X, Sparkles, FileText } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { X, Sparkles, FileText, CheckCircle2, ArrowRight } from 'lucide-react';
 import { DEFAULT_TRIAGE_CONFIG } from '@psynote/shared';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
-import type { TriageCandidateRow } from '../../../api/useResearchTriage';
+import { useToast } from '../../../shared/components';
+import {
+  useCreateFollowupEpisode,
+  type TriageCandidateRow,
+} from '../../../api/useResearchTriage';
+import { useCrisisCase, useCrisisCaseByEpisode } from '../../../api/useCrisisCase';
 import { TriageActionBar } from './TriageActionBar';
+import { CrisisChecklistPanel } from '../../counseling/components/CrisisChecklistPanel';
 
 interface ResultDetail {
   id: string;
@@ -18,9 +25,15 @@ interface ResultDetail {
 }
 
 /**
- * Right-pane detail for a selected triage row. Shows basic info, total
- * score, AI recommendations, and the TriageActionBar. Fetches the full
- * result only when we have a resultId (manual candidates may not).
+ * Right-pane detail for a selected triage row.
+ *
+ * Phase J: 双模视图.
+ *   - 默认: header + 基本信息 / AI 解读 / AI 建议 + TriageActionBar (4 按钮)
+ *   - 危机模式 (crisis_candidate accepted, 有关联 episode 和 crisisCase):
+ *       compact header + CrisisChecklistPanel inline (清单 5 步 + 提交督导 + 签字)
+ *       已结案 (stage='closed') 时顶部显示绿色 banner + "开后续咨询 episode" 按钮
+ *   - 切换源: row.resolvedRefType + row.resolvedRefId (db 反查) 或 onCrisisStarted
+ *     上抛的临时 episodeId (本次 accept 立即生效, 等 list refetch 后被 row 字段覆盖)
  */
 export function TriageDetailPanel({
   row,
@@ -32,10 +45,41 @@ export function TriageDetailPanel({
   onActionDone: () => void;
 }) {
   const orgId = useAuthStore((s) => s.currentOrgId);
+  const navigate = useNavigate();
+  const { toast } = useToast();
+  const createFollowup = useCreateFollowupEpisode();
+
+  // Phase J: 接 ActionBar 上抛的 episodeId (本次刚 accept 立即生效).
+  // row reload 完成后会被 row.resolvedRefId (crisisCaseId) 覆盖.
+  const [freshCrisisEpisodeId, setFreshCrisisEpisodeId] = useState<string | null>(null);
+  useEffect(() => {
+    setFreshCrisisEpisodeId(null);
+  }, [row?.resultId, row?.candidateId]);
+
+  // 两条 lookup 路径:
+  //   1. row 持久化: crisis_candidate accepted → resolvedRefType='crisis_case',
+  //      resolvedRefId=crisisCaseId (workflow.routes.ts crisis 分支 stamp 的)
+  //      → 用 useCrisisCase(crisisCaseId) 直接拿 case (含 episodeId 字段)
+  //   2. ActionBar 上抛: 本次 accept 拿到的 episodeId
+  //      → 用 useCrisisCaseByEpisode(episodeId) 反查
+  // 先 row 后 fresh (持久化优先, refresh 安全).
+  const rowCrisisCaseId =
+    row?.candidateKind === 'crisis_candidate' &&
+    row?.resolvedRefType === 'crisis_case' &&
+    row?.resolvedRefId
+      ? row.resolvedRefId
+      : null;
+  const { data: crisisFromRow } = useCrisisCase(rowCrisisCaseId);
+  const { data: crisisFromFresh } = useCrisisCaseByEpisode(
+    rowCrisisCaseId ? null : freshCrisisEpisodeId,
+  );
+  const crisisCase = crisisFromRow ?? crisisFromFresh ?? null;
+  const crisisEpisodeId = crisisCase?.episodeId ?? null;
+
   const resultQuery = useQuery({
     queryKey: ['assessment-result', orgId, row?.resultId],
     queryFn: () => api.get<ResultDetail>(`/orgs/${orgId}/results/${row!.resultId}`),
-    enabled: !!orgId && !!row?.resultId,
+    enabled: !!orgId && !!row?.resultId && !crisisCase, // 危机模式不需要 result 详情
   });
 
   if (!row) {
@@ -45,6 +89,87 @@ export function TriageDetailPanel({
       </div>
     );
   }
+
+  // Phase J 危机模式分支 -----------------------------------------------------
+  if (crisisCase && crisisEpisodeId) {
+    const isClosed = crisisCase.stage === 'closed';
+    return (
+      <div className="bg-white border border-slate-200 rounded-2xl h-full flex flex-col overflow-hidden">
+        {/* Compact header */}
+        <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2 flex-shrink-0">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-bold text-slate-900 truncate">
+                {row.userName ?? '(匿名来访者)'}
+              </h3>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-100 text-red-700 font-semibold">
+                危机
+              </span>
+              {row.totalScore != null && (
+                <span className="text-[11px] text-slate-500">总分 {row.totalScore}</span>
+              )}
+            </div>
+            <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+              {row.assessmentTitle ?? '—'}
+              <span className="ml-2">{new Date(row.createdAt).toLocaleString('zh-CN')}</span>
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onCleared}
+            className="text-slate-400 hover:text-slate-600 p-1"
+            aria-label="关闭详情"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Closed banner */}
+        {isClosed && row.userId && (
+          <div className="px-4 py-2.5 bg-emerald-50 border-b border-emerald-100 flex items-center gap-3 flex-shrink-0">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+            <div className="flex-1 text-xs text-emerald-800">
+              <div className="font-medium">危机案件已结案</div>
+              <div className="text-emerald-700 mt-0.5">
+                如客户需要后续治疗, 可创建一个新的随访 episode
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  const ep = await createFollowup.mutateAsync({
+                    clientId: row.userId!,
+                    sourceCrisisCaseId: crisisCase.id,
+                  });
+                  toast('已创建后续咨询 episode', 'success');
+                  navigate(`/episodes/${ep.id}`);
+                } catch (err) {
+                  toast((err as Error).message || '创建失败', 'error');
+                }
+              }}
+              disabled={createFollowup.isPending}
+              className="flex items-center gap-1 text-xs bg-white border border-emerald-300 text-emerald-700 px-2.5 py-1 rounded-lg hover:bg-emerald-50 disabled:opacity-50 flex-shrink-0"
+            >
+              {createFollowup.isPending ? '创建中…' : '+ 开后续咨询 episode'}
+              <ArrowRight className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {/* CrisisChecklistPanel inline. flex-1 min-h-0 让其内部 overflow-y-auto 生效. */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <CrisisChecklistPanel
+            crisisCase={crisisCase}
+            episodeId={crisisEpisodeId}
+            clientId={row.userId ?? ''}
+            clientName={row.userName ?? undefined}
+          />
+        </div>
+      </div>
+    );
+  }
+  // ------------------------------------------------------------------------
 
   const level = row.riskLevel
     ? DEFAULT_TRIAGE_CONFIG.levels.find((l) => l.key === row.riskLevel)
@@ -141,7 +266,15 @@ export function TriageDetailPanel({
       </div>
 
       {/* Action bar */}
-      <TriageActionBar row={row} onActionDone={onActionDone} />
+      <TriageActionBar
+        row={row}
+        onActionDone={onActionDone}
+        onCrisisStarted={(episodeId) => {
+          // Phase J: 接 ActionBar 上抛, 立即切到 inline 危机视图. 等 row reload
+          // 拿到 row.resolvedRefId 后, derive 优先用持久化字段, 不依赖此 state.
+          setFreshCrisisEpisodeId(episodeId);
+        }}
+      />
     </div>
   );
 }

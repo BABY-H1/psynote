@@ -35,6 +35,13 @@ export interface TriageCandidateRow {
   suggestion: string | null;
   priority: string | null;
   latestEpisodeId: string | null;
+  /**
+   * Phase J: candidate accept 后关联的实体 ref. crisis_candidate accepted →
+   * resolvedRefType='care_episode' + resolvedRefId=episodeId, TriageDetailPanel
+   * 用 useCrisisCaseByEpisode 反查并 inline 渲染清单.
+   */
+  resolvedRefType: string | null;
+  resolvedRefId: string | null;
   createdAt: string;
 }
 
@@ -142,6 +149,34 @@ export function useLazyCreateCandidate() {
       // candidate_pool 变了, 让 triage 列表跟 workflow candidate 列表都重取
       qc.invalidateQueries({ queryKey: ['triage-candidates'] });
       qc.invalidateQueries({ queryKey: ['candidate-pool'] });
+    },
+  });
+}
+
+/**
+ * Phase J: 危机案件结案后, 给客户开后续咨询 episode 的快捷入口.
+ * 复用现有 POST /api/orgs/:orgId/episodes 端点, body 标记 interventionType='followup'.
+ * 不去重 (alpha): 用户重复点会创建多个 followup episode, post-alpha 加反查.
+ */
+export function useCreateFollowupEpisode() {
+  const qc = useQueryClient();
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useMutation({
+    mutationFn: ({ clientId, sourceCrisisCaseId }: {
+      clientId: string;
+      sourceCrisisCaseId?: string;
+    }) => api.post<{ id: string }>(
+      `/orgs/${orgId}/episodes`,
+      {
+        clientId,
+        chiefComplaint: sourceCrisisCaseId
+          ? '危机案件结案后的随访咨询'
+          : '后续咨询',
+        interventionType: 'followup',
+      },
+    ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['episodes'] });
     },
   });
 }

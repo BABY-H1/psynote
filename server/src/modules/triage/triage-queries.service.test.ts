@@ -118,6 +118,34 @@ describe('listTriageCandidates', () => {
     expect(rows[0].candidateId).toBe('c1');
   });
 
+  it('Phase J: 暴露 resolvedRefType + resolvedRefId 让 detail panel 能 inline 渲染危机清单', async () => {
+    dbResults.push([
+      {
+        resultId: 'r11',
+        userId: 'u11',
+        userName: '张三',
+        assessmentId: 'a1',
+        assessmentTitle: 'PHQ-9',
+        assessmentType: 'screening',
+        riskLevel: 'level_4',
+        totalScore: '24',
+        batchId: null,
+        createdAt: new Date(),
+        candidateId: 'c-crisis',
+        candidateStatus: 'accepted',
+        candidateKind: 'crisis_candidate',
+        suggestion: '危机',
+        priority: 'urgent',
+        latestEpisodeId: null,
+        resolvedRefType: 'care_episode',
+        resolvedRefId: 'ep-c1',
+      },
+    ]);
+    const rows = await listTriageCandidates('org-1', {});
+    expect(rows[0].resolvedRefType).toBe('care_episode');
+    expect(rows[0].resolvedRefId).toBe('ep-c1');
+  });
+
   it('accepts optional batchId filter without error', async () => {
     dbResults.push([]);
     const rows = await listTriageCandidates('org-1', { batchId: 'b1' });

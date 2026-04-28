@@ -28,13 +28,24 @@ import type { TriageCandidateRow } from '../../../api/useResearchTriage';
  * 现在改成 ensure-then-act: 用户点击时如果 candidateId 缺失, 先 POST
  * /triage/results/:id/candidate 把 result 懒转成 candidate_pool 行
  * (sourceRuleId=null), 再立即走原 accept/dismiss 流程. 中间步骤对用户不可见.
+ *
+ * Phase J: "开危机处置" 路径不再 navigate 到 EpisodeDetail; 改成上抛
+ * onCrisisStarted(episodeId), 让 TriageDetailPanel inline 渲染 CrisisChecklistPanel.
+ * "转个案" / "课程·团辅" 路径仍 navigate 到现位置.
  */
 export function TriageActionBar({
   row,
   onActionDone,
+  onCrisisStarted,
 }: {
   row: TriageCandidateRow;
   onActionDone: () => void;
+  /**
+   * Phase J: crisis_candidate accept 完成后立即上抛, 让 detail panel 切到
+   * inline 危机清单视图. 等下一次 row reload 完成后, row.resolvedRefId 也会
+   * 带上同样的 episodeId, 两条信息源可冗余覆盖.
+   */
+  onCrisisStarted?: (episodeId: string) => void;
 }) {
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -92,18 +103,18 @@ export function TriageActionBar({
       const result = await accept.mutateAsync({ id: candidateId, resolvedRefType });
       toast('已接受候选', 'success');
       onActionDone();
-      // Navigate to the newly created entity when the server returns a ref.
-      // - crisis_case: 跳 /episodes/:id?mode=crisis (危机清单)
-      // - care_episode: 跳 /episodes/:id (普通个案)
-      // - course_enrollment: 服务端目前只 stamp, 不跳 (用户在 delivery 自己选)
       const ref = result as unknown as { resolvedRefType?: string; resolvedRefId?: string; episodeId?: string };
+      // Phase J: crisis 路径留在研判中心, 上抛 episodeId 让 detail panel
+      // 切到 CrisisChecklistPanel. 不再 navigate 到 /episodes/:id?mode=crisis.
       if (ref.resolvedRefType === 'crisis_case') {
         const episodeId = ref.episodeId || ref.resolvedRefId;
-        if (episodeId) navigate(`/episodes/${episodeId}?mode=crisis`);
+        if (episodeId && onCrisisStarted) onCrisisStarted(episodeId);
       } else if (ref.resolvedRefType === 'care_episode') {
+        // 非危机的"转个案"仍跳 EpisodeDetail (常规咨询工作台)
         const episodeId = ref.episodeId || ref.resolvedRefId;
         if (episodeId) navigate(`/episodes/${episodeId}`);
       }
+      // course_enrollment: 服务端 stamp 后不跳 (用户在 delivery 自己选具体课程)
     } catch (err) {
       toast((err as Error).message || '操作失败', 'error');
     }

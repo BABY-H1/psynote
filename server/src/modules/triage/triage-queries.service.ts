@@ -67,6 +67,13 @@ export interface TriageCandidateRow {
   suggestion: string | null;
   priority: string | null;
   latestEpisodeId: string | null;
+  /**
+   * Phase J: 候选 accept 后关联到的实体类型/ID. 用于在研判分流详情面板
+   * inline 渲染危机清单 (crisis_candidate accepted → resolvedRefType='care_episode',
+   * resolvedRefId=episodeId, 用 useCrisisCaseByEpisode 反查清单).
+   */
+  resolvedRefType: string | null;
+  resolvedRefId: string | null;
   createdAt: Date;
 }
 
@@ -156,6 +163,10 @@ async function queryScreening(
       suggestion: candidatePool.suggestion,
       priority: candidatePool.priority,
       latestEpisodeId: assessmentResults.careEpisodeId,
+      // Phase J: 暴露 candidate accept 后关联的 ref, 让 detail panel
+      // 能 inline 渲染危机清单或跳转到关联 episode.
+      resolvedRefType: candidatePool.resolvedRefType,
+      resolvedRefId: candidatePool.resolvedRefId,
     })
     .from(assessmentResults)
     .innerJoin(assessments, eq(assessments.id, assessmentResults.assessmentId))
@@ -187,6 +198,8 @@ async function queryScreening(
     suggestion: r.suggestion ?? null,
     priority: r.priority ?? null,
     latestEpisodeId: r.latestEpisodeId,
+    resolvedRefType: r.resolvedRefType ?? null,
+    resolvedRefId: r.resolvedRefId ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
   }));
 }
@@ -225,6 +238,9 @@ async function queryManual(
       priority: candidatePool.priority,
       status: candidatePool.status,
       createdAt: candidatePool.createdAt,
+      // Phase J: 同 queryScreening, 暴露 resolved ref 给 detail panel.
+      resolvedRefType: candidatePool.resolvedRefType,
+      resolvedRefId: candidatePool.resolvedRefId,
     })
     .from(candidatePool)
     .leftJoin(users, eq(users.id, candidatePool.clientUserId))
@@ -248,6 +264,8 @@ async function queryManual(
     suggestion: r.suggestion,
     priority: r.priority,
     latestEpisodeId: null,
+    resolvedRefType: r.resolvedRefType ?? null,
+    resolvedRefId: r.resolvedRefId ?? null,
     createdAt: r.createdAt instanceof Date ? r.createdAt : new Date(r.createdAt),
   }));
 }
