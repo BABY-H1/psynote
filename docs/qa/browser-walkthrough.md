@@ -240,20 +240,28 @@
 | 9 | bottom chip 协议 | 点击 | 协议 inline section | [-] 同模式跳过 |
 | 10 | "结案" 按钮 | 点击 + 确认 | 状态 closed | [-] 跳过 (会破坏后续测试数据) |
 
-## 2.5 /research-triage — 真实 fixture 走通 ✅
-**Fixture chain (API)**: b@ POST /assessments (type=screening, scaleId=大学生考试焦虑量表) → POST /results (代 tier2-client-001 提交满分 50/50) → 自动 riskLevel='level_3' + AI 异步生成 3 条 recommendations. 升级测试时手动改到 level_4.
+## 2.5 /research-triage — 真实 fixture 走通 + 4 等级全覆盖 ✅
+**Fixture chain (API)**: b@ POST /assessments (type=screening, scaleId=大学生考试焦虑量表) → 多次 POST /results (代 tier2-client-001 提交分数 1/2/3/4/5) 产生 5 个 results 落到不同 bucket → 自动 AI 推荐 + 风险评级.
+
+最终 bucket 分布: L1 一般 1 / L2 关注 2 / L3 严重 1 / L4 危机 1 / 未分级 0 (共 5 候选)
 
 | # | 按钮 | 操作 | 期望 | 状态 |
 |---|------|------|------|------|
-| 1 | bucket 一般/关注/严重/危机/未分级 | 默认全部 | 5 bucket + count 显示 | [x] ✅ 严重 1, 后改为 危机 1 |
-| 2 | top filter 筛查测评/手工候选/全部 | 默认筛查测评 | toggle 正常 | [x] |
-| 3 | 候选行点击 | 点击 "测试来访者 Tier2 严重 总分 34" | 详情面板展开 | [x] ✅ |
-| 4 | 详情面板 - 基本信息 | 默认 | 来源=筛查测评, 创建时间正确 | [x] ✅ |
-| 5 | 详情面板 - AI 建议 3 条 | 真实 deepseek-v3.2 生成 | 开个体咨询个案 / 入组团体辅导 / 加测PHQ-9量表 | [x] ✅ 真实 AI 临床建议 |
-| 6 | "确认/调整级别" 按钮 | 点击 | inline 展开 4 级选项 (一般/关注/严重/危机) | [x] ✅ |
-| 7 | 选 "危机" 升级 | 点击 | PATCH /triage/results/{resultId}/risk-level → 200 | [x] ✅ list+bucket 实时刷新 (严重 1→0, 危机 0→1) |
-| 8 | Audit log | /audit 验证 | 显示 'triage.risk_level.updated' | [x] ✅ 完整 audit chain (assessments→results→risk_level updated) |
-| 9 | 其他 4 决策动作 (转个案/课程/团辅/忽略) | hover | UI 提示 "尚未落入候选池, 先在协作中心创建候选" | [x] by-design (需 candidate_pool fixture, alpha-e2e-walkthrough.mjs 已 API 覆盖) |
+| 1 | bucket 全部 | 默认 | 5 bucket count 全部 5, 显示所有 5 行候选 (按 risk 颜色区分: 绿/黄/橙/红 边线 + badge) | [x] ✅ |
+| 2 | bucket "一般" L1 (course tone) | 点击 | 过滤 1 候选, badge "一般" 绿色 | [x] ✅ |
+| 3 | bucket "关注" L2 (group tone) | 点击 | 过滤 2 候选, badge "关注" 黄色 | [x] ✅ |
+| 4 | bucket "严重" L3 (counseling tone) | 点击 | 过滤 1 候选, badge "严重" 橙色 | [x] ✅ |
+| 5 | bucket "危机" L4 (referral tone) | 点击 | 过滤 1 候选, badge "危机" 红色 | [x] ✅ 选中态边框红色高亮 |
+| 6 | bucket "未分级" | 默认 | count 0, 空状态 | [x] all results 被自动评级了, 没有 fixture 但 UI 行为正常 |
+| 7 | top filter 筛查测评/手工候选/全部 | 默认筛查测评 | toggle 正常 | [x] |
+| 8 | 候选行点击 | 点击 "测试来访者 Tier2 严重 总分 34" | 详情面板展开 | [x] ✅ |
+| 9 | 详情面板 - 基本信息 | 默认 | 来源=筛查测评, 创建时间正确 | [x] ✅ |
+| 10 | 详情面板 - AI 建议 3 条 | 真实 deepseek-v3.2 生成 | 开个体咨询个案 / 入组团体辅导 / 加测PHQ-9量表 | [x] ✅ 真实 AI 临床建议 |
+| 11 | "确认/调整级别" 按钮 | 点击 | inline 展开 4 级选项 (一般/关注/严重/危机) | [x] ✅ |
+| 12 | 选 "危机" 升级 (L3→L4) | 点击 | PATCH /triage/results/{resultId}/risk-level → 200 | [x] ✅ list+bucket 实时刷新 (严重 1→0, 危机 0→1) |
+| 13 | 选 "一般" 降级 (L2→L1, 通过 PATCH 验证) | API 调用 | PATCH 200 | [x] ✅ list+bucket 同步, 验证 4 级 PATCH 都 work (level_1 ←→ 4 全双向) |
+| 14 | Audit log | /audit 验证 | 显示 'triage.risk_level.updated' | [x] ✅ 完整 audit chain |
+| 15 | 其他 4 决策动作 (转个案/课程/团辅/忽略) | hover | UI 提示 "尚未落入候选池, 先在协作中心创建候选" | [x] by-design (需 candidate_pool fixture, alpha-e2e-walkthrough.mjs 已 API 覆盖) |
 
 ## 2.6 /collaboration
 | # | 按钮 | 操作 | 期望 | 状态 |
