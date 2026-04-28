@@ -58,10 +58,23 @@ const PDF_BYTES = Buffer.from(
   'utf-8',
 );
 
-async function uploadPdf(token, orgId) {
+// Tiny mp3 silence frame (~96 bytes) — just an MP3 magic + zero frame
+// Browser will load it but it's silent. Enough to verify upload + render.
+const MP3_BYTES = Buffer.concat([
+  Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]), // ID3v2 header
+  Buffer.from([0xff, 0xfb, 0x90, 0x00]), // MP3 frame sync
+  Buffer.alloc(80, 0), // padding
+]);
+
+// Tiny mp4 — minimal box structure that browsers refuse to play but the
+// upload + endpoint roundtrip + DOM rendering still works. We don't need
+// real video for the test; we're verifying the pipeline.
+const MP4_BYTES = Buffer.from('00000020667479706d703432000000006d703432697368', 'hex');
+
+async function uploadFile(token, orgId, bytes, fileName, mimeType) {
   const fd = new FormData();
-  const blob = new Blob([PDF_BYTES], { type: 'application/pdf' });
-  fd.append('file', blob, 'alpha-test-handout.pdf');
+  const blob = new Blob([bytes], { type: mimeType });
+  fd.append('file', blob, fileName);
   const res = await fetch(`${BASE}/api/orgs/${orgId}/upload`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}` },
@@ -73,6 +86,10 @@ async function uploadPdf(token, orgId) {
   if (res.status !== 201) return { ok: false, status: res.status, body: json };
   return { ok: true, body: json };
 }
+
+const uploadPdf = (token, orgId) => uploadFile(token, orgId, PDF_BYTES, 'alpha-test-handout.pdf', 'application/pdf');
+const uploadMp3 = (token, orgId) => uploadFile(token, orgId, MP3_BYTES, 'alpha-test-relaxation.mp3', 'audio/mpeg');
+const uploadMp4 = (token, orgId) => uploadFile(token, orgId, MP4_BYTES, 'alpha-test-intro.mp4', 'video/mp4');
 
 (async function main() {
   // tier1-counseling org (b@ org_admin)
@@ -136,6 +153,40 @@ async function uploadPdf(token, orgId) {
   });
   if (!block.ok) { fail('create content-block failed', block); process.exit(1); }
   ok(`content-block created: ${block.body.id.slice(0, 8)}…`);
+
+  step('4b. Upload audio (mp3) + create audio content block');
+  const upMp3 = await uploadMp3(adminToken, orgId);
+  if (!upMp3.ok) fail('mp3 upload failed', upMp3);
+  else {
+    ok(`MP3 uploaded → ${upMp3.body.url} (${upMp3.body.fileSize} bytes, type=${upMp3.body.fileType})`);
+    const audioBlock = await http('POST', `/api/orgs/${orgId}/content-blocks`, {
+      token: adminToken,
+      body: {
+        parentType: 'course', parentId: chapterId, blockType: 'audio',
+        visibility: 'participant', sortOrder: 1,
+        payload: { src: upMp3.body.url, technique: 'breathing', narrator: 'Alpha 测试', caption: '一段简短的呼吸引导音频（端到端测试用）' },
+      },
+    });
+    if (audioBlock.ok) ok(`audio block created: ${audioBlock.body.id.slice(0, 8)}…`);
+    else fail('audio content-block create failed', audioBlock);
+  }
+
+  step('4c. Upload video (mp4) + create video content block');
+  const upMp4 = await uploadMp4(adminToken, orgId);
+  if (!upMp4.ok) fail('mp4 upload failed', upMp4);
+  else {
+    ok(`MP4 uploaded → ${upMp4.body.url} (${upMp4.body.fileSize} bytes, type=${upMp4.body.fileType})`);
+    const videoBlock = await http('POST', `/api/orgs/${orgId}/content-blocks`, {
+      token: adminToken,
+      body: {
+        parentType: 'course', parentId: chapterId, blockType: 'video',
+        visibility: 'participant', sortOrder: 2,
+        payload: { src: upMp4.body.url, caption: '课程引言视频（端到端测试用）' },
+      },
+    });
+    if (videoBlock.ok) ok(`video block created: ${videoBlock.body.id.slice(0, 8)}…`);
+    else fail('video content-block create failed', videoBlock);
+  }
 
   step('5. Publish course');
   const pub = await http('POST', `/api/orgs/${orgId}/courses/${courseId}/publish`, { token: adminToken });

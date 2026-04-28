@@ -689,6 +689,7 @@
 | FINDING-001 | architectural | 文档化, 不修 | 团辅/课程 instance wizard 无附件字段; "宣传海报" 仅本地下载. 附件流是模板层 `courseContentBlocks`/scheme session blocks (video/audio/pdf 都已可上传可在 Portal 渲染). 孤儿表 `course_attachments` 应清理 (alpha 后) |
 | BUG-012 | BLOCKER | 已修(待 commit) | Portal CourseReader 整体不可用: 3 个 rejectClient hook 阻断 client GET. 修法: 新建 `/client/courses/:id` portal 端点 + 移除 content-block + enrollment-response 的 hook 级 reject (改成 GET handler 内联 client 过滤) + CourseReader 改用新 hook. 浏览器验证 PDF 章节渲染 + 下载链接可用 ✅ |
 | BUG-013 | BLOCKER | 已修(待 commit) | Caddy /uploads 路由缺失, 所有上传文件返回 SPA index.html. 修法: Caddyfile 加 `handle /uploads/* { reverse_proxy app:4000 }`. Fastify 已用 @fastify/static 服务该前缀, 一行 Caddy 配置即可. 验证 curl -sI 返回 application/pdf 534 字节 ✅ |
+| ENH-002 | enhancement | 已实施(待 commit) | PDF 内嵌 iframe 预览 + 视频/音频端到端验证. PdfBlockView 根据 payload.mode='view' 内嵌 iframe (浏览器原生 PDF 查看器) + 提供"新窗口打开"+"下载". E2E 脚本扩展 4b/4c 步上传 mp3/mp4 + 创建 audio/video content block. 浏览器验证 tier2-client-001 视角 chapter 渲染 1 iframe + 1 video + 1 audio (controls), 0 console errors ✅ |
 
 修了 2 BLOCKER + 6 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008/009/010/011). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 
