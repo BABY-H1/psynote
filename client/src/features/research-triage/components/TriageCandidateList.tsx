@@ -73,7 +73,10 @@ export function TriageCandidateList({
       </div>
       <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
         {rows.map((row) => {
-          const k = row.resultId ?? row.candidateId ?? '';
+          // 复合 key — 必须跟 ResearchTriagePage.keyOf 一致, 否则 selected 比较
+          // 永远 false. 一个 result 可能对应多个 candidate (course/episode 等),
+          // 用 resultId:candidateId 区分.
+          const k = `${row.resultId ?? '_'}:${row.candidateId ?? '_'}`;
           const selected = k === selectedKey;
           const color = row.riskLevel ? LEVEL_COLOR[row.riskLevel] : '#cbd5e1';
           const label = row.riskLevel ? LEVEL_LABEL[row.riskLevel] ?? row.riskLevel : '未分级';

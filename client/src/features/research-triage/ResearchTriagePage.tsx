@@ -121,6 +121,16 @@ export function ResearchTriagePage() {
   );
 }
 
+/**
+ * 复合 key — 防止"一点选中两行"的 bug.
+ *
+ * 当一个 result 同时有多个 candidate (e.g. 既有 course_candidate 又有
+ * episode_candidate) 时, queryScreening LEFT JOIN candidate_pool 会返回
+ * 多行, 每行 resultId 相同但 candidateId 不同. 之前 `resultId ?? candidateId`
+ * 优先用 resultId, 两行共享同一个 selectedKey → 同时高亮.
+ *
+ * 用 resultId:candidateId 复合键, 每行都唯一.
+ */
 function keyOf(row: TriageCandidateRow): string {
-  return row.resultId ?? row.candidateId ?? '';
+  return `${row.resultId ?? '_'}:${row.candidateId ?? '_'}`;
 }
