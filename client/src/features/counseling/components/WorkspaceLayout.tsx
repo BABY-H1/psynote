@@ -50,11 +50,20 @@ export function WorkspaceLayout({
     };
   }, [dragging, minWidth]);
 
+  /*
+   * 之前 root 用 `h-[calc(100vh-5rem)]` 硬编码 viewport 减 shell header,
+   * 但实际 main 高度因 AppShell p-6 + ServiceDetailLayout header mb-6 多
+   * 减 ~72px, 导致 main 触发 30px 溢出 (用户看到整页滚动条).
+   *
+   * 改成 h-full + min-h-0, 让父级 (ServiceDetailLayout 加上 flex-1 min-h-0)
+   * 决定可用高度. 三栏内部 overflow-y-auto 各自滚动, overflow-x-hidden
+   * 防止用户拖窄某栏时长文本撑出横向 scroll.
+   */
   return (
-    <div ref={containerRef} className="flex h-[calc(100vh-5rem)] select-none">
+    <div ref={containerRef} className="flex h-full min-h-0 select-none">
       {/* Left panel */}
       <div
-        className="flex-shrink-0 overflow-y-auto border-r border-slate-200 bg-white"
+        className="flex-shrink-0 overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-white"
         style={{ width: leftWidth }}
       >
         {left}
@@ -67,7 +76,7 @@ export function WorkspaceLayout({
       />
 
       {/* Center panel */}
-      <div className="flex-1 min-w-0 overflow-y-auto bg-slate-50">
+      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50">
         {center}
       </div>
 
@@ -79,7 +88,7 @@ export function WorkspaceLayout({
 
       {/* Right panel */}
       <div
-        className="flex-shrink-0 overflow-y-auto border-l border-slate-200 bg-white"
+        className="flex-shrink-0 overflow-y-auto overflow-x-hidden border-l border-slate-200 bg-white"
         style={{ width: rightWidth }}
       >
         {right}

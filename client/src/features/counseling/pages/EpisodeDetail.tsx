@@ -162,6 +162,10 @@ export function EpisodeDetail() {
   return (
     <ServiceDetailLayout
       variant="workspace"
+      // h-full flex flex-col 让 ServiceDetailLayout 占满 main 可用高度,
+      // header flex-shrink-0 + body flex-1 min-h-0 锁住三栏 viewport.
+      // 之前 calc(100vh-5rem) 跟 main 实际高度有 ~30px 偏差导致整页滚动.
+      className="h-full flex flex-col"
       title={episode.client?.name || '未知来访者'}
       status={mapEpisodeStatus(episode.status)}
       statusText={tone.text}

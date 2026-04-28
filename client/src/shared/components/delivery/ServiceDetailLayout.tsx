@@ -88,8 +88,9 @@ export function ServiceDetailLayout(props: Props) {
 
   return (
     <div className={className}>
-      {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      {/* Header — flex-shrink-0 lets workspace-variant body get a proper
+          flex-1 min-h-0 bounding box without header content stealing space. */}
+      <div className="flex items-start justify-between mb-6 flex-shrink-0">
         <div className="flex items-center gap-3 min-w-0">
           {onBack && (
             <button
@@ -126,8 +127,11 @@ export function ServiceDetailLayout(props: Props) {
 
       {/* Body */}
       {props.variant === 'workspace' ? (
-        // Workspace variant — caller renders WorkspaceLayout, no tab bar
-        <>{children}</>
+        // Workspace variant — caller renders WorkspaceLayout. wrap in flex-1
+        // min-h-0 so the WorkspaceLayout's h-full gets a real bounding box
+        // (avoids 30px overflow that triggered an outer page scroll). Caller
+        // should pass `className="h-full flex flex-col"` for this to work.
+        <div className="flex-1 min-h-0">{children}</div>
       ) : (
         // Tabs variant
         <>

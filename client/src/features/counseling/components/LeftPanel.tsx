@@ -39,6 +39,13 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
   const { data: allEpisodes } = useEpisodes({ clientId });
   const [viewingEpisodeId, setViewingEpisodeId] = useState(episodeId);
 
+  // 5 sections 各自折叠状态, 持久化到 localStorage 跨 episode 共享偏好.
+  const [sessionCollapsed, toggleSession] = useSectionCollapse('session');
+  const [assessmentCollapsed, toggleAssessment] = useSectionCollapse('assessment');
+  const [planCollapsed, togglePlan] = useSectionCollapse('plan');
+  const [simulateCollapsed, toggleSimulate] = useSectionCollapse('simulate');
+  const [superviseCollapsed, toggleSupervise] = useSectionCollapse('supervise');
+
   const { data: sessionNotes } = useSessionNotes({ careEpisodeId: viewingEpisodeId });
   const { data: assessmentResults } = useResults({ userId: clientId });
   const { data: referrals } = useReferrals(episodeId);
@@ -136,7 +143,15 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
           const totalCount = (sessionNotes?.length || 0) + noteDrafts.length;
           return (
             <>
-              <SectionHeader icon={<FileText className="w-3.5 h-3.5" />} title="会谈记录" count={totalCount} />
+              <SectionHeader
+                icon={<FileText className="w-3.5 h-3.5" />}
+                title="会谈记录"
+                count={totalCount}
+                sectionKey="session"
+                collapsed={sessionCollapsed}
+                onToggle={toggleSession}
+              />
+              {!sessionCollapsed && (
               <div className="px-3 pb-2 space-y-1">
                 {noteDrafts.length === 0 && (!sessionNotes || sessionNotes.length === 0) ? (
                   <div className="text-xs text-slate-400 py-2">暂无会谈记录</div>
@@ -184,11 +199,20 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
                   </>
                 )}
               </div>
+              )}
             </>
           );
         })()}
 
-        <SectionHeader icon={<BarChart3 className="w-3.5 h-3.5" />} title="评估记录" count={assessmentResults?.length} />
+        <SectionHeader
+          icon={<BarChart3 className="w-3.5 h-3.5" />}
+          title="评估记录"
+          count={assessmentResults?.length}
+          sectionKey="assessment"
+          collapsed={assessmentCollapsed}
+          onToggle={toggleAssessment}
+        />
+        {!assessmentCollapsed && (
         <div className="px-3 pb-2 space-y-1">
           {(!assessmentResults || assessmentResults.length === 0) ? (
             <div className="text-xs text-slate-400 py-2">暂无评估记录</div>
@@ -217,6 +241,7 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
             })
           )}
         </div>
+        )}
 
         {/*
           Phase I follow-up: 之前 plan/simulate/supervise 平铺在 "AI 对话" 区,
@@ -233,9 +258,20 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
           } as const)[targetMode];
           const filtered = (aiConversations || []).filter((c: any) => c.mode === targetMode);
           if (filtered.length === 0) return null;
+          // 同名变量避免 closure 引用问题, 把折叠 state 解到 outer
+          const collapsed = targetMode === 'plan' ? planCollapsed : targetMode === 'simulate' ? simulateCollapsed : superviseCollapsed;
+          const onToggle = targetMode === 'plan' ? togglePlan : targetMode === 'simulate' ? toggleSimulate : toggleSupervise;
           return (
             <React.Fragment key={targetMode}>
-              <SectionHeader icon={meta.icon} title={meta.label} count={filtered.length} />
+              <SectionHeader
+                icon={meta.icon}
+                title={meta.label}
+                count={filtered.length}
+                sectionKey={targetMode}
+                collapsed={collapsed}
+                onToggle={onToggle}
+              />
+              {!collapsed && (
               <div className="px-3 pb-2 space-y-1">
                 {filtered.map((conv: any) => {
                   const msgCount = (conv.messages as any[])?.length || 0;
@@ -253,6 +289,7 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
                   );
                 })}
               </div>
+              )}
             </React.Fragment>
           );
         })}
@@ -331,12 +368,69 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
   );
 }
 
-function SectionHeader({ icon, title, count }: { icon: React.ReactNode; title: string; count?: number }) {
+/*
+ * SectionHeader: 可折叠. 状态按 sectionKey 持久化到 localStorage, 跨 episode
+ * 共享偏好 (用户折叠"督导对话" 后, 其他 episode 也默认折叠).
+ *   - 不传 sectionKey: 退化为不可折叠 (跟旧版一致).
+ *   - 传 sectionKey: 显示 chevron, 点击 toggle. children 只在展开时渲染.
+ *
+ * collapsed=true → children 不渲染 (节省 DOM).
+ */
+function SectionHeader({
+  icon, title, count, sectionKey, collapsed, onToggle,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  count?: number;
+  sectionKey?: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}) {
+  const isCollapsible = !!sectionKey;
   return (
-    <div className="flex items-center gap-1.5 px-3 pt-3 pb-1">
+    <button
+      type="button"
+      onClick={isCollapsible ? onToggle : undefined}
+      className={`w-full flex items-center gap-1.5 px-3 pt-3 pb-1 text-left ${
+        isCollapsible ? 'hover:bg-slate-50 transition cursor-pointer' : 'cursor-default'
+      }`}
+    >
+      {isCollapsible && (
+        <ChevronDown
+          className={`w-3 h-3 text-slate-400 flex-shrink-0 transition-transform ${
+            collapsed ? '-rotate-90' : ''
+          }`}
+        />
+      )}
       <span className="text-slate-400">{icon}</span>
       <span className="text-xs font-medium text-slate-500">{title}</span>
       {count != null && count > 0 && <span className="text-xs text-slate-400">({count})</span>}
-    </div>
+    </button>
   );
+}
+
+/*
+ * useSectionCollapse: 持久化折叠状态. key 用 'leftpanel:section:<name>'
+ * 存 boolean. 默认全展开 (false). 用户改了就记住.
+ */
+function useSectionCollapse(name: string) {
+  const storageKey = `leftpanel:section:${name}`;
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(storageKey) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        if (next) localStorage.setItem(storageKey, '1');
+        else localStorage.removeItem(storageKey);
+      } catch {}
+      return next;
+    });
+  };
+  return [collapsed, toggle] as const;
 }
