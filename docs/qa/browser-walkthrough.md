@@ -261,7 +261,8 @@
 | 12 | 选 "危机" 升级 (L3→L4) | 点击 | PATCH /triage/results/{resultId}/risk-level → 200 | [x] ✅ list+bucket 实时刷新 (严重 1→0, 危机 0→1) |
 | 13 | 选 "一般" 降级 (L2→L1, 通过 PATCH 验证) | API 调用 | PATCH 200 | [x] ✅ list+bucket 同步, 验证 4 级 PATCH 都 work (level_1 ←→ 4 全双向) |
 | 14 | Audit log | /audit 验证 | 显示 'triage.risk_level.updated' | [x] ✅ 完整 audit chain |
-| 15 | 其他 4 决策动作 (转个案/课程/团辅/忽略) | hover | UI 提示 "尚未落入候选池, 先在协作中心创建候选" | [x] by-design (需 candidate_pool fixture, alpha-e2e-walkthrough.mjs 已 API 覆盖) |
+| 15 | 转个案 / 课程·团辅 / 忽略 (3 按钮) | DOM 检查 disabled 状态 | hasCandidate=false 时 disabled, 提示文字应清楚 | [!] BUG-007 旧提示指向已废弃的 "协作中心/待处理候选" tab, 误导用户 |
+| 16 | BUG-007 修复后再测 | 浏览器加载新 client bundle | 新提示文字显示, 解释规则引擎 + 给 workaround | [x] ✅ 已修(待 commit) — "候选池条目由工作流规则自动创建...请到「交付中心」新建个案/团辅/课程" |
 
 ## 2.6 /collaboration
 | # | 按钮 | 操作 | 期望 | 状态 |
@@ -445,6 +446,22 @@
 - 浏览器走查这几行直接标 [x] verified clean (静态分析阶段已确认)
 
 
+### BUG-007 — 研判分流提示指向已废弃的 "协作中心/待处理候选" tab
+- 严重度: **MAJOR** (UX 死循环, 用户找不到提示让做的事)
+- 触发行: Tier 2.5 #15 (TriageActionBar.tsx)
+- 复现:
+  1. b@ 进 /research-triage 选一个候选 (无 candidate_pool 行的 result)
+  2. 看到 3 按钮 (转个案/课程·团辅/忽略) 都 disabled
+  3. 底部提示: "此测评结果尚未落入候选池, 先在协作中心'待处理候选'里手动创建候选, 再回来执行动作"
+  4. 按提示去 /collaboration → 4 个 tab 是: 派单 / 临时授权 / 督导待审 / 收到的转介
+  5. **没有 "待处理候选" tab, 也没有 "手动创建候选" 按钮**
+- 根因: useWorkflow.ts L90 注释明确说"useCandidatePool removed — the old 协作中心/待处理候选 Tab has been superseded by the /research-triage workspace". 但 TriageActionBar 的提示文字 (L157) 没跟随重构更新, 引用了已经不存在的 tab.
+  - candidate_pool 行现在只能由 workflow rule engine (Phase 12+) 自动创建; alpha 上没机构配置规则, 所以这 3 按钮永远 disabled.
+- 怀疑文件: `client/src/features/research-triage/components/TriageActionBar.tsx` L157
+- 修法: 改提示文字, 反映真实情况: "候选池条目由工作流规则自动创建（机构未配置规则时不会产生）。当前可点「确认/调整级别」修改 L 等级；要直接做处置，请到「交付中心」新建个案 / 团辅 / 课程，或在右侧 AI 建议里参考下一步动作。"
+- 状态: **已修 (待 commit). 浏览器验证: hard reload 后新提示显示, 旧文案消失.**
+- 影响范围: 所有未配工作流规则的机构 (alpha 默认状态), 即 100% 的研判分流用户
+
 <!-- 模板:
 ### BUG-NNN — 一句话描述
 - 严重度: BLOCKER | MAJOR | MINOR
@@ -517,8 +534,9 @@
 | BUG-004 | MAJOR | 已修(4de974d) | ScaleDetail/CourseDetail 横向滚动 (final fix: 抛弃 -m-6, 用 flex h-full) |
 | BUG-005 | BLOCKER | 已修(2928b97) | AI course creator /orgs/null/ai 404 (aiPrefix 缺 sysadmin fallback) |
 | BUG-006 | MINOR | 已修(653ed20) | OrgAdminDashboard 5 KPI 卡只有 2 个可点 (UX 不一致) — 全部加 onClick 跳到对应 /delivery?type=* |
+| BUG-007 | MAJOR | 已修(待 commit) | 研判分流详情面板 stale 提示指向已废弃的 "协作中心/待处理候选" tab — 改为解释规则引擎 + 给 workaround |
 
-修了 2 BLOCKER + 2 MAJOR + 1 MINOR (BUG-001/002/004/005/006). 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
+修了 2 BLOCKER + 3 MAJOR + 1 MINOR (BUG-001/002/004/005/006/007). 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 
 ### Alpha 上线就绪判据 (per Phase F plan §"终止条件")
 1. ✅ Tier 1 全 pass (法律页 + 退出 + sidebar + tenant CRUD + library 6 tab 都覆盖)

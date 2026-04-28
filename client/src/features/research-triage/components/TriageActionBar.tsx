@@ -154,7 +154,16 @@ export function TriageActionBar({
       )}
       {!hasCandidate && row.resultId && (
         <p className="text-[11px] text-slate-400 mt-2">
-          提示：此测评结果尚未落入候选池，先在协作中心"待处理候选"里手动创建候选，再回来执行动作。
+          {/*
+            BUG-007 fix: 旧提示让用户去"协作中心 / 待处理候选"创建候选,
+            但那个 tab 已经在 candidate_pool 重构中移除 (见
+            useWorkflow.ts L90 注释). candidate_pool 行现在仅由 workflow
+            rule engine (Phase 12+) 自动创建; 没配规则的机构, 这些按钮
+            会一直 disabled. 改成告诉用户实际情况 + 可用的 workaround.
+          */}
+          提示：候选池条目由工作流规则自动创建（机构未配置规则时不会产生）。
+          当前可点「确认/调整级别」修改 L 等级；要直接做处置，请到「交付中心」
+          新建个案 / 团辅 / 课程，或在右侧 AI 建议里参考下一步动作。
         </p>
       )}
     </div>
