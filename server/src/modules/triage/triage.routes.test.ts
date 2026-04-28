@@ -48,7 +48,11 @@ describe('triageRoutes — route registration contract', () => {
     expect(collected.sort()).toEqual([
       'GET /buckets',
       'GET /candidates',
+      // Phase H: lazy-create candidate from a result (BUG-007 真正修复).
+      // 用户从研判分流详情面板按"转个案/课程·团辅/忽略", 前端先 POST 这个
+      // 端点确保有 candidate_pool 行, 再走 accept/dismiss 链.
       'PATCH /results/:resultId/risk-level',
+      'POST /results/:resultId/candidate',
     ]);
   });
 });

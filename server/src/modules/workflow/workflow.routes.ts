@@ -31,6 +31,7 @@ import { requireRole } from '../../middleware/rbac.js';
 import { ValidationError, NotFoundError } from '../../lib/errors.js';
 import { logAudit } from '../../middleware/audit.js';
 import * as crisisService from '../crisis/crisis-case.service.js';
+import * as episodeService from '../counseling/episode.service.js';
 import type {
   CandidateKind,
   CandidateStatus,
@@ -349,9 +350,50 @@ export async function workflowRoutes(app: FastifyInstance) {
       };
     }
 
-    // Default path (non-crisis): just flip the status. Other workflows
-    // (group/episode/course) still route the counselor to their own
-    // workbench and create their own entities there.
+    /**
+     * Phase H 扩展: episode_candidate 也原子创建 careEpisode (mirror crisis 模式).
+     *
+     * 之前这里只 stamp status='accepted', 客户端拿不到 episodeId 没法跳, 跟
+     * BUG-007 修复 (lazy-create candidate) 一起把研判分流→处置链路打通: 用户
+     * 点 "转个案" → 后端真创建 episode → 前端跳 /episodes/:id.
+     *
+     * 仅当 kind='episode_candidate' AND body.resolvedRefType='care_episode' 触发.
+     * 其他 kind (group/course) 保留现有 stamp-only 行为, 因为它们的处置去向
+     * (具体哪个团辅/课程) 还需咨询师在 workbench 选, 不能在 accept 一刀切.
+     */
+    if (existing.kind === 'episode_candidate' && body.resolvedRefType === 'care_episode') {
+      const created = await episodeService.createEpisode({
+        orgId,
+        clientId: existing.clientUserId,
+        counselorId: request.user!.id,
+        chiefComplaint: existing.suggestion || '研判分流转入',
+        currentRisk: 'level_1', // 起步默认低风险, 咨询师在 episode 里会调
+      });
+
+      const [updated] = await db
+        .update(candidatePool)
+        .set({
+          status: 'accepted',
+          handledByUserId: request.user!.id,
+          handledAt: new Date(),
+          handledNote: body.note || null,
+          resolvedRefType: 'care_episode',
+          resolvedRefId: created.id,
+        })
+        .where(and(eq(candidatePool.id, id), eq(candidatePool.orgId, orgId)))
+        .returning();
+
+      await logAudit(request, 'candidate.accepted', 'candidate_pool', id);
+      return {
+        ...updated,
+        // 客户端 navigate 用 — TriageActionBar 会据此跳 /episodes/:episodeId
+        episodeId: created.id,
+      };
+    }
+
+    // Default path (group/course/etc): just flip the status. 这些 kind 的
+    // 实际处置去向需要咨询师在 workbench 选具体团辅/课程, 不能在 accept
+    // 一刀切创建实体.
     const [updated] = await db
       .update(candidatePool)
       .set({

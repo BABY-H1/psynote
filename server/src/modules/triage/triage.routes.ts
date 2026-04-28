@@ -26,6 +26,11 @@ const PatchLevelBody = z.object({
   reason: z.string().optional(),
 });
 
+const LazyCreateCandidateBody = z.object({
+  kind: z.enum(['episode_candidate', 'group_candidate', 'course_candidate', 'crisis_candidate']),
+  priority: z.enum(['low', 'normal', 'high', 'urgent']).optional(),
+});
+
 function parseMode(value: unknown): triageService.TriageMode {
   return value === 'manual' || value === 'all' ? value : 'screening';
 }
@@ -80,6 +85,37 @@ export async function triageRoutes(app: FastifyInstance) {
 
       await logAudit(request, 'triage.risk_level.updated', 'assessment_results', resultId);
       return updated;
+    },
+  });
+
+  /**
+   * Phase H — BUG-007 真正修复: 把 result 懒转成 candidate_pool 行.
+   *
+   * 之前研判分流详情面板的"转个案/课程·团辅/忽略"按钮要求 row.candidateId
+   * 已存在, 但 candidate_pool 行只在工作流规则引擎触发时产生, 没规则
+   * 的机构里这些按钮永远 disabled. 现在前端用户点击时先 POST 这个端点
+   * 把 result 转成 candidate_pool 行 (sourceRuleId=null 标记手工创建),
+   * 再立即走 accept/dismiss 流程.
+   *
+   * 幂等: 同 (resultId, kind, status='pending') 已有候选 → 直接返回原行,
+   * 不重复 INSERT. 用户重点 "转个案" 不会产生重复.
+   */
+  app.post('/results/:resultId/candidate', {
+    preHandler: [requireRole('org_admin', 'counselor')],
+    handler: async (request, reply) => {
+      const { resultId } = request.params as { resultId: string };
+      const body = validate(LazyCreateCandidateBody, request.body);
+
+      const candidate = await triageService.lazyCreateCandidate({
+        orgId: request.org!.orgId,
+        resultId,
+        kind: body.kind,
+        priority: body.priority,
+      });
+
+      await logAudit(request, 'candidate.created.manual', 'candidate_pool', candidate.id);
+      reply.code(201);
+      return candidate;
     },
   });
 }

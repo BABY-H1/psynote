@@ -113,3 +113,35 @@ export function useUpdateRiskLevel() {
     },
   });
 }
+
+export type CandidateKind =
+  | 'episode_candidate'
+  | 'group_candidate'
+  | 'course_candidate'
+  | 'crisis_candidate';
+
+/**
+ * Phase H — BUG-007 真正修复:
+ * 把 result 懒转为 candidate_pool 行 (sourceRuleId=null 标记手工创建).
+ * 服务端幂等: 同 (resultId, kind, status='pending') 已有候选 → 返回原行.
+ * TriageActionBar 在用户点 "转个案 / 课程·团辅 / 忽略" 时先调这个,
+ * 保证后续 accept/dismiss 链路有 candidateId 可用.
+ */
+export function useLazyCreateCandidate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ resultId, kind, priority }: {
+      resultId: string;
+      kind: CandidateKind;
+      priority?: 'low' | 'normal' | 'high' | 'urgent';
+    }) => api.post<{ id: string }>(
+      `${orgPrefix()}/results/${resultId}/candidate`,
+      { kind, priority },
+    ),
+    onSuccess: () => {
+      // candidate_pool 变了, 让 triage 列表跟 workflow candidate 列表都重取
+      qc.invalidateQueries({ queryKey: ['triage-candidates'] });
+      qc.invalidateQueries({ queryKey: ['candidate-pool'] });
+    },
+  });
+}

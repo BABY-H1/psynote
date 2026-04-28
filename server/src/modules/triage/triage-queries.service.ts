@@ -36,7 +36,14 @@ import {
   candidatePool,
   users,
 } from '../../db/schema.js';
+import { NotFoundError } from '../../lib/errors.js';
 import type { DataScope } from '../../middleware/data-scope.js';
+
+export type CandidateKind =
+  | 'episode_candidate'
+  | 'group_candidate'
+  | 'course_candidate'
+  | 'crisis_candidate';
 
 export type TriageMode = 'screening' | 'manual' | 'all';
 
@@ -389,4 +396,96 @@ export async function updateResultRiskLevel(params: {
     )
     .returning({ id: assessmentResults.id, riskLevel: assessmentResults.riskLevel });
   return updated;
+}
+
+// ─── lazyCreateCandidate (Phase H — BUG-007 真正修复) ────────────
+//
+// 把 assessment_results 行"懒"转成 candidate_pool 行, 让研判分流的
+// "转个案 / 课程·团辅 / 忽略" 按钮在没规则引擎的机构也能直接 work.
+//
+// 设计要点:
+// - sourceRuleId=null 区分手工创建 vs 规则引擎创建. queryManual 已经
+//   预留了这条 (`isNull(candidatePool.sourceRuleId)`) 但之前没人写入,
+//   现在补上写入路径.
+// - 防重复: 同 (resultId, kind) 已有 status='pending' 的候选 → 直接
+//   返回那条, 不二次 INSERT. 用户在 UI 上重复点 "转个案" 不会产生
+//   重复条目.
+// - 跨 org: SELECT 时同时 WHERE orgId=:orgId, 跨 org 的 result 当
+//   作不存在 (NotFoundError, 不泄漏存在性, 跟 admin tenant get/patch
+//   的 404 模式一致).
+// - priority 决策: 显式传入优先, 否则 L4 → urgent, 其他 → normal.
+// - suggestion / reason 走默认文案 ("研判分流人工创建 · 风险 ..."),
+//   accept/dismiss 后续流程不依赖它们做决策, 仅展示用.
+
+export async function lazyCreateCandidate(params: {
+  orgId: string;
+  resultId: string;
+  kind: CandidateKind;
+  priority?: 'low' | 'normal' | 'high' | 'urgent';
+}): Promise<typeof candidatePool.$inferSelect> {
+  // 1) 拿 result 校验存在 + 同 org + 提取 clientUserId / riskLevel
+  const [result] = await db
+    .select({
+      id: assessmentResults.id,
+      orgId: assessmentResults.orgId,
+      userId: assessmentResults.userId,
+      riskLevel: assessmentResults.riskLevel,
+      assessmentId: assessmentResults.assessmentId,
+    })
+    .from(assessmentResults)
+    .where(
+      and(
+        eq(assessmentResults.id, params.resultId),
+        eq(assessmentResults.orgId, params.orgId),
+      ),
+    )
+    .limit(1);
+
+  if (!result) {
+    throw new NotFoundError('AssessmentResult', params.resultId);
+  }
+  if (!result.userId) {
+    // 匿名 result (公开筛查未登录) 不能转成 candidate, 因为 candidate_pool.clientUserId NOT NULL
+    throw new NotFoundError('AssessmentResult.userId', params.resultId);
+  }
+
+  // 2) 防重复: 同 (resultId, kind) 已有 pending 候选 → 返回原行
+  const [existing] = await db
+    .select()
+    .from(candidatePool)
+    .where(
+      and(
+        eq(candidatePool.orgId, params.orgId),
+        eq(candidatePool.sourceResultId, params.resultId),
+        eq(candidatePool.kind, params.kind),
+        eq(candidatePool.status, 'pending'),
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    return existing;
+  }
+
+  // 3) 决定 priority: 显式 > L4 urgent > 其余 normal
+  const priority =
+    params.priority ?? (result.riskLevel === 'level_4' ? 'urgent' : 'normal');
+
+  // 4) INSERT
+  const [created] = await db
+    .insert(candidatePool)
+    .values({
+      orgId: params.orgId,
+      clientUserId: result.userId,
+      kind: params.kind,
+      suggestion: '研判分流人工创建',
+      reason: `研判分流人工创建 · 风险 ${result.riskLevel ?? '未分级'}`,
+      priority,
+      sourceRuleId: null,
+      sourceResultId: params.resultId,
+      status: 'pending',
+    })
+    .returning();
+
+  return created;
 }

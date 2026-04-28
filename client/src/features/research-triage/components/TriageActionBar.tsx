@@ -9,16 +9,25 @@ import {
   useAcceptCandidate,
   useDismissCandidate,
 } from '../../../api/useWorkflow';
-import { useUpdateRiskLevel } from '../../../api/useResearchTriage';
+import {
+  useUpdateRiskLevel,
+  useLazyCreateCandidate,
+  type CandidateKind,
+} from '../../../api/useResearchTriage';
 import type { TriageCandidateRow } from '../../../api/useResearchTriage';
 
 /**
  * Per-row action bar. Four groups of next-step actions:
  *   1. 确认/调整 L 级别 — overrides assessment_results.riskLevel
  *   2. 转个案 / 开危机案 — reuses candidate-pool accept flow
- *      (only available when the row has an associated candidate_pool entry)
- *   3. 课程 / 团辅 — placeholder buttons, wired to candidate accept too
- *   4. 忽略 — dismiss candidate with reason
+ *   3. 课程 / 团辅 — wired to candidate accept (resolvedRefType='course_enrollment')
+ *   4. 忽略 — dismiss candidate
+ *
+ * Phase H (BUG-007 真正修复): 之前 2/3/4 三类按钮要求 row.candidateId 已存在,
+ * 但 candidate_pool 行只在工作流规则引擎触发时产生, 没规则的机构永远 disabled.
+ * 现在改成 ensure-then-act: 用户点击时如果 candidateId 缺失, 先 POST
+ * /triage/results/:id/candidate 把 result 懒转成 candidate_pool 行
+ * (sourceRuleId=null), 再立即走原 accept/dismiss 流程. 中间步骤对用户不可见.
  */
 export function TriageActionBar({
   row,
@@ -32,12 +41,12 @@ export function TriageActionBar({
   const updateLevel = useUpdateRiskLevel();
   const accept = useAcceptCandidate();
   const dismiss = useDismissCandidate();
+  const lazyCreate = useLazyCreateCandidate();
 
   const [pickingLevel, setPickingLevel] = useState(false);
-  const busy = updateLevel.isPending || accept.isPending || dismiss.isPending;
+  const busy = updateLevel.isPending || accept.isPending || dismiss.isPending || lazyCreate.isPending;
 
   const isCrisis = row.riskLevel === 'level_4' || row.candidateKind === 'crisis_candidate';
-  const hasCandidate = !!row.candidateId;
 
   async function confirmLevel(level: 'level_1' | 'level_2' | 'level_3' | 'level_4') {
     if (!row.resultId) {
@@ -54,24 +63,46 @@ export function TriageActionBar({
     }
   }
 
-  async function acceptCandidate(resolvedRefType?: string) {
-    if (!row.candidateId) {
-      toast('该条目尚未进入候选池，请先由系统生成候选', 'info');
-      return;
+  /**
+   * 确保有 candidateId 可用. 已有就直接返回, 没就 lazy create.
+   * 服务端幂等, 重复调用不会产生重复行.
+   */
+  async function ensureCandidate(kind: CandidateKind): Promise<string> {
+    if (row.candidateId) return row.candidateId;
+    if (!row.resultId) {
+      throw new Error('此条目没有测评结果，无法创建候选');
     }
+    const created = await lazyCreate.mutateAsync({
+      resultId: row.resultId,
+      kind,
+      priority: row.riskLevel === 'level_4' ? 'urgent' : 'normal',
+    });
+    return created.id;
+  }
+
+  async function acceptCandidate(resolvedRefType?: string) {
     try {
-      const result = await accept.mutateAsync({
-        id: row.candidateId,
-        resolvedRefType,
-      });
+      // resolvedRefType 决定 candidate kind: crisis_case → crisis_candidate,
+      // course_enrollment → course_candidate, 其他 (含 care_episode) → episode_candidate.
+      const kind: CandidateKind =
+        resolvedRefType === 'crisis_case' ? 'crisis_candidate'
+        : resolvedRefType === 'course_enrollment' ? 'course_candidate'
+        : 'episode_candidate';
+      const candidateId = await ensureCandidate(kind);
+      const result = await accept.mutateAsync({ id: candidateId, resolvedRefType });
       toast('已接受候选', 'success');
       onActionDone();
-      // Navigate to the newly created entity when the server returns a ref
-      const ref = (result as unknown as { resolvedRefType?: string; resolvedRefId?: string });
-      if (ref.resolvedRefType === 'crisis_case' || ref.resolvedRefType === 'care_episode') {
-        // crisis case accept returns episodeId via resolvedRefId on care_episode
-        const episodeId = (result as any).episodeId || ref.resolvedRefId;
+      // Navigate to the newly created entity when the server returns a ref.
+      // - crisis_case: 跳 /episodes/:id?mode=crisis (危机清单)
+      // - care_episode: 跳 /episodes/:id (普通个案)
+      // - course_enrollment: 服务端目前只 stamp, 不跳 (用户在 delivery 自己选)
+      const ref = result as unknown as { resolvedRefType?: string; resolvedRefId?: string; episodeId?: string };
+      if (ref.resolvedRefType === 'crisis_case') {
+        const episodeId = ref.episodeId || ref.resolvedRefId;
         if (episodeId) navigate(`/episodes/${episodeId}?mode=crisis`);
+      } else if (ref.resolvedRefType === 'care_episode') {
+        const episodeId = ref.episodeId || ref.resolvedRefId;
+        if (episodeId) navigate(`/episodes/${episodeId}`);
       }
     } catch (err) {
       toast((err as Error).message || '操作失败', 'error');
@@ -79,13 +110,18 @@ export function TriageActionBar({
   }
 
   async function dismissRow() {
-    if (!row.candidateId) {
-      toast('非候选池条目无法忽略', 'info');
+    if (!row.resultId && !row.candidateId) {
+      toast('该条目无法忽略', 'info');
       return;
     }
     const reason = window.prompt('忽略理由（可选）');
     try {
-      await dismiss.mutateAsync({ id: row.candidateId, reason: reason ?? undefined });
+      const candidateId = await ensureCandidate(
+        // 忽略的语义比较中性, 默认按 episode_candidate 落库即可 — 不会真的产生 episode,
+        // dismiss 后 status='dismissed' 而非 'accepted'.
+        (isCrisis ? 'crisis_candidate' : 'episode_candidate') as CandidateKind,
+      );
+      await dismiss.mutateAsync({ id: candidateId, reason: reason ?? undefined });
       toast('已忽略', 'success');
       onActionDone();
     } catch (err) {
@@ -133,39 +169,30 @@ export function TriageActionBar({
             icon={<UserPlus className="w-3.5 h-3.5" />}
             label={isCrisis ? '开危机处置' : '转个案'}
             onClick={() => acceptCandidate(isCrisis ? 'crisis_case' : 'care_episode')}
-            disabled={busy || !hasCandidate}
+            disabled={busy || !row.resultId}
             tone={isCrisis ? 'rose' : 'blue'}
           />
           <ActionButton
             icon={<BookOpen className="w-3.5 h-3.5" />}
             label="课程 / 团辅"
             onClick={() => acceptCandidate('course_enrollment')}
-            disabled={busy || !hasCandidate}
+            disabled={busy || !row.resultId}
             tone="teal"
           />
           <ActionButton
             icon={busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <XCircle className="w-3.5 h-3.5" />}
             label="忽略"
             onClick={dismissRow}
-            disabled={busy || !hasCandidate}
+            disabled={busy || !row.resultId}
             tone="slate-muted"
           />
         </div>
       )}
-      {!hasCandidate && row.resultId && (
-        <p className="text-[11px] text-slate-400 mt-2">
-          {/*
-            BUG-007 fix: 旧提示让用户去"协作中心 / 待处理候选"创建候选,
-            但那个 tab 已经在 candidate_pool 重构中移除 (见
-            useWorkflow.ts L90 注释). candidate_pool 行现在仅由 workflow
-            rule engine (Phase 12+) 自动创建; 没配规则的机构, 这些按钮
-            会一直 disabled. 改成告诉用户实际情况 + 可用的 workaround.
-          */}
-          提示：候选池条目由工作流规则自动创建（机构未配置规则时不会产生）。
-          当前可点「确认/调整级别」修改 L 等级；要直接做处置，请到「交付中心」
-          新建个案 / 团辅 / 课程，或在右侧 AI 建议里参考下一步动作。
-        </p>
-      )}
+      {/*
+        Phase H (BUG-007 真正修复): 之前这里有一段提示 "候选池由规则引擎产生,
+        未配置规则时这些按钮 disabled, 请到交付中心绕一圈". 现在按钮直接
+        work (lazy create candidate), 提示已不需要 → 删除.
+      */}
     </div>
   );
 }

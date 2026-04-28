@@ -41,11 +41,19 @@ vi.mock('../../config/database.js', () => {
   chain.innerJoin = vi.fn(() => chain);
   chain.leftJoin = vi.fn(() => chain);
   chain.where = vi.fn(() => terminal(nextRows()));
+  // Phase H: insert chain for lazyCreateCandidate. db.insert(t).values(v).returning()
+  // pops one row set from the same FIFO queue, so tests can interleave selects + insert.
+  chain.insert = vi.fn(() => chain);
+  chain.values = vi.fn(() => chain);
+  chain.returning = vi.fn(() => Promise.resolve(nextRows()));
   return { db: chain };
 });
 
 // Import after mocks
-const { listTriageCandidates, listTriageBuckets, listCandidatesForService } = await import('./triage-queries.service.js');
+const {
+  listTriageCandidates, listTriageBuckets, listCandidatesForService,
+  lazyCreateCandidate,
+} = await import('./triage-queries.service.js');
 
 beforeEach(() => {
   dbResults.length = 0;
@@ -341,3 +349,149 @@ describe('listCandidatesForService', () => {
     expect(rows[0].status).toBe('accepted');
   });
 });
+
+// ─── lazyCreateCandidate (Phase H — BUG-007 真正修复) ────────────
+//
+// 研判分流详情面板的"转个案 / 课程·团辅 / 忽略"按钮在没有规则引擎产
+// 生 candidate_pool 行的机构里永远 disabled. 这里加 lazy create:
+// 用户点按钮时, 前端先 POST 这个端点把 result 转为 candidate_pool 行,
+// 再走原 accept/dismiss 流程. 中间步骤对用户不可见.
+//
+// 调用顺序 (FIFO 队列模拟):
+//   1) SELECT assessment_results WHERE id=:resultId AND orgId=:orgId LIMIT 1
+//      → 用来拿 clientUserId / riskLevel 并校验跨 org
+//   2) SELECT candidate_pool WHERE sourceResultId=:resultId AND kind=:kind
+//      AND status='pending' LIMIT 1 → 防重复
+//   3a) 命中: 返回该行, 不 INSERT
+//   3b) 未命中: INSERT candidate_pool ... RETURNING * → 返回新行
+
+describe('lazyCreateCandidate', () => {
+  it('为 L3 result 创建 episode_candidate, sourceRuleId=null, status=pending, priority=normal', async () => {
+    // 1) result lookup
+    dbResults.push([
+      { id: 'r-1', orgId: 'org-1', userId: 'u-1', riskLevel: 'level_3', assessmentId: 'a-1' },
+    ]);
+    // 2) idempotency check — no existing candidate
+    dbResults.push([]);
+    // 3) insert returning
+    dbResults.push([
+      {
+        id: 'c-new',
+        orgId: 'org-1',
+        clientUserId: 'u-1',
+        kind: 'episode_candidate',
+        suggestion: '研判分流人工创建',
+        reason: '研判分流人工创建 · 风险 level_3',
+        priority: 'normal',
+        sourceRuleId: null,
+        sourceResultId: 'r-1',
+        status: 'pending',
+        createdAt: new Date(),
+      },
+    ]);
+
+    const row = await lazyCreateCandidate({
+      orgId: 'org-1',
+      resultId: 'r-1',
+      kind: 'episode_candidate',
+    });
+
+    expect(row.id).toBe('c-new');
+    expect(row.kind).toBe('episode_candidate');
+    expect(row.priority).toBe('normal');
+    expect(row.sourceRuleId).toBeNull();
+    expect(row.sourceResultId).toBe('r-1');
+    expect(row.status).toBe('pending');
+  });
+
+  it('L4 result 默认 priority=urgent', async () => {
+    dbResults.push([
+      { id: 'r-2', orgId: 'org-1', userId: 'u-2', riskLevel: 'level_4', assessmentId: 'a-1' },
+    ]);
+    dbResults.push([]); // no existing
+    dbResults.push([
+      {
+        id: 'c-urgent',
+        priority: 'urgent',
+        kind: 'crisis_candidate',
+        sourceRuleId: null,
+        sourceResultId: 'r-2',
+        status: 'pending',
+      },
+    ]);
+
+    const row = await lazyCreateCandidate({
+      orgId: 'org-1',
+      resultId: 'r-2',
+      kind: 'crisis_candidate',
+    });
+
+    expect(row.priority).toBe('urgent');
+  });
+
+  it('idempotent: 同 (resultId, kind) 已有 pending 候选 → 返回原行, 不 INSERT', async () => {
+    dbResults.push([
+      { id: 'r-3', orgId: 'org-1', userId: 'u-3', riskLevel: 'level_2', assessmentId: 'a-1' },
+    ]);
+    // 2) existing candidate found
+    dbResults.push([
+      {
+        id: 'c-existing',
+        orgId: 'org-1',
+        clientUserId: 'u-3',
+        kind: 'group_candidate',
+        priority: 'normal',
+        sourceRuleId: null,
+        sourceResultId: 'r-3',
+        status: 'pending',
+        createdAt: new Date('2026-04-20T00:00:00Z'),
+      },
+    ]);
+    // No 3rd push — INSERT must not be called
+
+    const row = await lazyCreateCandidate({
+      orgId: 'org-1',
+      resultId: 'r-3',
+      kind: 'group_candidate',
+    });
+
+    expect(row.id).toBe('c-existing');
+    // FIFO 队列里 (idempotent 路径不应 pop 第三次), 还剩 0
+    expect(dbResults.length).toBe(0);
+  });
+
+  it('result 不存在 → throw NotFoundError', async () => {
+    dbResults.push([]); // SELECT returns nothing
+    await expect(
+      lazyCreateCandidate({ orgId: 'org-1', resultId: 'r-missing', kind: 'episode_candidate' }),
+    ).rejects.toThrow();
+  });
+
+  it('result 跨 org → 视为不存在 (NotFoundError, 不泄漏存在性)', async () => {
+    // 实现层在 SELECT 时同时 WHERE orgId=:orgId, 跨 org 的 result 返回空 → NotFoundError
+    dbResults.push([]);
+    await expect(
+      lazyCreateCandidate({ orgId: 'org-other', resultId: 'r-1', kind: 'episode_candidate' }),
+    ).rejects.toThrow();
+  });
+
+  it('显式传 priority 优先于 risk-level 默认值', async () => {
+    dbResults.push([
+      { id: 'r-5', orgId: 'org-1', userId: 'u-5', riskLevel: 'level_1', assessmentId: 'a-1' },
+    ]);
+    dbResults.push([]);
+    dbResults.push([
+      { id: 'c-explicit', priority: 'urgent', kind: 'episode_candidate', sourceRuleId: null, sourceResultId: 'r-5', status: 'pending' },
+    ]);
+
+    const row = await lazyCreateCandidate({
+      orgId: 'org-1',
+      resultId: 'r-5',
+      kind: 'episode_candidate',
+      priority: 'urgent',
+    });
+
+    expect(row.priority).toBe('urgent');
+  });
+});
+

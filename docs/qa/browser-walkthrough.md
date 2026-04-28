@@ -683,7 +683,7 @@
 | BUG-004 | MAJOR | 已修(4de974d) | ScaleDetail/CourseDetail 横向滚动 (final fix: 抛弃 -m-6, 用 flex h-full) |
 | BUG-005 | BLOCKER | 已修(2928b97) | AI course creator /orgs/null/ai 404 (aiPrefix 缺 sysadmin fallback) |
 | BUG-006 | MINOR | 已修(653ed20) | OrgAdminDashboard 5 KPI 卡只有 2 个可点 (UX 不一致) — 全部加 onClick 跳到对应 /delivery?type=* |
-| BUG-007 | MAJOR | 部分修(ed1e07e), 深度修待产品决策 | 研判分流详情面板 3 按钮在无规则机构永远 disabled — 仅改提示文字治标. 深度修方案 (lazy-create candidate API) 见 plans/l1-l4-luminous-sunset.md Phase H, 待产品决策 |
+| BUG-007 | MAJOR | 已修(待 commit, Phase H 深度修) | 研判分流详情面板 3 按钮在无规则机构永远 disabled. **Phase H 真正修复**: (1) 新加 `POST /triage/results/:id/candidate` lazy-create 端点(sourceRuleId=null 标记手工创建, 幂等防重复) (2) `useLazyCreateCandidate` hook + TriageActionBar `ensureCandidate` ensure-then-act (3) workflow accept 扩展 episode_candidate kind 真创建 careEpisode + 返回 episodeId (mirror crisis pattern). 浏览器端到端: b@ 点 Tier2 关注 L2 row 转个案 → POST candidate 201 → POST accept 200 → navigate `/episodes/0c73d71e...`. DB 验证 candidate.source_rule_id IS NULL + resolved_ref_type='care_episode' + 新 careEpisode 行存在. ✅ |
 | BUG-008 | MAJOR | 已修(4bc5953) | Portal 页面高度不统一, 底部 nav 浮在内容下方 — html/body/root 没 height + `h-[100dvh]` Tailwind 没编译. 修法: index.css 加 height:100% + h-screen 替换 |
 | BUG-009 | MAJOR | 已修(305c685) | Episode AI 4 mode 仅 simulate/supervise 自动归档, note/plan 漏档. 督导 mode 因此拿不到笔记 context. 修法: `if (mode !== 'crisis')` 全归档 + 扩展 mode→label 映射 |
 | BUG-010 | MAJOR | 已修(待 commit) | 写笔记 mode 对话归"AI 对话"区错位. 修法 (Phase I Issue 1): ai_conversations 加 sessionNoteId FK, 保存笔记时关联, LeftPanel 重组为草稿+主记录+草稿子项 |
@@ -698,7 +698,7 @@
 | BUG-003 | MINOR → 已修 | 已修(待 commit) | License 续期改用 max(now, oldExpiry) + months (SaaS 标准语义), 提前续期不丢天数. UI 加 toast 通知 (renew/issue/revoke/modify 全部). verify-renew-semantic.mjs 验证 ✅ |
 | LEGAL-PAGES | docs cleanup | 已清理(待 commit) | LegalPage 日期改为 build-time stamp (VITE_BUILD_DATE 或 fallback to current date), 文案添加 "(待法务出具正式版)" 明示状态. 浏览器验证 /legal/privacy + /legal/terms 都正常渲染 ✅ |
 
-修了 2 BLOCKER + 6 MAJOR + 1 MINOR (BUG-001/002/004/005/006/008/009/010/011). BUG-007 仅治标 (文案), 深度修待审. 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
+修了 2 BLOCKER + 7 MAJOR + 1 MINOR (BUG-001/002/004/005/006/007/008/009/010/011). BUG-007 已 Phase H 深度修复 (lazy-create candidate + workflow accept 扩展 episode_candidate). 标 1 MINOR ship-with-known-issue (BUG-003 续期 UI 不刷新).
 
 ### Alpha 上线就绪判据 (per Phase F plan §"终止条件")
 1. ✅ Tier 1 全 pass (法律页 + 退出 + sidebar + tenant CRUD + library 6 tab 都覆盖)
