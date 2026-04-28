@@ -37,21 +37,21 @@ export function TriageCandidateList({
 }) {
   if (isLoading) {
     return (
-      <div className="bg-white border border-slate-200 rounded-2xl h-full flex items-center justify-center text-slate-400">
+      <div className="h-full flex items-center justify-center text-slate-400">
         <Loader2 className="w-4 h-4 animate-spin mr-2" /> 加载中…
       </div>
     );
   }
   if (isError) {
     return (
-      <div className="bg-white border border-slate-200 rounded-2xl h-full flex items-center justify-center text-rose-500 text-sm">
+      <div className="h-full flex items-center justify-center text-rose-500 text-sm">
         加载失败
       </div>
     );
   }
   if (rows.length === 0) {
     return (
-      <div className="bg-white border border-slate-200 rounded-2xl h-full flex flex-col items-center justify-center text-slate-400 text-sm px-6 text-center">
+      <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm px-6 text-center">
         <User className="w-8 h-8 mb-2 text-slate-300" />
         当前筛选范围内没有待研判对象
         {mode === 'manual' && (
@@ -65,7 +65,8 @@ export function TriageCandidateList({
   }
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl h-full flex flex-col overflow-hidden">
+    // Phase J 后续: 去掉 rounded-2xl + border (WorkspaceLayout 边框接管).
+    <div className="h-full flex flex-col overflow-hidden">
       <div className="px-4 py-2.5 border-b border-slate-100 text-xs text-slate-500 flex items-center gap-2">
         <span className="font-semibold text-slate-700">共 {rows.length} 人</span>
         {mode === 'all' && <span className="text-slate-400">· 筛查 + 手工</span>}

@@ -84,7 +84,7 @@ export function TriageDetailPanel({
 
   if (!row) {
     return (
-      <div className="bg-white border border-slate-200 rounded-2xl h-full flex items-center justify-center text-slate-400 text-sm">
+      <div className="h-full flex items-center justify-center text-slate-400 text-sm">
         从左侧选择一位待研判对象
       </div>
     );
@@ -94,7 +94,7 @@ export function TriageDetailPanel({
   if (crisisCase && crisisEpisodeId) {
     const isClosed = crisisCase.stage === 'closed';
     return (
-      <div className="bg-white border border-slate-200 rounded-2xl h-full flex flex-col overflow-hidden">
+      <div className="h-full flex flex-col overflow-hidden">
         {/* Compact header */}
         <div className="px-4 py-2.5 border-b border-slate-100 flex items-center gap-2 flex-shrink-0">
           <div className="flex-1 min-w-0">
@@ -176,7 +176,7 @@ export function TriageDetailPanel({
     : undefined;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Header */}
       <div className="px-4 py-3 border-b border-slate-100 flex items-start gap-2">
         <div className="flex-1 min-w-0">

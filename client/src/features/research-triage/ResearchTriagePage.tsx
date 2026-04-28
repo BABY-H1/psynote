@@ -17,6 +17,7 @@ import { TopFilterBar } from './components/TopFilterBar';
 import { LevelBucketSidebar } from './components/LevelBucketSidebar';
 import { TriageCandidateList } from './components/TriageCandidateList';
 import { TriageDetailPanel } from './components/TriageDetailPanel';
+import { WorkspaceLayout } from '../counseling/components/WorkspaceLayout';
 import {
   useTriageCandidates,
   useTriageBuckets,
@@ -65,42 +66,53 @@ export function ResearchTriagePage() {
         }}
       />
 
-      <div className="flex-1 grid grid-cols-12 gap-4 min-h-0">
-        <div className="col-span-2">
-          <LevelBucketSidebar
-            levels={levels}
-            buckets={bucketsQuery.data}
-            selectedLevel={selectedLevel}
-            onSelect={(lvl) => {
-              setSelectedLevel(lvl);
-              setSelectedRow(null);
-            }}
-            isLoading={bucketsQuery.isLoading}
-            disabled={mode === 'manual'}
-          />
-        </div>
-
-        <div className="col-span-5">
-          <TriageCandidateList
-            rows={listQuery.data ?? []}
-            isLoading={listQuery.isLoading}
-            isError={listQuery.isError}
-            selectedKey={selectedRow ? keyOf(selectedRow) : null}
-            onSelect={setSelectedRow}
-            mode={mode}
-          />
-        </div>
-
-        <div className="col-span-5">
-          <TriageDetailPanel
-            row={selectedRow}
-            onCleared={() => setSelectedRow(null)}
-            onActionDone={() => {
-              bucketsQuery.refetch();
-              listQuery.refetch();
-            }}
-          />
-        </div>
+      {/*
+       * Phase J 后续: 三栏从 grid 写死宽度改成 WorkspaceLayout (复用
+       * EpisodeDetail 的可调宽 + 独立 scroll). 用户拖中间两条 resize handle
+       * 调整 left/right 宽度, 各栏内部 overflow-y-auto 自由滚动.
+       *
+       * 默认宽度: left=240 (4 个 bucket + 全部/未分级), right=520 (CrisisChecklistPanel
+       * 内容多, 给较大空间). center 用 flex-1 自动撑满.
+       */}
+      <div className="flex-1 min-h-0">
+        <WorkspaceLayout
+          defaultLeftWidth={240}
+          defaultRightWidth={520}
+          minWidth={180}
+          left={
+            <LevelBucketSidebar
+              levels={levels}
+              buckets={bucketsQuery.data}
+              selectedLevel={selectedLevel}
+              onSelect={(lvl) => {
+                setSelectedLevel(lvl);
+                setSelectedRow(null);
+              }}
+              isLoading={bucketsQuery.isLoading}
+              disabled={mode === 'manual'}
+            />
+          }
+          center={
+            <TriageCandidateList
+              rows={listQuery.data ?? []}
+              isLoading={listQuery.isLoading}
+              isError={listQuery.isError}
+              selectedKey={selectedRow ? keyOf(selectedRow) : null}
+              onSelect={setSelectedRow}
+              mode={mode}
+            />
+          }
+          right={
+            <TriageDetailPanel
+              row={selectedRow}
+              onCleared={() => setSelectedRow(null)}
+              onActionDone={() => {
+                bucketsQuery.refetch();
+                listQuery.refetch();
+              }}
+            />
+          }
+        />
       </div>
     </div>
   );

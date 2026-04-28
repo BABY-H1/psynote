@@ -23,7 +23,9 @@ export function LevelBucketSidebar({
   };
 
   return (
-    <div className="bg-white border border-slate-200 rounded-2xl p-2 h-full flex flex-col">
+    // Phase J 后续: 去掉 rounded-2xl + border (WorkspaceLayout 已经有 border-r),
+    // 避免双层边框. h-full 确保撑满 panel 高度.
+    <div className="p-2 h-full flex flex-col">
       <div className="px-2 py-1.5 text-[11px] font-semibold text-slate-400 uppercase tracking-wide">
         分级
       </div>
