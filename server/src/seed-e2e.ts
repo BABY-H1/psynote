@@ -486,6 +486,17 @@ async function seedE2E() {
       suggestedAction: '推荐 8 周 CBT 团辅课程',
     },
   ]);
+  // Phase K — AI 合规水印. seed 一份固定 provenance 让 dev 环境
+  // 直接能看到 <AIBadge /> 在 detail panel 的"AI 解读" / "AI 建议"
+  // 旁边渲染. 真实跑过 AI 的 result 由 triage-automation.service.ts
+  // 写入 (model 取自 env.AI_MODEL).
+  const triageProvenance = JSON.stringify({
+    aiGenerated: true,
+    aiModel: 'e2e-stub-model',
+    aiPipeline: 'triage-auto',
+    aiGeneratedAt: '2026-04-29T10:00:00.000Z',
+    aiConfidence: 0.86,
+  });
   const existingTriageResult = await sql<{ id: string }[]>`
     SELECT id FROM assessment_results WHERE id = ${TRIAGE_RESULT_ID} LIMIT 1
   `;
@@ -494,22 +505,24 @@ async function seedE2E() {
       INSERT INTO assessment_results (
         id, org_id, assessment_id, user_id,
         answers, dimension_scores, total_score, risk_level,
-        ai_interpretation, recommendations, created_by
+        ai_interpretation, recommendations, ai_provenance, created_by
       )
       VALUES (
         ${TRIAGE_RESULT_ID}, ${countOrgId}, ${MINI.assessmentId}, ${counselingClientId},
         ${triageAnswers}::jsonb, ${triageDimScores}::jsonb, '2', 'level_3',
         '中度风险，建议 1-2 周内安排面谈', ${triageRecommendations}::jsonb,
-        ${counselingClientId}
+        ${triageProvenance}::jsonb, ${counselingClientId}
       )
     `;
   } else {
-    // Re-running seed should resync the level so the spec is stable
-    // even if a prior run mutated risk_level via the override route.
+    // Re-running seed should resync the level + provenance so the spec
+    // is stable even if a prior run mutated risk_level via the override
+    // route or the column existed but was nulled.
     await sql`
       UPDATE assessment_results
       SET risk_level = 'level_3',
-          recommendations = ${triageRecommendations}::jsonb
+          recommendations = ${triageRecommendations}::jsonb,
+          ai_provenance = ${triageProvenance}::jsonb
       WHERE id = ${TRIAGE_RESULT_ID}
     `;
   }

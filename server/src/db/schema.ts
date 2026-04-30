@@ -209,6 +209,13 @@ export const assessmentResults = pgTable('assessment_results', {
   // Stored on the result row so the suggestion panel can show them without a re-run.
   // Shape: TriageRecommendation[] from triage.ts
   recommendations: jsonb('recommendations').notNull().default([]),
+  // AI 合规水印 — 当 recommendations / aiInterpretation 由 AI 写入时，
+  // 这里记录 model/pipeline/confidence/generatedAt 等元数据，前端
+  // <AIBadge provenance={...} /> 据此渲染"AI 生成"标识。
+  // Shape: AIProvenance from packages/shared/src/types/ai-provenance.ts.
+  // 历史行没有 backfill — 前端在 provenance == null 时回退到 generic
+  // "AI 生成" 标签，不破坏既有 UX。
+  aiProvenance: jsonb('ai_provenance'),
   batchId: uuid('batch_id').references(() => assessmentBatches.id),
   createdBy: uuid('created_by').references(() => users.id),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),

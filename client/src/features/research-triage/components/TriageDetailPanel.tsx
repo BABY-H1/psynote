@@ -2,10 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { X, Sparkles, FileText, CheckCircle2, ArrowRight } from 'lucide-react';
-import { DEFAULT_TRIAGE_CONFIG } from '@psynote/shared';
+import { DEFAULT_TRIAGE_CONFIG, type AIProvenance } from '@psynote/shared';
 import { api } from '../../../api/client';
 import { useAuthStore } from '../../../stores/authStore';
-import { useToast } from '../../../shared/components';
+import { useToast, AIBadge } from '../../../shared/components';
 import {
   useCreateFollowupEpisode,
   type TriageCandidateRow,
@@ -22,6 +22,12 @@ interface ResultDetail {
   dimensionScores: Record<string, number> | unknown[];
   aiInterpretation: string | null;
   recommendations: Array<{ title?: string; rationale?: string; suggestedAction?: string }>;
+  /**
+   * AI 合规水印 — 当 recommendations / aiInterpretation 是 AI 生成时
+   * 后端写入。前端 <AIBadge provenance={...} /> 据此渲染来源标识。
+   * 历史行为 null;UI 在这种情况下回退到 generic "AI 生成" 标签。
+   */
+  aiProvenance: AIProvenance | null;
   createdAt: string;
 }
 
@@ -242,7 +248,10 @@ export function TriageDetailPanel({
         {resultQuery.data && (
           <>
             {resultQuery.data.aiInterpretation && (
-              <Section title="AI 解读">
+              <Section
+                title="AI 解读"
+                trailing={<AIBadge provenance={resultQuery.data.aiProvenance} />}
+              >
                 <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap">
                   {resultQuery.data.aiInterpretation}
                 </p>
@@ -250,7 +259,11 @@ export function TriageDetailPanel({
             )}
 
             {resultQuery.data.recommendations && resultQuery.data.recommendations.length > 0 && (
-              <Section title="AI 建议" icon={<Sparkles className="w-3.5 h-3.5" />}>
+              <Section
+                title="AI 建议"
+                icon={<Sparkles className="w-3.5 h-3.5" />}
+                trailing={<AIBadge provenance={resultQuery.data.aiProvenance} />}
+              >
                 <div className="space-y-2">
                   {resultQuery.data.recommendations.map((r, i) => (
                     <div
@@ -308,16 +321,23 @@ export function TriageDetailPanel({
 }
 
 function Section({
-  title, icon, children,
+  title, icon, trailing, children,
 }: {
   title: string;
   icon?: React.ReactNode;
+  /**
+   * Optional inline content rendered at the right edge of the heading
+   * row. Used to attach <AIBadge /> to AI-authored sections without
+   * each caller having to lay out the flex themselves.
+   */
+  trailing?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
     <section>
       <h4 className="text-[11px] font-semibold text-slate-400 uppercase tracking-wide flex items-center gap-1 mb-1.5">
         {icon}{title}
+        {trailing && <span className="ml-auto">{trailing}</span>}
       </h4>
       {children}
     </section>

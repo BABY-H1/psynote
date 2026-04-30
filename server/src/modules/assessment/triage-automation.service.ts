@@ -10,6 +10,7 @@
  */
 import { eq, and } from 'drizzle-orm';
 import { db } from '../../config/database.js';
+import { env } from '../../config/env.js';
 import {
   assessmentResults,
   organizations,
@@ -18,7 +19,7 @@ import {
   schoolStudentProfiles,
 } from '../../db/schema.js';
 import { createNotification } from '../notification/notification.service.js';
-import type { OrgType } from '@psynote/shared';
+import type { AIProvenance, OrgType } from '@psynote/shared';
 import { getTerm } from '@psynote/shared';
 
 // ─── Auto AI Triage ─────────────────────────────────────────────
@@ -67,10 +68,23 @@ export async function autoTriageAndNotify(params: AutoTriageParams): Promise<voi
       },
     );
 
-    // Store recommendations on the result row
+    // 同步写入 AI 合规水印 (Phase K).
+    // recommendations + provenance 一起更新, 让前端 <AIBadge /> 能展示
+    // model + 时间, 满足"AI 输出必须可识别"的合规要求.
+    // 历史行为 ai_provenance=null, 前端会 fallback 到 generic "AI 生成".
+    const provenance: AIProvenance = {
+      aiGenerated: true,
+      aiModel: env.AI_MODEL,
+      aiPipeline: 'triage-auto',
+      aiGeneratedAt: new Date().toISOString(),
+    };
+
     await db
       .update(assessmentResults)
-      .set({ recommendations: triageResult.recommendations })
+      .set({
+        recommendations: triageResult.recommendations,
+        aiProvenance: provenance,
+      })
       .where(eq(assessmentResults.id, resultId));
   } catch (err) {
     console.warn('[auto-triage] AI recommendation failed (non-blocking):', err);

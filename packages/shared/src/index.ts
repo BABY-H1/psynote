@@ -14,5 +14,6 @@ export * from './types/content-block.js';
 export * from './types/workflow.js';
 export * from './types/crisis.js';
 export * from './types/parent-binding.js';
+export * from './types/ai-provenance.js';
 export * from './schemas/triage-config.js';
 export * from './auth/index.js';
