@@ -3,6 +3,7 @@ import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { dataScopeGuard } from '../../middleware/data-scope.js';
+import { assertAuthorized } from '../../middleware/authorize.js';
 import { logAudit, logPhiAccess } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
 import * as resultService from './result.service.js';
@@ -30,8 +31,16 @@ export async function resultRoutes(app: FastifyInstance) {
     const { resultId } = request.params as { resultId: string };
     const result = await resultService.getResultById(resultId);
 
-    // Log PHI access if viewing another user's result
+    // Phase 1.5: 测评原始答卷 = phi_full;clinic_admin 默认禁。
+    // 来访者本人查自己的(self_only)由 policy.checkScope 处理。
+    // result.userId 是 string | null;userId 缺失的匿名结果不走密级检查
+    // (那种结果通常是开放预测评,本身就没有"本人"概念)
     if (result.userId && result.userId !== request.user!.id) {
+      assertAuthorized(request, 'view', {
+        type: 'assessment_result',
+        dataClass: 'phi_full',
+        ownerUserId: result.userId,
+      });
       await logPhiAccess(request, result.userId, 'assessment_results', 'view', result.id);
     }
 

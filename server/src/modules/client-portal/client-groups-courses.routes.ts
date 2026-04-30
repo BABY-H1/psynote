@@ -4,7 +4,7 @@ import { db } from '../../config/database.js';
 import {
   groupInstances, groupEnrollments, groupSchemes, groupSchemeSessions,
   groupSessionRecords, groupSessionAttendance,
-  courses, courseEnrollments,
+  courses, courseEnrollments, courseChapters, courseContentBlocks,
 } from '../../db/schema.js';
 import { logAudit } from '../../middleware/audit.js';
 import { ValidationError } from '../../lib/errors.js';
@@ -121,6 +121,74 @@ export async function clientGroupsCoursesRoutes(app: FastifyInstance) {
       .leftJoin(courses, eq(courses.id, courseEnrollments.courseId))
       .where(eq(courseEnrollments.userId, userId))
       .orderBy(desc(courseEnrollments.enrolledAt));
+  });
+
+  /**
+   * Course detail for an enrolled participant.
+   *
+   * Bug fix (BUG-012): the org-admin route at /api/orgs/:orgId/courses/:courseId
+   * is gated by `rejectClient`, so portal CourseReader cannot fetch course
+   * detail directly. This endpoint returns the same envelope shape (course +
+   * chapters + per-chapter content blocks filtered to participant-visible
+   * blocks) for an enrolled client.
+   *
+   * Auth: client must have an active enrollment for this course in this org.
+   */
+  app.get('/courses/:courseId', async (request) => {
+    rejectAsParam(request);
+    const userId = request.user!.id;
+    const orgId = request.org!.orgId;
+    const { courseId } = request.params as { courseId: string };
+
+    // Verify enrollment
+    const [enrollment] = await db
+      .select()
+      .from(courseEnrollments)
+      .where(and(
+        eq(courseEnrollments.userId, userId),
+        eq(courseEnrollments.courseId, courseId),
+      ))
+      .limit(1);
+    if (!enrollment) throw new ValidationError('You are not enrolled in this course');
+
+    // Course
+    const [course] = await db
+      .select()
+      .from(courses)
+      .where(and(
+        eq(courses.id, courseId),
+        or(eq(courses.orgId, orgId), and(isNull(courses.orgId), eq(courses.isPublic, true))),
+      ))
+      .limit(1);
+    if (!course) throw new ValidationError('Course not found');
+
+    // Chapters (sorted)
+    const chapters = await db
+      .select()
+      .from(courseChapters)
+      .where(eq(courseChapters.courseId, courseId))
+      .orderBy(courseChapters.sortOrder);
+
+    // Content blocks for all chapters in one query, filtered to participant-visible
+    const chapterIds = chapters.map((c) => c.id);
+    const blocks = chapterIds.length === 0 ? [] : await db
+      .select()
+      .from(courseContentBlocks)
+      .where(and(
+        // chapterId IN (...): drizzle's inArray would be cleaner; use OR chain for compat
+        or(...chapterIds.map((id) => eq(courseContentBlocks.chapterId, id))),
+      ))
+      .orderBy(courseContentBlocks.sortOrder);
+    const visibleBlocks = blocks.filter((b) => b.visibility === 'participant' || b.visibility === 'both');
+
+    return {
+      enrollment,
+      course,
+      chapters: chapters.map((c) => ({
+        ...c,
+        contentBlocks: visibleBlocks.filter((b) => b.chapterId === c.id),
+      })),
+    };
   });
 
   /** My group enrollments */

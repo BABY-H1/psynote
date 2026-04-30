@@ -151,7 +151,8 @@ export async function getScaleById(scaleId: string): Promise<FullScale> {
 
 /** Create a scale with dimensions, rules, and items in one transaction */
 export async function createScale(input: {
-  orgId: string;
+  /** orgId null = platform-level (system admin library) scale, visible to all orgs via isPublic */
+  orgId: string | null;
   title: string;
   description?: string;
   instructions?: string;

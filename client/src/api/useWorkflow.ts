@@ -11,8 +11,6 @@ import type {
   WorkflowCondition,
   WorkflowAction,
   CandidateEntry,
-  CandidateKind,
-  CandidateStatus,
   WorkflowExecution,
 } from '@psynote/shared';
 
@@ -88,27 +86,12 @@ export function useWorkflowExecutions(ruleId?: string) {
 }
 
 // ─── Candidate Pool ──────────────────────────────────────────────
-
-export interface CandidateFilters {
-  status?: CandidateStatus | CandidateStatus[];
-  kind?: CandidateKind | CandidateKind[];
-}
-
-export function useCandidatePool(filters: CandidateFilters = {}) {
-  const orgId = useAuthStore((s) => s.currentOrgId);
-  const statusParam = Array.isArray(filters.status) ? filters.status.join(',') : filters.status;
-  const kindParam = Array.isArray(filters.kind) ? filters.kind.join(',') : filters.kind;
-  const qs = new URLSearchParams();
-  if (statusParam) qs.set('status', statusParam);
-  if (kindParam) qs.set('kind', kindParam);
-
-  return useQuery({
-    queryKey: ['candidate-pool', orgId, statusParam, kindParam],
-    queryFn: () => api.get<CandidateEntry[]>(`${orgPrefix()}/candidates?${qs.toString()}`),
-    enabled: !!orgId,
-    refetchInterval: 60_000,
-  });
-}
+//
+// useCandidatePool removed — the old协作中心/待处理候选 Tab has been
+// superseded by the /research-triage workspace, which drives from
+// assessment_results directly. Accept/dismiss mutations below are still
+// used (by TriageActionBar) since every candidate_pool row is created
+// by the rule engine tied to a screening/intake result.
 
 export function useAcceptCandidate() {
   const qc = useQueryClient();

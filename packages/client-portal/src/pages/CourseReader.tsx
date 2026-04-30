@@ -1,6 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { useCourse, useUpdateCourseProgress } from '@client/api/useCourses';
+import { useQuery } from '@tanstack/react-query';
+import { useUpdateCourseProgress } from '@client/api/useCourses';
+import { api } from '@client/api/client';
+import { useAuthStore } from '@client/stores/authStore';
+import type { Course } from '@psynote/shared';
 import { PageLoading } from '@client/shared/components';
 // Phase 9α — C-facing content block renderer
 import { ContentBlockRenderer } from '../components/ContentBlockRenderer';
@@ -38,11 +42,33 @@ import {
  * the buttons still render but the user just navigates away without
  * mutations firing. This matches pre-Phase-8c behavior.
  */
+/**
+ * BUG-012 fix: portal CourseReader now uses the dedicated client endpoint
+ * `/api/orgs/:orgId/client/courses/:courseId` which:
+ *   1. Enforces enrollment (throws 400 if the caller is not enrolled).
+ *   2. Returns course + chapters + chapter.contentBlocks pre-filtered to
+ *      participant-visible visibility.
+ * Previously this called `useCourse` which hit the org-admin library route
+ * gated by `rejectClient`, returning 403 for any client. CourseReader was
+ * unusable in production.
+ */
+function useClientCourse(courseId: string | undefined) {
+  const orgId = useAuthStore((s) => s.currentOrgId);
+  return useQuery({
+    queryKey: ['portal-course-detail', orgId, courseId],
+    queryFn: () => api.get<{ enrollment: any; course: Course; chapters: any[] }>(
+      `/orgs/${orgId}/client/courses/${courseId}`,
+    ),
+    enabled: !!orgId && !!courseId,
+  });
+}
+
 export function CourseReader() {
   const { courseId } = useParams<{ courseId: string }>();
   const location = useLocation();
   const navigate = useNavigate();
-  const { data: course, isLoading } = useCourse(courseId);
+  const { data: detail, isLoading } = useClientCourse(courseId);
+  const course = detail ? { ...detail.course, chapters: detail.chapters } as Course : undefined;
   const updateProgress = useUpdateCourseProgress();
   const [selectedChapterId, setSelectedChapterId] = useState<string | null>(null);
   // Mobile-first: sidebar closed by default on small screens

@@ -12,6 +12,14 @@ const envSchema = z.object({
   HOST: z.string().default('0.0.0.0'),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CLIENT_URL: z.string().default('http://localhost:5173'),
+  // 密码重置邮件链接基址(通常同 CLIENT_URL)
+  PUBLIC_BASE_URL: z.string().optional(),
+  // SMTP (密码重置邮件必需;production 启动时若缺会拒启,见 lib/mailer.ts)
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.coerce.number().default(587),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+  SMTP_FROM: z.string().optional(),
 });
 
 const parsed = envSchema.safeParse(process.env);

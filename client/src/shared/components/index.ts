@@ -10,3 +10,7 @@ export * from './delivery';
 
 // Phase 7a — Feature flag gate
 export { FeatureGate } from './FeatureGate';
+
+// AI provenance / 合规水印 — surfaces "AI 生成 / 已审核" on AI-authored payloads
+export { AIBadge } from './AIBadge';
+export type { AIBadgeProps } from './AIBadge';

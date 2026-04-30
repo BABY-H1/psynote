@@ -18,6 +18,7 @@ import {
   useToast,
   ServiceDetailLayout,
   ServiceTabBar,
+  ServiceCandidatesTab,
   type ServiceTab,
 } from '../../../shared/components';
 import type { ServiceStatus } from '@psynote/shared';
@@ -54,7 +55,7 @@ interface Props {
   onClose: () => void;
 }
 
-const VISIBLE_TABS: ServiceTab[] = ['overview', 'participants', 'timeline', 'records'];
+const VISIBLE_TABS: ServiceTab[] = ['overview', 'candidates', 'participants', 'timeline', 'records'];
 const TAB_LABELS: Partial<Record<ServiceTab, string>> = {
   participants: '学员',
   timeline: '进度',
@@ -192,6 +193,9 @@ export function CourseInstanceDetail({ instanceId, onClose }: Props) {
       }
     >
       {tab === 'overview' && <OverviewTab instance={instance} />}
+      {tab === 'candidates' && (
+        <ServiceCandidatesTab serviceType="course" instanceId={instanceId} />
+      )}
       {tab === 'participants' && <MembersTab instanceId={instanceId} />}
       {tab === 'timeline' && <ProgressTab instanceId={instanceId} instance={instance} />}
       {tab === 'records' && <FeedbackHomeworkTab instanceId={instanceId} />}

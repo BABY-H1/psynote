@@ -1,4 +1,5 @@
 import { aiClient } from '../providers/openai-compatible.js';
+import { extractStructuredPayload } from './chat-json-helpers.js';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -96,21 +97,26 @@ ${scaleInfo}
 
   const response = await aiClient.chat(chatMessages, { temperature: 0.4, maxTokens: 3000 });
 
-  let cleaned = response.trim();
-  if (cleaned.startsWith('```')) {
-    cleaned = cleaned.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-  }
+  const cleaned = response.trim();
 
-  try {
-    const parsed = JSON.parse(cleaned);
-    if (parsed.type === 'rules' && parsed.rules) {
-      return { type: 'rules', summary: parsed.summary || '', rules: parsed.rules };
-    }
-    if (parsed.type === 'message' && parsed.content) {
-      return { type: 'message', content: parsed.content };
-    }
-  } catch {
-    // Not JSON — treat as plain message
+  // 鲁棒抽取 — 模型常带前置自然语言, startsWith('```') 会漏. 见
+  // create-scale-chat.ts 同款修复说明.
+  type RulesPayload = { type: 'rules'; rules: unknown; summary?: string };
+  type MessagePayload = { type: 'message'; content: string };
+  const isRules = (v: unknown): v is RulesPayload =>
+    !!v && typeof v === 'object' && (v as { type?: unknown }).type === 'rules'
+    && !!(v as { rules?: unknown }).rules;
+  const isMessage = (v: unknown): v is MessagePayload =>
+    !!v && typeof v === 'object' && (v as { type?: unknown }).type === 'message'
+    && typeof (v as { content?: unknown }).content === 'string';
+
+  const rulesPayload = extractStructuredPayload<RulesPayload>(cleaned, isRules);
+  if (rulesPayload) {
+    return { type: 'rules', summary: (rulesPayload.summary as string) || '', rules: rulesPayload.rules as any };
+  }
+  const msgPayload = extractStructuredPayload<MessagePayload>(cleaned, isMessage);
+  if (msgPayload) {
+    return { type: 'message', content: msgPayload.content };
   }
 
   return { type: 'message', content: cleaned };

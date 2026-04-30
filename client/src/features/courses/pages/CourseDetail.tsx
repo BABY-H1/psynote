@@ -120,7 +120,7 @@ export function CourseDetail({ courseId, onBack, initialEditing = false }: Props
     activeSessionIndex !== null ? displayData.blueprint.sessions[activeSessionIndex] : null;
 
   return (
-    <div className="flex flex-row-reverse -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
+    <div className="flex flex-row-reverse h-full overflow-hidden">
       {/* RIGHT (rendered first; flex-row-reverse places it on the right) */}
       <CourseDetailSidebar
         title={displayData.title}

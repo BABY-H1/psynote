@@ -74,11 +74,18 @@ export async function updateConversation(id: string, data: {
   messages?: any[];
   title?: string;
   summary?: string;
+  /*
+   * Phase I Issue 1: 用户保存 sessionNote 时, ChatWorkspace PATCH 当前
+   * note-mode 对话把 sessionNoteId 关联过去. LeftPanel 用此字段把
+   * "草稿对话" 显示在 "会谈记录" 区. 传 null 可解绑 (未来万一需要).
+   */
+  sessionNoteId?: string | null;
 }) {
   const updates: any = { updatedAt: new Date() };
   if (data.messages !== undefined) updates.messages = data.messages;
   if (data.title !== undefined) updates.title = data.title;
   if (data.summary !== undefined) updates.summary = data.summary;
+  if (data.sessionNoteId !== undefined) updates.sessionNoteId = data.sessionNoteId;
 
   const [row] = await db.update(aiConversations)
     .set(updates)

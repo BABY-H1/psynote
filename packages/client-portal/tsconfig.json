@@ -14,7 +14,8 @@
     "sourceMap": false,
     "composite": false,
     "paths": {
-      "@client/*": ["../../client/src/*"]
+      "@client/*": ["../../client/src/*"],
+      "@psynote/shared": ["../shared/src/index.ts"]
     }
   },
   "include": ["src"]

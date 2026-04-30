@@ -35,11 +35,44 @@ export const users = pgTable('users', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * password_reset_tokens (migration 027) —— 密码重置专用一次性 token 表。
+ *
+ * 安全设计:
+ *   - DB 只存 sha256(token),邮件链接里才是明文。即使 DB 被偷,token 不可回放
+ *   - 15 min 过期(expiresAt)
+ *   - 一次性(usedAt 非 null 即作废)
+ *   - 忘记密码对未知邮箱也返回 200,不暴露"邮箱是否注册"
+ */
+export const passwordResetTokens = pgTable('password_reset_tokens', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  tokenHash: text('token_hash').notNull(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  usedAt: timestamp('used_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('uq_password_reset_token_hash').on(t.tokenHash),
+  index('idx_password_reset_user_expires').on(t.userId, t.expiresAt),
+]);
+
 export const orgMembers = pgTable('org_members', {
   id: uuid('id').primaryKey().defaultRandom(),
   orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
-  role: text('role').notNull(), // org_admin | counselor | client
+  role: text('role').notNull(), // legacy: org_admin | counselor | client
+  // ── Role Architecture V2 (migration 026) ──
+  // per-orgType 角色字典。DB trigger `trg_validate_role_v2` 保证 role_v2 ∈
+  // orgType 对应的合法角色集。nullable:Phase 1 骨架期,backfill 未跑前为 NULL。
+  // 语义见 packages/shared/src/auth/roles.ts。
+  roleV2: text('role_v2'),
+  // Principal class 决定登录入口(staff→主 app / subject→Portal 自视角 / proxy→监护视角)。
+  // CHECK constraint 硬约束只允许 staff|subject|proxy。
+  principalClass: text('principal_class'),
+  // 单点权限补丁:{ dataClasses: DataClass[], extraScopes: string[], grantedAt, grantedBy, reason }
+  // Role 默认策略的覆盖层,Phase 3 UI 接入前默认空。
+  accessProfile: jsonb('access_profile'),
+  // ── Legacy (保留) ──
   permissions: jsonb('permissions').notNull().default({}),
   status: text('status').notNull().default('active'),
   validUntil: timestamp('valid_until', { withTimezone: true }),
@@ -176,6 +209,13 @@ export const assessmentResults = pgTable('assessment_results', {
   // Stored on the result row so the suggestion panel can show them without a re-run.
   // Shape: TriageRecommendation[] from triage.ts
   recommendations: jsonb('recommendations').notNull().default([]),
+  // AI 合规水印 — 当 recommendations / aiInterpretation 由 AI 写入时，
+  // 这里记录 model/pipeline/confidence/generatedAt 等元数据，前端
+  // <AIBadge provenance={...} /> 据此渲染"AI 生成"标识。
+  // Shape: AIProvenance from packages/shared/src/types/ai-provenance.ts.
+  // 历史行没有 backfill — 前端在 provenance == null 时回退到 generic
+  // "AI 生成" 标签，不破坏既有 UX。
+  aiProvenance: jsonb('ai_provenance'),
   batchId: uuid('batch_id').references(() => assessmentBatches.id),
   createdBy: uuid('created_by').references(() => users.id),
   deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -528,14 +568,23 @@ export const aiConversations = pgTable('ai_conversations', {
   orgId: uuid('org_id').notNull().references(() => organizations.id),
   careEpisodeId: uuid('care_episode_id').notNull().references(() => careEpisodes.id, { onDelete: 'cascade' }),
   counselorId: uuid('counselor_id').notNull().references(() => users.id),
-  mode: text('mode').notNull(), // 'simulate' | 'supervise'
+  mode: text('mode').notNull(), // 'note' | 'plan' | 'simulate' | 'supervise' (BUG-009: 之前只 simulate/supervise 归档)
   title: text('title'),
   messages: jsonb('messages').notNull().default([]), // ChatMessage[]
   summary: text('summary'),
+  /*
+   * Phase I Issue 1: mode='note' 的对话在用户点 "保存笔记" 后被关联到
+   * 新建的 sessionNote. NULL = 草稿尚未保存; 非 NULL = 该对话是某个
+   * sessionNote 的 AI 草稿过程. LeftPanel 用此字段把草稿显示在
+   * "会谈记录" 区而不是 "AI 对话" 区. plan/simulate/supervise 的对话
+   * 字段恒 NULL (它们不绑定 sessionNote).
+   */
+  sessionNoteId: uuid('session_note_id').references(() => sessionNotes.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('idx_ai_conversations_episode').on(t.careEpisodeId, t.mode),
+  index('idx_ai_conversations_session_note').on(t.sessionNoteId),
 ]);
 
 // ─── Group Domain ─────────────────────────────────────────────────
@@ -740,19 +789,11 @@ export const courseTemplateTags = pgTable('course_template_tags', {
   uniqueIndex('uq_course_template_tags_org_name').on(t.orgId, t.name),
 ]);
 
-export const courseAttachments = pgTable('course_attachments', {
-  id: uuid('id').primaryKey().defaultRandom(),
-  chapterId: uuid('chapter_id').notNull().references(() => courseChapters.id, { onDelete: 'cascade' }),
-  fileName: text('file_name').notNull(),
-  fileUrl: text('file_url').notNull(),
-  fileType: text('file_type').notNull(),
-  fileSize: integer('file_size'),
-  sortOrder: integer('sort_order').notNull().default(0),
-  uploadedBy: uuid('uploaded_by').references(() => users.id),
-  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-}, (t) => [
-  index('idx_course_attachments_chapter').on(t.chapterId),
-]);
+// REMOVED 2026-04-28 (migration 029): courseAttachments was a Phase-7 orphan
+// table — created but never wired into any route or UI. Real chapter
+// attachments live in `courseContentBlocks` (PDF / video / audio block
+// types) which is end-to-end verified through to the portal CourseReader.
+// See server/src/db/migrations/029-drop-orphan-course-attachments.ts.
 
 /**
  * Phase 9α — C-facing consumable content blocks attached to course chapters.
@@ -960,10 +1001,41 @@ export const phiAccessLogs = pgTable('phi_access_logs', {
   resourceId: uuid('resource_id'),
   action: text('action').notNull(),
   reason: text('reason'),
+  // Migration 026: Role Architecture V2 — data class + actor role snapshot.
+  // 记录本次访问数据的 PHI 密级 + 冻结当时的角色,供合规审计追溯。
+  dataClass: text('data_class'),
+  actorRoleSnapshot: text('actor_role_snapshot'),
   ipAddress: inet('ip_address'),
   userAgent: text('user_agent'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+/**
+ * user_role_audit (migration 026) —— 角色与权限变更专用审计表。
+ *
+ * 既有 audit_logs 是通用变更日志,不包含 role snapshot 字段。此表每次
+ * org_members.role_v2 / access_profile / principal_class 变更都写一行,
+ * 把变更前后快照、执行人当时角色一起冻结,便于按角色演变倒查。
+ *
+ * action: 'role_change' | 'access_profile_change' | 'principal_class_change'
+ */
+export const userRoleAudit = pgTable('user_role_audit', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  orgId: uuid('org_id').notNull().references(() => organizations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+  action: text('action').notNull(),
+  roleBefore: text('role_before'),
+  roleAfter: text('role_after'),
+  accessProfileBefore: jsonb('access_profile_before'),
+  accessProfileAfter: jsonb('access_profile_after'),
+  actorId: uuid('actor_id').references(() => users.id),
+  actorRoleSnapshot: text('actor_role_snapshot'),
+  reason: text('reason'),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  index('idx_user_role_audit_org_user').on(t.orgId, t.userId, t.createdAt),
+  index('idx_user_role_audit_actor').on(t.actorId, t.createdAt),
+]);
 
 export const consentTemplates = pgTable('consent_templates', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -1264,10 +1336,17 @@ export const candidatePool = pgTable('candidate_pool', {
   // 接受后关联到的实体(比如 accepted 后创建了个案,这里存个案 id)
   resolvedRefType: text('resolved_ref_type'),
   resolvedRefId: uuid('resolved_ref_id'),
+  // 候选目标服务:规则作者在规则 action.config 里指定的"打算把这个人加到哪个团辅/课程"
+  // 仅对 group_candidate / course_candidate 两类有意义;crisis / episode 候选可留空。
+  // 填了之后,团辅/课程详情页的"候选"tab 就能反查"指向本服务的候选名单"。
+  targetGroupInstanceId: uuid('target_group_instance_id').references(() => groupInstances.id, { onDelete: 'set null' }),
+  targetCourseInstanceId: uuid('target_course_instance_id').references(() => courseInstances.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [
   index('idx_candidate_pool_org_status_kind').on(t.orgId, t.status, t.kind),
   index('idx_candidate_pool_client').on(t.clientUserId, t.status),
+  index('idx_candidate_pool_target_group').on(t.targetGroupInstanceId, t.status),
+  index('idx_candidate_pool_target_course').on(t.targetCourseInstanceId, t.status),
 ]);
 
 // ─── AI Usage Tracking ───────────────────────────────────────────

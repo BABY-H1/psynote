@@ -16,8 +16,11 @@ test.describe('counseling org_admin smoke', () => {
     await expect(page.locator('body')).not.toHaveText(/Forbidden|403/i);
   });
 
-  test('sees "待办事项" or "快捷入口" — OrgAdminDashboard-specific panels', async ({ page }) => {
+  test('sees "机构运营概览" — distinguishes OrgAdminDashboard from counselor DashboardHome', async ({ page }) => {
+    // Dashboard 重设计 (commit 046a7f6) 后,OrgAdminDashboard 的 admin-only 标识从
+    // "待办事项 / 快捷入口" 改为 "机构运营概览" 副标题 + 5 KPI 卡 (本月新增来访者 etc).
+    // counselor 的 DashboardHome 副标题是 "今日工作看板", 不会撞.
     await page.goto('/');
-    await expect(page.getByText(/待办事项|快捷入口/).first()).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByText(/机构运营概览/).first()).toBeVisible({ timeout: 10_000 });
   });
 });

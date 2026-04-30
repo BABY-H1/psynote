@@ -8,6 +8,9 @@ import { isVisible, type SceneContext, type SceneVisibility } from './scene/visi
 import { DEFAULT_ORG_TYPE } from '../shared/constants/roles';
 import { useAuthStore } from '../stores/authStore';
 import { LoginPage } from '../features/auth/pages/LoginPage';
+import { ForgotPasswordPage } from '../features/auth/pages/ForgotPasswordPage';
+import { ResetPasswordPage } from '../features/auth/pages/ResetPasswordPage';
+import { PrivacyPolicyPage, TermsOfServicePage } from '../features/legal/LegalPage';
 import { ScaleLibrary } from '../features/assessment/pages/ScaleLibrary';
 import { AssessmentRunner } from '../features/assessment/pages/AssessmentRunner';
 import { EpisodeDetail } from '../features/counseling/pages/EpisodeDetail';
@@ -31,6 +34,7 @@ import {
   BookAppointment,
   CourseReader,
   ConsentCenter,
+  CounselingPublicRegisterPage,
 } from '@psynote/client-portal';
 import { KnowledgeBase } from '../features/knowledge/pages/KnowledgeBase';
 import { GoalLibrary } from '../features/knowledge/pages/GoalLibrary';
@@ -63,6 +67,8 @@ import { useOrgBranding } from '../api/useOrgBranding';
 import { OrgCollaboration } from '../features/collaboration/OrgCollaboration';
 import { AuditLogViewer } from '../features/collaboration/AuditLogViewer';
 import { OrgSettingsPage } from '../features/settings/pages/OrgSettingsPage';
+// Research & triage — L1-L4 decision workbench over screening results
+import { ResearchTriagePage } from '../features/research-triage/ResearchTriagePage';
 
 function AppRoutes() {
   const { user, currentOrgId, currentRole, isSystemAdmin, _hydrated } = useAuthStore();
@@ -81,6 +87,11 @@ function AppRoutes() {
       <Route path="/course-enroll/:instanceId" element={<PublicCourseEnrollment />} />
       <Route path="/checkin/:instanceId/:sessionId" element={<PublicCheckin />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/register/counseling/:orgSlug" element={<CounselingPublicRegisterPage />} />
+      <Route path="/legal/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/legal/terms" element={<TermsOfServicePage />} />
 
       {/* Auth required */}
       {!user ? (
@@ -170,6 +181,8 @@ function AppRoutes() {
           {/* Per-module detail and wizard routes — kept; entered from inside the delivery center */}
           <Route path="episodes/new" element={<CreateEpisodeWizard />} />
           <Route path="episodes/:episodeId" element={<EpisodeDetail />} />
+          {/* Research & triage — L1-L4 decision workbench (org_admin + counselor) */}
+          <Route path="research-triage" element={<ResearchTriagePage />} />
           {/* Phase 10 — collaboration center (org_admin + counselor) */}
           <Route path="collaboration" element={<OrgCollaboration />} />
           {/* Phase 10 — audit log (org_admin, also embedded in settings later) */}
@@ -291,6 +304,12 @@ const allNavItems: NavItem[] = [
   { to: '/', label: '首页', end: true },
   { to: '/knowledge', label: '知识库' },
   { to: '/delivery', label: '交付中心' },
+  {
+    to: '/research-triage',
+    label: '研判分流',
+    onlyForRoles: ['org_admin', 'counselor'],
+    hideForOrgTypes: ['solo'],
+  },
   {
     to: '/collaboration',
     label: '协作中心',

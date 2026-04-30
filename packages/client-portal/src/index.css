@@ -2,6 +2,25 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * Lock the layout chain to viewport height so PortalAppShell's `h-screen`
+ * (100vh) actually resolves to 911px/etc., and `flex-1 overflow-y-auto`
+ * inside <main> can compute against a real bounding height.
+ *
+ * Without these, `<html>`/`<body>`/`<#root>` default to `height: auto`
+ * (= content height). The portal phone shell collapses to whatever the
+ * current page renders — empty state of /portal/account/consents was
+ * 345px, leaving the bottom tab bar floating in mid-screen instead of
+ * pinned to the viewport bottom.
+ *
+ * Closes BUG-008.
+ */
+html,
+body,
+#root {
+  height: 100%;
+}
+
 body {
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
 }

@@ -11,7 +11,7 @@
 import type { FastifyInstance } from 'fastify';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import { eq, count } from 'drizzle-orm';
+import { eq, and, count } from 'drizzle-orm';
 import { db } from '../../config/database.js';
 import { organizations, orgMembers, users, eapPartnerships } from '../../db/schema.js';
 import { authGuard } from '../../middleware/auth.js';
@@ -101,10 +101,12 @@ export async function adminTenantRoutes(app: FastifyInstance) {
         id: orgMembers.id,
         userId: orgMembers.userId,
         role: orgMembers.role,
+        roleV2: orgMembers.roleV2,
         status: orgMembers.status,
         createdAt: orgMembers.createdAt,
         userName: users.name,
         userEmail: users.email,
+        accessProfile: orgMembers.accessProfile,
       })
       .from(orgMembers)
       .innerJoin(users, eq(users.id, orgMembers.userId))
@@ -192,10 +194,16 @@ export async function adminTenantRoutes(app: FastifyInstance) {
     }
 
     // 3. Create or link admin user
+    //
+    // 三种情况:
+    //   (a) body.admin.userId 给了 → 链接已有 user (按 ID 直接绑)
+    //   (b) 没给 userId 但邮箱已存在 → 复用已有 user, 不动密码
+    //       (避免管理员通过此接口"接管"任何邮箱: 如果想给现有用户做机构 admin,
+    //        他用自己原密码登录就行; 如果忘了密码走密码重置)
+    //   (c) 没给 userId 也没匹配的邮箱 → 新建 user
     let adminUserId: string;
 
     if (body.admin.userId) {
-      // Link existing user
       const [existingUser] = await db
         .select({ id: users.id })
         .from(users)
@@ -204,28 +212,31 @@ export async function adminTenantRoutes(app: FastifyInstance) {
       if (!existingUser) throw new ValidationError('指定的管理员用户不存在');
       adminUserId = existingUser.id;
     } else {
-      // Create new user
-      if (!body.admin.email || !body.admin.name || !body.admin.password) {
-        throw new ValidationError('创建新管理员需要邮箱、姓名和密码');
+      if (!body.admin.email || !body.admin.name) {
+        throw new ValidationError('创建新管理员需要邮箱和姓名');
       }
-      if (body.admin.password.length < 6) {
-        throw new ValidationError('密码至少 6 位');
-      }
-      const [dupUser] = await db
+      const email = body.admin.email.trim().toLowerCase();
+      const [existingByEmail] = await db
         .select({ id: users.id })
         .from(users)
-        .where(eq(users.email, body.admin.email))
+        .where(eq(users.email, email))
         .limit(1);
-      if (dupUser) throw new ValidationError(`邮箱 '${body.admin.email}' 已存在`);
 
-      const passwordHash = await bcrypt.hash(body.admin.password, 10);
-      const [newUser] = await db.insert(users).values({
-        id: crypto.randomUUID(),
-        email: body.admin.email,
-        name: body.admin.name,
-        passwordHash,
-      }).returning();
-      adminUserId = newUser.id;
+      if (existingByEmail) {
+        // 复用 — 不重置密码 (走 Reset 流程或对方自己登录)
+        adminUserId = existingByEmail.id;
+      } else {
+        if (!body.admin.password) throw new ValidationError('新建管理员需要密码');
+        if (body.admin.password.length < 6) throw new ValidationError('密码至少 6 位');
+        const passwordHash = await bcrypt.hash(body.admin.password, 10);
+        const [newUser] = await db.insert(users).values({
+          id: crypto.randomUUID(),
+          email,
+          name: body.admin.name,
+          passwordHash,
+        }).returning();
+        adminUserId = newUser.id;
+      }
     }
 
     // 4. Add admin to org
@@ -277,36 +288,49 @@ export async function adminTenantRoutes(app: FastifyInstance) {
 
     const role = body.role && VALID_ROLES.includes(body.role as any) ? body.role : 'counselor';
     let userId: string;
+    let reusedExistingUser = false;
 
     if (body.userId) {
-      // Existing user
       const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.id, body.userId)).limit(1);
       if (!existing) throw new ValidationError('用户不存在');
       userId = existing.id;
+      reusedExistingUser = true;
     } else {
-      // Create new user
-      if (!body.email || !body.name || !body.password) {
-        throw new ValidationError('新建用户需要邮箱、姓名和密码');
+      if (!body.email || !body.name) {
+        throw new ValidationError('需要邮箱和姓名');
       }
-      const [dup] = await db.select({ id: users.id }).from(users).where(eq(users.email, body.email)).limit(1);
-      if (dup) throw new ValidationError(`邮箱 '${body.email}' 已存在`);
-
-      const passwordHash = await bcrypt.hash(body.password, 10);
-      const [newUser] = await db.insert(users).values({
-        id: crypto.randomUUID(),
-        email: body.email,
-        name: body.name,
-        passwordHash,
-      }).returning();
-      userId = newUser.id;
+      const email = body.email.trim().toLowerCase();
+      // 邮箱已存在就直接复用,不重置密码 — 否则管理员可以借此接管任意邮箱.
+      // 如对方忘了密码走密码重置.
+      const [existingByEmail] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);
+      if (existingByEmail) {
+        userId = existingByEmail.id;
+        reusedExistingUser = true;
+      } else {
+        if (!body.password) throw new ValidationError('新建用户需要密码');
+        if (body.password.length < 6) throw new ValidationError('密码至少 6 位');
+        const passwordHash = await bcrypt.hash(body.password, 10);
+        const [newUser] = await db.insert(users).values({
+          id: crypto.randomUUID(),
+          email,
+          name: body.name,
+          passwordHash,
+        }).returning();
+        userId = newUser.id;
+      }
     }
 
-    // Check if already a member
+    // 重复检查 — 原代码漏了 userId 条件 (只 where orgId), 任何已有成员都会
+    // 命中却没用结果, 形如装饰性代码; 现改成真正按 (orgId, userId) 唯一性查.
     const [existingMember] = await db
-      .select({ id: orgMembers.id })
+      .select({ id: orgMembers.id, role: orgMembers.role, status: orgMembers.status })
       .from(orgMembers)
-      .where(eq(orgMembers.orgId, orgId))
+      .where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.userId, userId)))
       .limit(1);
+
+    if (existingMember) {
+      throw new ValidationError(`该用户已是本机构成员 (角色: ${existingMember.role}, 状态: ${existingMember.status})`);
+    }
 
     const [member] = await db.insert(orgMembers).values({
       orgId,
@@ -317,17 +341,42 @@ export async function adminTenantRoutes(app: FastifyInstance) {
 
     await logAudit(request, 'member.added', 'org_members', member.id);
 
-    return reply.status(201).send(member);
+    return reply.status(201).send({ ...member, reusedExistingUser });
   });
 
   // ─── Update Member ──────────────────────────────────────────────
   app.patch('/:orgId/members/:memberId', async (request) => {
     const { orgId, memberId } = request.params as { orgId: string; memberId: string };
-    const body = request.body as { role?: string; status?: string };
+    const body = request.body as {
+      role?: string;
+      status?: string;
+      // Phase 1.5: 单点放开 phi_full 给 clinic_admin(老板兼咨询师场景)
+      clinicalPractitioner?: boolean;
+    };
 
     const updates: Record<string, unknown> = {};
     if (body.role && VALID_ROLES.includes(body.role as any)) updates.role = body.role;
     if (body.status) updates.status = body.status;
+
+    // Phase 1.5: clinicalPractitioner 开关写入 access_profile.dataClasses
+    if (typeof body.clinicalPractitioner === 'boolean') {
+      const [existing] = await db
+        .select({ accessProfile: orgMembers.accessProfile })
+        .from(orgMembers)
+        .where(eq(orgMembers.id, memberId))
+        .limit(1);
+      const profile = (existing?.accessProfile as Record<string, unknown> | null) ?? {};
+      if (body.clinicalPractitioner) {
+        profile.dataClasses = ['phi_full', 'phi_summary', 'de_identified', 'aggregate'];
+        profile.reason = 'clinical_practitioner_patch';
+        profile.grantedAt = new Date().toISOString();
+      } else {
+        delete profile.dataClasses;
+        delete profile.reason;
+        delete profile.grantedAt;
+      }
+      updates.accessProfile = profile;
+    }
 
     const [updated] = await db
       .update(orgMembers)

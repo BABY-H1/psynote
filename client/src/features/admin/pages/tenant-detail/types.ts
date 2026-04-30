@@ -4,10 +4,21 @@ export interface MemberRow {
   id: string;
   userId: string;
   role: string;
+  roleV2?: string | null;
   status: string;
   createdAt: string;
   userName: string;
   userEmail: string;
+  /**
+   * Phase 1.5: access_profile 是 jsonb,目前支持 { dataClasses: DataClass[],
+   * reason?, grantedAt? }。当 dataClasses 包含 'phi_full' 时,该成员被标记
+   * 为"具备临床执业身份"(老板兼咨询师等场景)。
+   */
+  accessProfile?: {
+    dataClasses?: string[];
+    reason?: string;
+    grantedAt?: string;
+  } | null;
 }
 
 export interface TenantDetailData {

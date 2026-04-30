@@ -92,6 +92,20 @@ jobs:
       - name: Install workspaces
         run: npm ci
 
+      - name: Build @psynote/shared
+        # The shared package's package.json points "main"/"exports" at
+        # ./dist/index.js, which only exists post-build. The static type
+        # imports work via vite-tsconfig-paths → src, but dynamic
+        # `await import('@psynote/shared')` (e.g. App.tsx OrgSelector lazy
+        # load) goes through Node resolution and needs the built dist.
+        # Without this step vite throws plugin:vite:import-analysis
+        # "Failed to resolve entry for package @psynote/shared", the app
+        # crashes on first navigation, and every dashboard smoke spec
+        # times out waiting for content to render.
+        # The typecheck job already runs this step for the same reason
+        # (TS project references), so e2e was the only job missing it.
+        run: npm run build --workspace=@psynote/shared
+
       - name: Probe Postgres reachability
         # Drill-down diagnostics because the service-container health-check
         # doesn't guarantee the CLI from the runner host can reach it — if

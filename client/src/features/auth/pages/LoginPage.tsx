@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../../../stores/authStore';
 import { api } from '../../../api/client';
 import { Shield, Zap, BarChart3 } from 'lucide-react';
@@ -189,7 +189,15 @@ export function LoginPage() {
 
             {/* Password */}
             <div>
-              <label className="block text-sm font-medium text-slate-700 mb-1.5">密码</label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-sm font-medium text-slate-700">密码</label>
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-brand-600 hover:underline"
+                >
+                  忘记密码?
+                </Link>
+              </div>
               <div className="relative">
                 <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400">
                   <svg viewBox="0 0 20 20" className="w-5 h-5" fill="currentColor">
@@ -218,9 +226,9 @@ export function LoginPage() {
               />
               <span className="text-xs text-slate-500 leading-relaxed">
                 我已阅读并同意
-                <span className="text-brand-600 hover:underline cursor-pointer">《用户协议》</span>
+                <Link to="/legal/terms" target="_blank" className="text-brand-600 hover:underline mx-1">《用户协议》</Link>
                 和
-                <span className="text-brand-600 hover:underline cursor-pointer">《隐私政策》</span>
+                <Link to="/legal/privacy" target="_blank" className="text-brand-600 hover:underline mx-1">《隐私政策》</Link>
               </span>
             </label>
 

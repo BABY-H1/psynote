@@ -28,42 +28,23 @@ function signTokens(user: { id: string; email: string | null; isSystemAdmin?: bo
 }
 
 export async function authRoutes(app: FastifyInstance) {
-  /** Register a new user */
-  app.post('/register', async (request, reply) => {
-    const { email, password, name } = request.body as {
-      email: string;
-      password: string;
-      name: string;
-    };
-
-    if (!email || !password || !name) {
-      throw new ValidationError('email, password, and name are required');
-    }
-
-    // Check if email already exists
-    const [existing] = await db
-      .select()
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
-
-    if (existing) {
-      throw new ValidationError('该邮箱已注册');
-    }
-
-    const passwordHash = await bcrypt.hash(password, 10);
-
-    const [user] = await db.insert(users).values({
-      email,
-      name,
-      passwordHash,
-    }).returning();
-
-    const tokens = signTokens(user);
-
-    return reply.status(201).send({
-      ...tokens,
-      user: { id: user.id, email: user.email, name: user.name, isSystemAdmin: user.isSystemAdmin },
+  /**
+   * POST /register —— 已弃用 (alpha)
+   *
+   * 历史上此端点会建 users 行但**不建 org_members**,导致用户登进去看到
+   * "您尚未加入任何机构"的孤儿状态。alpha 起改为:所有注册必须走 orgType
+   * 专属的公开入口,这样服务端事务里一次建齐 user + org_members + profile:
+   *
+   *   POST /api/public/counseling/:orgSlug/register  —— 咨询中心来访者
+   *   POST /api/public/eap/:orgSlug/register         —— 企业员工
+   *   POST /api/public/parent-bind/:token            —— 学校家长(班级邀请码)
+   *
+   * 故意返回 410 Gone 而不是 404,明确告知调用方"此功能被移除"。
+   */
+  app.post('/register', async (_request, reply) => {
+    return reply.status(410).send({
+      error: 'registration_endpoint_deprecated',
+      message: '请通过机构专属注册入口注册(咨询中心 / EAP / 学校家长邀请)',
     });
   });
 

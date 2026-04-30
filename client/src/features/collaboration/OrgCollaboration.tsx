@@ -1,19 +1,22 @@
 /**
- * Phase 10 — Org collaboration center.
+ * Org collaboration center.
  *
  * 4 tabs:
  *   - 派单 (Assignment)        — assign unassigned clients to counselors
  *   - 临时授权 (Access Grants)  — manage cross-counselor temporary access
  *   - 督导待审 (Pending Review) — supervisor inbox for note review
  *   - 收到的转介 (Inbox)        — accept/reject incoming referrals
+ *
+ * NOTE: The old 危机仪表板 + 待处理候选 tabs now live in /research-triage.
+ * Every candidate_pool row is created by the rule engine on a
+ * screening/intake assessment result, so the research-triage workspace is
+ * a superset of the old candidate tab.
  */
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
-  Users, ShieldCheck, ClipboardList, Inbox, Loader2, Check, X, Plus, Trash2, Sparkles, AlertTriangle,
+  Users, ShieldCheck, ClipboardList, Inbox, Loader2, Check, X, Plus, Trash2,
 } from 'lucide-react';
-import { CandidatePoolTab } from '../workflow/CandidatePoolTab';
-import { CrisisDashboardTab } from './CrisisDashboardTab';
 import {
   useUnassignedClients,
   useAssignmentsList,
@@ -32,12 +35,10 @@ import { useAuthStore } from '../../stores/authStore';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../api/client';
 
-type TabKey = 'assignment' | 'candidates' | 'crisis' | 'grants' | 'supervision' | 'inbox';
+type TabKey = 'assignment' | 'grants' | 'supervision' | 'inbox';
 
 const TABS: { key: TabKey; label: string; Icon: React.ComponentType<{ className?: string }> }[] = [
   { key: 'assignment', label: '派单', Icon: Users },
-  { key: 'candidates', label: '待处理候选', Icon: Sparkles },
-  { key: 'crisis', label: '危机仪表板', Icon: AlertTriangle },
   { key: 'grants', label: '临时授权', Icon: ShieldCheck },
   { key: 'supervision', label: '督导待审', Icon: ClipboardList },
   { key: 'inbox', label: '收到的转介', Icon: Inbox },
@@ -86,8 +87,6 @@ export function OrgCollaboration() {
 
       <div>
         {tab === 'assignment' && <AssignmentTab />}
-        {tab === 'candidates' && <CandidatePoolTab />}
-        {tab === 'crisis' && <CrisisDashboardTab />}
         {tab === 'grants' && <GrantsTab />}
         {tab === 'supervision' && <SupervisionTab />}
         {tab === 'inbox' && <ReferralInboxTab />}

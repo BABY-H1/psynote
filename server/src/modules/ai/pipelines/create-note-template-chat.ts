@@ -1,4 +1,5 @@
 import { aiClient } from '../providers/openai-compatible.js';
+import { extractStructuredPayload } from './chat-json-helpers.js';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -96,23 +97,24 @@ export async function chatCreateNoteTemplate(
 
   const trimmed = result.trim();
 
-  // Check if the response is a JSON template result
-  let jsonStr = trimmed;
-  if (jsonStr.startsWith('```')) {
-    jsonStr = jsonStr.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-  }
+  // 鲁棒 JSON 抽取 — 见 create-scale-chat.ts 同款注释. 老的 startsWith('```')
+  // 不匹配前置自然语言场景, 用 extractStructuredPayload 任意位置挖.
+  type TemplateEnvelope = { type: 'template'; template: NoteTemplate; summary?: string };
+  const isTemplate = (v: unknown): v is TemplateEnvelope =>
+    !!v && typeof v === 'object' && (v as { type?: unknown }).type === 'template'
+    && !!(v as { template?: unknown }).template;
+  const isBareTemplate = (v: unknown): v is NoteTemplate =>
+    !!v && typeof v === 'object'
+    && Array.isArray((v as { fieldDefinitions?: unknown }).fieldDefinitions)
+    && typeof (v as { title?: unknown }).title === 'string';
 
-  try {
-    const parsed = JSON.parse(jsonStr);
-    if (parsed.type === 'template' && parsed.template) {
-      return {
-        type: 'template',
-        template: parsed.template,
-        summary: parsed.summary || '',
-      };
-    }
-  } catch {
-    // Not JSON — treat as regular message
+  const envelope = extractStructuredPayload<TemplateEnvelope>(trimmed, isTemplate);
+  if (envelope) {
+    return { type: 'template', template: envelope.template, summary: envelope.summary || '' };
+  }
+  const bare = extractStructuredPayload<NoteTemplate>(trimmed, isBareTemplate);
+  if (bare) {
+    return { type: 'template', template: bare, summary: '' };
   }
 
   return { type: 'message', content: trimmed };

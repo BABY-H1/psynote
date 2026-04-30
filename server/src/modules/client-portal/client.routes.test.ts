@@ -38,6 +38,7 @@ describe('clientPortalRoutes — route registration contract', () => {
       'GET /consents',
       'GET /counselors',
       'GET /courses',
+      'GET /courses/:courseId',
       'GET /dashboard',
       'GET /documents',
       'GET /documents/:docId',
@@ -59,7 +60,7 @@ describe('clientPortalRoutes — route registration contract', () => {
     ]);
   });
 
-  it('registers exactly 22 authored endpoints (no drift)', async () => {
+  it('registers exactly 23 authored endpoints (no drift)', async () => {
     const app = Fastify();
     let count = 0;
     app.addHook('onRoute', (route) => {
@@ -72,6 +73,6 @@ describe('clientPortalRoutes — route registration contract', () => {
     await app.register(clientPortalRoutes);
     await app.ready();
     await app.close();
-    expect(count).toBe(22);
+    expect(count).toBe(23);
   });
 });

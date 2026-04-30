@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Sparkles } from 'lucide-react';
+import { Sparkles, PanelRightClose } from 'lucide-react';
 import { useScale, useUpdateScale, useDeleteScale } from '../../../api/useScales';
 import { PageLoading, useToast } from '../../../shared/components';
 import { OverviewTab } from './scale-detail/OverviewTab';
@@ -40,6 +40,24 @@ export function ScaleDetail({ scaleId, onBack, initialEditing = false, onPreview
   const [editing, setEditing] = useState(initialEditing);
   const [activeSubTab, setActiveSubTab] = useState<SubTab>('overview');
   const [expandedDimGroups, setExpandedDimGroups] = useState<Set<number>>(new Set([0]));
+  // AI 助手面板默认展开,可折叠 — 在窄屏 (<1280px viewport, 即 lg-xl 之间)
+  // 给主区让出宽度. localStorage 记住用户偏好,跨页面持久化.
+  const [aiPanelOpen, setAiPanelOpen] = useState<boolean>(() => {
+    try {
+      const saved = window.localStorage.getItem('scale.aiPanelOpen');
+      if (saved === 'false') return false;
+      if (saved === 'true') return true;
+    } catch { /* SSR / disabled storage */ }
+    // 默认根据视窗判断: 大屏开,小屏收
+    return typeof window !== 'undefined' && window.innerWidth >= 1280;
+  });
+  const toggleAiPanel = () => {
+    setAiPanelOpen((prev) => {
+      const next = !prev;
+      try { window.localStorage.setItem('scale.aiPanelOpen', String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (initialEditing && scale && !state.editData) {
@@ -109,8 +127,8 @@ export function ScaleDetail({ scaleId, onBack, initialEditing = false, onPreview
     });
 
   return (
-    <div className="flex -m-6" style={{ height: 'calc(100vh - 5rem)' }}>
-      <div className="flex-1 flex flex-col bg-slate-50 min-w-0">
+    <div className="flex h-full overflow-hidden">
+      <div className="flex-1 flex flex-col bg-slate-50 min-w-0 overflow-hidden">
         <ScaleDetailTopBar
           activeSubTab={activeSubTab}
           onSubTabChange={setActiveSubTab}
@@ -119,11 +137,14 @@ export function ScaleDetail({ scaleId, onBack, initialEditing = false, onPreview
           canDelete={!!scale.orgId}
           canPreviewReport={!!onPreviewReport}
           isSaving={updateScale.isPending}
+          onBack={onBack}
           onEdit={handleEdit}
           onCancel={handleCancel}
           onSave={handleSave}
           onDelete={handleDelete}
           onPreviewReport={onPreviewReport}
+          aiPanelOpen={aiPanelOpen}
+          onToggleAiPanel={toggleAiPanel}
         />
 
         <div className="flex-1 overflow-y-auto">
@@ -180,17 +201,23 @@ export function ScaleDetail({ scaleId, onBack, initialEditing = false, onPreview
         </div>
       </div>
 
-      <div className="w-[420px] flex-shrink-0 border-l border-slate-200 bg-white flex flex-col">
-        <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
-          <button onClick={onBack} className="text-slate-400 hover:text-slate-600">
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-          <Sparkles className="w-5 h-5 text-amber-500" />
-          <h3 className="font-bold text-slate-900 truncate">{data.title || '量表详情'}</h3>
-        </div>
+      {aiPanelOpen && (
+        <div className="w-[360px] flex-shrink-0 border-l border-slate-200 bg-white flex flex-col overflow-hidden">
+          <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
+            <Sparkles className="w-5 h-5 text-amber-500 flex-shrink-0" />
+            <h3 className="font-bold text-slate-900 truncate flex-1">{data.title || '量表详情'}</h3>
+            <button
+              onClick={toggleAiPanel}
+              className="text-slate-400 hover:text-slate-600 flex-shrink-0"
+              title="收起 AI 助手"
+            >
+              <PanelRightClose className="w-5 h-5" />
+            </button>
+          </div>
 
-        <ScaleAIChatPanel editing={editing} currentState={data} onApply={applyAIChange} />
-      </div>
+          <ScaleAIChatPanel editing={editing} currentState={data} onApply={applyAIChange} />
+        </div>
+      )}
     </div>
   );
 }

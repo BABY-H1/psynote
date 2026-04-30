@@ -7,6 +7,12 @@ interface Props {
   defaultLeftWidth?: number;
   defaultRightWidth?: number;
   minWidth?: number;
+  /**
+   * 单栏可拉到的最大比例 (相对 container 宽度). 默认 0.4 让 center 至少能占
+   * 20% 宽度. 研判分流右栏需要更宽的空间显示 picker / 危机清单, 传 0.5
+   * 让右栏可达 "三栏一半" 宽.
+   */
+  maxRatio?: number;
 }
 
 export function WorkspaceLayout({
@@ -14,6 +20,7 @@ export function WorkspaceLayout({
   defaultLeftWidth = 280,
   defaultRightWidth = 260,
   minWidth = 180,
+  maxRatio = 0.4,
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [leftWidth, setLeftWidth] = useState(defaultLeftWidth);
@@ -32,10 +39,10 @@ export function WorkspaceLayout({
       const rect = containerRef.current.getBoundingClientRect();
 
       if (dragging === 'left') {
-        const newWidth = Math.max(minWidth, Math.min(e.clientX - rect.left, rect.width * 0.4));
+        const newWidth = Math.max(minWidth, Math.min(e.clientX - rect.left, rect.width * maxRatio));
         setLeftWidth(newWidth);
       } else {
-        const newWidth = Math.max(minWidth, Math.min(rect.right - e.clientX, rect.width * 0.4));
+        const newWidth = Math.max(minWidth, Math.min(rect.right - e.clientX, rect.width * maxRatio));
         setRightWidth(newWidth);
       }
     };
@@ -48,13 +55,22 @@ export function WorkspaceLayout({
       document.removeEventListener('mousemove', handleMouseMove);
       document.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [dragging, minWidth]);
+  }, [dragging, minWidth, maxRatio]);
 
+  /*
+   * 之前 root 用 `h-[calc(100vh-5rem)]` 硬编码 viewport 减 shell header,
+   * 但实际 main 高度因 AppShell p-6 + ServiceDetailLayout header mb-6 多
+   * 减 ~72px, 导致 main 触发 30px 溢出 (用户看到整页滚动条).
+   *
+   * 改成 h-full + min-h-0, 让父级 (ServiceDetailLayout 加上 flex-1 min-h-0)
+   * 决定可用高度. 三栏内部 overflow-y-auto 各自滚动, overflow-x-hidden
+   * 防止用户拖窄某栏时长文本撑出横向 scroll.
+   */
   return (
-    <div ref={containerRef} className="flex h-[calc(100vh-5rem)] select-none">
+    <div ref={containerRef} className="flex h-full min-h-0 select-none">
       {/* Left panel */}
       <div
-        className="flex-shrink-0 overflow-y-auto border-r border-slate-200 bg-white"
+        className="flex-shrink-0 overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-white"
         style={{ width: leftWidth }}
       >
         {left}
@@ -67,7 +83,7 @@ export function WorkspaceLayout({
       />
 
       {/* Center panel */}
-      <div className="flex-1 min-w-0 overflow-y-auto bg-slate-50">
+      <div className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50">
         {center}
       </div>
 
@@ -79,7 +95,7 @@ export function WorkspaceLayout({
 
       {/* Right panel */}
       <div
-        className="flex-shrink-0 overflow-y-auto border-l border-slate-200 bg-white"
+        className="flex-shrink-0 overflow-y-auto overflow-x-hidden border-l border-slate-200 bg-white"
         style={{ width: rightWidth }}
       >
         {right}

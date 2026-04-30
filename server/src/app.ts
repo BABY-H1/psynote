@@ -7,6 +7,8 @@ import { join } from 'path';
 import { env } from './config/env.js';
 import { errorHandler } from './middleware/error-handler.js';
 import { authRoutes } from './modules/auth/auth.routes.js';
+import { passwordResetRoutes } from './modules/auth/password-reset.routes.js';
+import { counselingPublicRoutes } from './modules/counseling/counseling-public.routes.js';
 import { userRoutes } from './modules/user/user.routes.js';
 import { orgRoutes } from './modules/org/org.routes.js';
 import { scaleRoutes } from './modules/assessment/scale.routes.js';
@@ -77,6 +79,8 @@ import { collaborationRoutes } from './modules/collaboration/collaboration.route
 import { workflowRoutes } from './modules/workflow/workflow.routes.js';
 // Phase 13 — Crisis handling case workflow
 import { crisisRoutes } from './modules/crisis/crisis-case.routes.js';
+// Research & triage — L1-L4 decision workbench over screening assessment results
+import { triageRoutes } from './modules/triage/triage.routes.js';
 // EAP Enterprise — 国央企版 partnership & assignment
 import { eapPartnershipRoutes } from './modules/eap/eap-partnership.routes.js';
 import { eapAssignmentRoutes } from './modules/eap/eap-assignment.routes.js';
@@ -140,6 +144,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   // Routes
   await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(passwordResetRoutes, { prefix: '/api/auth' });
   // Phase 14f — self-service user endpoints (/me)
   await app.register(userRoutes, { prefix: '/api/users' });
   await app.register(orgRoutes, { prefix: '/api/orgs' });
@@ -253,6 +258,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(collaborationRoutes, { prefix: '/api/orgs/:orgId/collaboration' });
   await app.register(workflowRoutes, { prefix: '/api/orgs/:orgId/workflow' });
   await app.register(crisisRoutes, { prefix: '/api/orgs/:orgId/crisis' });
+  await app.register(triageRoutes, { prefix: '/api/orgs/:orgId/triage' });
 
   // EAP Enterprise — partnerships + assignments + analytics + public registration.
   // Phase 14h: /eap/employees and /eap/crisis HTTP routes deleted (zero clients
@@ -261,6 +267,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(eapAssignmentRoutes, { prefix: '/api/orgs/:orgId/eap/assignments' });
   await app.register(eapAnalyticsRoutes, { prefix: '/api/orgs/:orgId/eap/analytics' });
   await app.register(eapPublicRoutes, { prefix: '/api/public/eap' });
+  await app.register(counselingPublicRoutes, { prefix: '/api/public/counseling' });
 
   // School — class & student management
   await app.register(schoolClassRoutes, { prefix: '/api/orgs/:orgId/school/classes' });

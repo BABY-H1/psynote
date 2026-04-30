@@ -63,6 +63,13 @@ export function OrgAdminDashboard() {
 
       {/* 5 核心 KPI 环比 */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+        {/*
+          5 KPI 都跳到 /delivery 对应 type 过滤. 没有 list view 严格匹配
+          "本月" 时间窗口, 但点进去能看到对应类别的全量列表是合理的下一步动作
+          (delivery 已支持 type=group/course/counseling/assessment/archive 5 种).
+          UX 一致性: 5 个卡都可点, 不再是 2/5 的不一致状态.
+          Closes BUG-006.
+        */}
         <KPIDelta
           icon={<UserPlus className="w-4 h-4" />}
           tone="blue"
@@ -71,6 +78,7 @@ export function OrgAdminDashboard() {
           previous={delta?.newClient.previous}
           suffix="人"
           loading={deltaLoading}
+          onClick={() => navigate('/delivery?type=archive')}
         />
         <KPIDelta
           icon={<Calendar className="w-4 h-4" />}
@@ -80,6 +88,7 @@ export function OrgAdminDashboard() {
           previous={delta?.session.previous}
           suffix="场"
           loading={deltaLoading}
+          onClick={() => navigate('/delivery?type=counseling')}
         />
         <KPIDelta
           icon={<UsersRound className="w-4 h-4" />}
@@ -109,6 +118,7 @@ export function OrgAdminDashboard() {
           previous={delta?.assessment.previous}
           suffix="份"
           loading={deltaLoading}
+          onClick={() => navigate('/delivery?type=assessment')}
         />
       </div>
 

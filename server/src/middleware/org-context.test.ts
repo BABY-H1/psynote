@@ -87,7 +87,7 @@ describe('orgContextGuard', () => {
   });
 
   it('throws ForbiddenError when user is not authenticated', async () => {
-    const r = reqFor({ orgId: 'o1' });
+    const r = reqFor({ orgId: '00000000-0000-0000-0000-000000000001' });
     await expect(orgContextGuard(r, reply)).rejects.toBeInstanceOf(ForbiddenError);
   });
 
@@ -95,11 +95,11 @@ describe('orgContextGuard', () => {
     // single query: organizations row (plan + licenseKey + settings)
     selectQueue.push([{ plan: 'premium', licenseKey: null, settings: { orgType: 'school' } }]);
 
-    const r = reqFor({ userId: 'sys1', isSystemAdmin: true, orgId: 'o1' });
+    const r = reqFor({ userId: 'sys1', isSystemAdmin: true, orgId: '00000000-0000-0000-0000-000000000001' });
     await orgContextGuard(r, reply);
 
     expect(r.org).toMatchObject({
-      orgId: 'o1',
+      orgId: '00000000-0000-0000-0000-000000000001',
       role: 'org_admin',
       memberId: 'system-admin',
       fullPracticeAccess: true,
@@ -114,7 +114,7 @@ describe('orgContextGuard', () => {
 
     selectQueue.push([]); // orgMembers lookup → empty
 
-    const r = reqFor({ userId: 'u1', orgId: 'o1' });
+    const r = reqFor({ userId: 'u1', orgId: '00000000-0000-0000-0000-000000000001' });
     await expect(orgContextGuard(r, reply)).rejects.toBeInstanceOf(ForbiddenError);
 
     envState.NODE_ENV = 'test';
@@ -127,7 +127,7 @@ describe('orgContextGuard', () => {
     selectQueue.push([
       {
         id: 'm1',
-        orgId: 'o1',
+        orgId: '00000000-0000-0000-0000-000000000001',
         userId: 'u1',
         role: 'org_admin',
         status: 'active',
@@ -141,11 +141,11 @@ describe('orgContextGuard', () => {
     // 3. organizations row
     selectQueue.push([{ plan: 'pro', licenseKey: null, settings: { orgType: 'counseling' } }]);
 
-    const r = reqFor({ userId: 'u1', orgId: 'o1' });
+    const r = reqFor({ userId: 'u1', orgId: '00000000-0000-0000-0000-000000000001' });
     await orgContextGuard(r, reply);
 
     expect(r.org).toMatchObject({
-      orgId: 'o1',
+      orgId: '00000000-0000-0000-0000-000000000001',
       role: 'org_admin',
       memberId: 'm1',
       tier: 'growth',
@@ -163,7 +163,7 @@ describe('orgContextGuard', () => {
     selectQueue.push([
       {
         id: 'm1',
-        orgId: 'o1',
+        orgId: '00000000-0000-0000-0000-000000000001',
         userId: 'u1',
         role: 'counselor',
         status: 'active',
@@ -173,7 +173,7 @@ describe('orgContextGuard', () => {
       },
     ]);
 
-    const r = reqFor({ userId: 'u1', orgId: 'o1' });
+    const r = reqFor({ userId: 'u1', orgId: '00000000-0000-0000-0000-000000000001' });
     await expect(orgContextGuard(r, reply)).rejects.toBeInstanceOf(ForbiddenError);
 
     envState.NODE_ENV = 'test';
@@ -192,7 +192,7 @@ describe('orgContextGuard', () => {
 
     selectQueue.push([]); // orgMembers → empty
 
-    const r = reqFor({ userId: 'u1', orgId: 'o1', devRole: 'counselor' });
+    const r = reqFor({ userId: 'u1', orgId: '00000000-0000-0000-0000-000000000001', devRole: 'counselor' });
     await expect(orgContextGuard(r, reply)).rejects.toBeInstanceOf(ForbiddenError);
 
     envState.NODE_ENV = 'test';
@@ -203,7 +203,7 @@ describe('orgContextGuard', () => {
 
     selectQueue.push([]);
 
-    const r = reqFor({ userId: 'u1', orgId: 'o1', devRole: 'org_admin' });
+    const r = reqFor({ userId: 'u1', orgId: '00000000-0000-0000-0000-000000000001', devRole: 'org_admin' });
     await expect(orgContextGuard(r, reply)).rejects.toBeInstanceOf(ForbiddenError);
 
     envState.NODE_ENV = 'test';
@@ -214,14 +214,14 @@ describe('orgContextGuard', () => {
 
     // orgMembers → active member
     selectQueue.push([
-      { id: 'm1', orgId: 'o1', userId: 'u1', role: 'counselor', status: 'active', validUntil: null, supervisorId: null, fullPracticeAccess: false },
+      { id: 'm1', orgId: '00000000-0000-0000-0000-000000000001', userId: 'u1', role: 'counselor', status: 'active', validUntil: null, supervisorId: null, fullPracticeAccess: false },
     ]);
     // supervisees (counselor path loads them)
     selectQueue.push([]);
     // organizations with empty settings
     selectQueue.push([{ plan: 'free', licenseKey: null, settings: {} }]);
 
-    const r = reqFor({ userId: 'u1', orgId: 'o1' });
+    const r = reqFor({ userId: 'u1', orgId: '00000000-0000-0000-0000-000000000001' });
     await orgContextGuard(r, reply);
 
     expect(r.org?.orgType).toBe('counseling');

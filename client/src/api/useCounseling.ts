@@ -329,9 +329,19 @@ export function useCreateAiConversation() {
 export function useUpdateAiConversation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: string; messages?: any[]; title?: string; summary?: string }) =>
+    mutationFn: ({ id, ...data }: {
+      id: string;
+      messages?: any[];
+      title?: string;
+      summary?: string;
+      // Phase I Issue 1: 关联到 sessionNote (mode='note' 工作流)
+      sessionNoteId?: string | null;
+    }) =>
       api.patch<any>(`${orgPrefix()}/ai-conversations/${id}`, data),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['aiConversations'] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['aiConversations'] });
+      qc.invalidateQueries({ queryKey: ['sessionNotes'] }); // 因关联会影响 LeftPanel 渲染
+    },
   });
 }
 

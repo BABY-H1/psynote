@@ -4,6 +4,7 @@ import { authGuard } from '../../middleware/auth.js';
 import { orgContextGuard } from '../../middleware/org-context.js';
 import { requireRole } from '../../middleware/rbac.js';
 import { dataScopeGuard } from '../../middleware/data-scope.js';
+import { assertAuthorized } from '../../middleware/authorize.js';
 import { logAudit, logPhiAccess } from '../../middleware/audit.js';
 import { validate } from '../../lib/validate.js';
 import * as episodeService from './episode.service.js';
@@ -58,6 +59,14 @@ export async function episodeRoutes(app: FastifyInstance) {
   app.get('/:episodeId', async (request) => {
     const { episodeId } = validate(EpisodeIdParam, request.params);
     const episode = await episodeService.getEpisodeById(episodeId);
+
+    // Phase 1.5: 个案档案是 phi_full(主诉/风险/干预说明都在这).
+    // clinic_admin 默认禁,需 access_profile patch.
+    assertAuthorized(request, 'view', {
+      type: 'care_episode',
+      dataClass: 'phi_full',
+      ownerUserId: episode.clientId,
+    });
 
     await logPhiAccess(request, episode.clientId, 'care_episodes', 'view', episode.id);
     return episode;

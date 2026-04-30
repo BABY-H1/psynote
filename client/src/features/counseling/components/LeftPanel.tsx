@@ -10,6 +10,7 @@ import { useToast } from '../../../shared/components';
 import {
   FileText, BarChart3, ChevronDown, MessageSquare,
   ArrowRightLeft, ClipboardList, FileCheck, Download,
+  Target, Users, GraduationCap,
 } from 'lucide-react';
 import { ReferralForm } from './ReferralForm';
 import { ReferralCard } from './ReferralCard';
@@ -37,6 +38,13 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
   const { data: profile } = useClientProfile(clientId);
   const { data: allEpisodes } = useEpisodes({ clientId });
   const [viewingEpisodeId, setViewingEpisodeId] = useState(episodeId);
+
+  // 5 sections 各自折叠状态, 持久化到 localStorage 跨 episode 共享偏好.
+  const [sessionCollapsed, toggleSession] = useSectionCollapse('session');
+  const [assessmentCollapsed, toggleAssessment] = useSectionCollapse('assessment');
+  const [planCollapsed, togglePlan] = useSectionCollapse('plan');
+  const [simulateCollapsed, toggleSimulate] = useSectionCollapse('simulate');
+  const [superviseCollapsed, toggleSupervise] = useSectionCollapse('supervise');
 
   const { data: sessionNotes } = useSessionNotes({ careEpisodeId: viewingEpisodeId });
   const { data: assessmentResults } = useResults({ userId: clientId });
@@ -118,28 +126,93 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
       )}
 
       {/* Scrollable content */}
-      <div className="flex-1 overflow-y-auto">
-        <SectionHeader icon={<FileText className="w-3.5 h-3.5" />} title="会谈记录" count={sessionNotes?.length} />
-        <div className="px-3 pb-2 space-y-1">
-          {(!sessionNotes || sessionNotes.length === 0) ? (
-            <div className="text-xs text-slate-400 py-2">暂无会谈记录</div>
-          ) : (
-            sessionNotes.map((note, i) => (
-              <button key={note.id}
-                onClick={() => onSelectNote(note)}
-                className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-emerald-50">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-xs font-medium">{sessionNotes.length - i}</div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-slate-700 truncate">{note.summary || `${(note.noteFormat || 'soap').toUpperCase()} 记录`}</div>
-                  <div className="text-slate-400">{note.sessionDate}</div>
-                </div>
-                <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
-              </button>
-            ))
-          )}
-        </div>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
+        {/*
+          Phase I Issue 1: 会谈记录区按 sessionNote 渲染主行 + 关联的 note-mode
+          AI 对话作为子条目 (草稿过程). 没保存为 sessionNote 的 note 草稿
+          (sessionNoteId IS NULL) 单独作为 "未保存的笔记草稿" 列在最上面.
+        */}
+        {(() => {
+          const noteDrafts = (aiConversations || []).filter((c: any) => c.mode === 'note' && !c.sessionNoteId);
+          const noteDraftBySessionId = new Map<string, any>();
+          for (const c of (aiConversations || [])) {
+            if (c.mode === 'note' && c.sessionNoteId) {
+              noteDraftBySessionId.set(c.sessionNoteId, c);
+            }
+          }
+          const totalCount = (sessionNotes?.length || 0) + noteDrafts.length;
+          return (
+            <>
+              <SectionHeader
+                icon={<FileText className="w-3.5 h-3.5" />}
+                title="会谈记录"
+                count={totalCount}
+                sectionKey="session"
+                collapsed={sessionCollapsed}
+                onToggle={toggleSession}
+              />
+              {!sessionCollapsed && (
+              <div className="px-3 pb-2 space-y-1">
+                {noteDrafts.length === 0 && (!sessionNotes || sessionNotes.length === 0) ? (
+                  <div className="text-xs text-slate-400 py-2">暂无会谈记录</div>
+                ) : (
+                  <>
+                    {/* 未保存的笔记草稿 — 浅灰底, 点击载入 ChatWorkspace 续写 */}
+                    {noteDrafts.map((draft: any) => (
+                      <button key={draft.id}
+                        onClick={() => onSelectConversation?.(draft)}
+                        className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-emerald-50 bg-slate-50/60 border border-dashed border-slate-200">
+                        <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center flex-shrink-0 text-xs">📝</div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-slate-600 truncate italic">{draft.title || '笔记草稿'} <span className="text-slate-400 not-italic">(未保存)</span></div>
+                          <div className="text-slate-400">{(draft.messages as any[])?.length || 0} 条 · {new Date(draft.updatedAt).toLocaleDateString('zh-CN')}</div>
+                        </div>
+                        <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
+                      </button>
+                    ))}
+                    {/* 已保存的 sessionNote — 主行 + 可选关联草稿子行 */}
+                    {sessionNotes && sessionNotes.map((note, i) => {
+                      const linkedDraft = noteDraftBySessionId.get(note.id);
+                      return (
+                        <div key={note.id} className="space-y-1">
+                          <button
+                            onClick={() => onSelectNote(note)}
+                            className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-emerald-50">
+                            <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center flex-shrink-0 text-xs font-medium">{sessionNotes.length - i}</div>
+                            <div className="flex-1 min-w-0">
+                              <div className="text-slate-700 truncate">{note.summary || `${(note.noteFormat || 'soap').toUpperCase()} 记录`}</div>
+                              <div className="text-slate-400">{note.sessionDate}</div>
+                            </div>
+                            <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
+                          </button>
+                          {linkedDraft && (
+                            <button
+                              onClick={() => onSelectConversation?.(linkedDraft)}
+                              className="w-full text-left flex items-center gap-2 px-2 py-1 ml-5 rounded text-[11px] text-slate-500 hover:bg-slate-50 transition">
+                              <span>📝</span>
+                              <span className="flex-1 truncate">AI 草稿过程 · {(linkedDraft.messages as any[])?.length || 0} 条</span>
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
+              </div>
+              )}
+            </>
+          );
+        })()}
 
-        <SectionHeader icon={<BarChart3 className="w-3.5 h-3.5" />} title="评估记录" count={assessmentResults?.length} />
+        <SectionHeader
+          icon={<BarChart3 className="w-3.5 h-3.5" />}
+          title="评估记录"
+          count={assessmentResults?.length}
+          sectionKey="assessment"
+          collapsed={assessmentCollapsed}
+          onToggle={toggleAssessment}
+        />
+        {!assessmentCollapsed && (
         <div className="px-3 pb-2 space-y-1">
           {(!assessmentResults || assessmentResults.length === 0) ? (
             <div className="text-xs text-slate-400 py-2">暂无评估记录</div>
@@ -168,31 +241,58 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
             })
           )}
         </div>
-
-        {/* AI Conversations */}
-        {aiConversations && aiConversations.length > 0 && (
-          <>
-            <SectionHeader icon={<MessageSquare className="w-3.5 h-3.5" />} title="AI 对话" count={aiConversations.length} />
-            <div className="px-3 pb-2 space-y-1">
-              {aiConversations.map((conv: any) => {
-                const modeLabel = conv.mode === 'simulate' ? '🗣️' : '🎓';
-                const msgCount = (conv.messages as any[])?.length || 0;
-                return (
-                  <button key={conv.id}
-                    onClick={() => onSelectConversation?.(conv)}
-                    className="w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition hover:bg-violet-50">
-                    <div className="w-5 h-5 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center flex-shrink-0 text-xs">{modeLabel}</div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-slate-700 truncate">{conv.title || (conv.mode === 'simulate' ? '模拟练习' : '督导对话')}</div>
-                      <div className="text-slate-400">{msgCount}条 · {new Date(conv.updatedAt).toLocaleDateString('zh-CN')}</div>
-                    </div>
-                    <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
-                  </button>
-                );
-              })}
-            </div>
-          </>
         )}
+
+        {/*
+          Phase I follow-up: 之前 plan/simulate/supervise 平铺在 "AI 对话" 区,
+          用户反馈混在一起不易找特定 mode 历史. 改成 3 mode 各自独立 section
+          (跟"会谈记录" / "评估记录" 的"按内容类型分组"一致). 空 mode 隐藏
+          整个 section, 避免占空间. 第一次产生该 mode 的 conversation 时
+          section 自动出现.
+        */}
+        {(['plan', 'simulate', 'supervise'] as const).map((targetMode) => {
+          const meta = ({
+            plan: { emoji: '🎯', label: '治疗方案', icon: <Target className="w-3.5 h-3.5" />, hoverBg: 'hover:bg-teal-50' },
+            simulate: { emoji: '🗣️', label: '模拟练习', icon: <Users className="w-3.5 h-3.5" />, hoverBg: 'hover:bg-violet-50' },
+            supervise: { emoji: '🎓', label: '督导对话', icon: <GraduationCap className="w-3.5 h-3.5" />, hoverBg: 'hover:bg-amber-50' },
+          } as const)[targetMode];
+          const filtered = (aiConversations || []).filter((c: any) => c.mode === targetMode);
+          if (filtered.length === 0) return null;
+          // 同名变量避免 closure 引用问题, 把折叠 state 解到 outer
+          const collapsed = targetMode === 'plan' ? planCollapsed : targetMode === 'simulate' ? simulateCollapsed : superviseCollapsed;
+          const onToggle = targetMode === 'plan' ? togglePlan : targetMode === 'simulate' ? toggleSimulate : toggleSupervise;
+          return (
+            <React.Fragment key={targetMode}>
+              <SectionHeader
+                icon={meta.icon}
+                title={meta.label}
+                count={filtered.length}
+                sectionKey={targetMode}
+                collapsed={collapsed}
+                onToggle={onToggle}
+              />
+              {!collapsed && (
+              <div className="px-3 pb-2 space-y-1">
+                {filtered.map((conv: any) => {
+                  const msgCount = (conv.messages as any[])?.length || 0;
+                  return (
+                    <button key={conv.id}
+                      onClick={() => onSelectConversation?.(conv)}
+                      className={`w-full text-left flex items-center gap-2 px-2 py-1.5 rounded-lg text-xs transition ${meta.hoverBg}`}>
+                      <div className="w-5 h-5 rounded-full bg-slate-100 text-slate-600 flex items-center justify-center flex-shrink-0 text-xs">{meta.emoji}</div>
+                      <div className="flex-1 min-w-0">
+                        <div className="text-slate-700 truncate">{conv.title || meta.label}</div>
+                        <div className="text-slate-400">{msgCount}条 · {new Date(conv.updatedAt).toLocaleDateString('zh-CN')}</div>
+                      </div>
+                      <ChevronDown className="w-3 h-3 text-slate-400 rotate-[-90deg]" />
+                    </button>
+                  );
+                })}
+              </div>
+              )}
+            </React.Fragment>
+          );
+        })}
 
         {sessionNotes && sessionNotes.length > 0 && (
           <div className="px-3 pb-2">
@@ -268,12 +368,69 @@ export function LeftPanel({ episodeId, clientId, onSelectNote, onSelectResult, o
   );
 }
 
-function SectionHeader({ icon, title, count }: { icon: React.ReactNode; title: string; count?: number }) {
+/*
+ * SectionHeader: 可折叠. 状态按 sectionKey 持久化到 localStorage, 跨 episode
+ * 共享偏好 (用户折叠"督导对话" 后, 其他 episode 也默认折叠).
+ *   - 不传 sectionKey: 退化为不可折叠 (跟旧版一致).
+ *   - 传 sectionKey: 显示 chevron, 点击 toggle. children 只在展开时渲染.
+ *
+ * collapsed=true → children 不渲染 (节省 DOM).
+ */
+function SectionHeader({
+  icon, title, count, sectionKey, collapsed, onToggle,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  count?: number;
+  sectionKey?: string;
+  collapsed?: boolean;
+  onToggle?: () => void;
+}) {
+  const isCollapsible = !!sectionKey;
   return (
-    <div className="flex items-center gap-1.5 px-3 pt-3 pb-1">
+    <button
+      type="button"
+      onClick={isCollapsible ? onToggle : undefined}
+      className={`w-full flex items-center gap-1.5 px-3 pt-3 pb-1 text-left ${
+        isCollapsible ? 'hover:bg-slate-50 transition cursor-pointer' : 'cursor-default'
+      }`}
+    >
+      {isCollapsible && (
+        <ChevronDown
+          className={`w-3 h-3 text-slate-400 flex-shrink-0 transition-transform ${
+            collapsed ? '-rotate-90' : ''
+          }`}
+        />
+      )}
       <span className="text-slate-400">{icon}</span>
       <span className="text-xs font-medium text-slate-500">{title}</span>
       {count != null && count > 0 && <span className="text-xs text-slate-400">({count})</span>}
-    </div>
+    </button>
   );
+}
+
+/*
+ * useSectionCollapse: 持久化折叠状态. key 用 'leftpanel:section:<name>'
+ * 存 boolean. 默认全展开 (false). 用户改了就记住.
+ */
+function useSectionCollapse(name: string) {
+  const storageKey = `leftpanel:section:${name}`;
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem(storageKey) === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggle = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        if (next) localStorage.setItem(storageKey, '1');
+        else localStorage.removeItem(storageKey);
+      } catch {}
+      return next;
+    });
+  };
+  return [collapsed, toggle] as const;
 }

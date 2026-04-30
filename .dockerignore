@@ -1,0 +1,52 @@
+# Psynote Docker build — 只传源码 + package.json,node_modules 在容器里重装
+#
+# 目标: Docker build context 尽量小(<50MB),避免传输 symlinks
+
+# 所有 node_modules 的工作区 hoisted copies + symlinks
+node_modules/
+*/node_modules/
+packages/*/node_modules/
+
+# 构建产物(会在容器里重新构建)
+dist/
+*/dist/
+packages/*/dist/
+*.tsbuildinfo
+
+# git
+.git/
+.gitignore
+
+# 本地环境 / secrets
+.env
+.env.local
+*.env
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# 测试产物
+coverage/
+test-results/
+playwright-report/
+e2e/.auth/
+
+# Claude / 本地 agent
+.claude/
+claude_*
+
+# 日志
+*.log
+
+# Docker 自己的文件(避免递归)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# 大文件 / 备份
+server/uploads/
+*.sql.gz
+*.tar.gz

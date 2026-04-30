@@ -4,7 +4,8 @@
     "outDir": "./dist",
     "rootDir": "./src",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@psynote/shared": ["../packages/shared/src/index.ts"]
     }
   },
   "include": ["src"],

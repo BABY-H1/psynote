@@ -68,25 +68,44 @@ export class AIClient {
     // client's own abort fires first and propagates a real error up to the
     // route handler, rather than letting the socket die and leave the
     // client with an empty response body.
-    const timeout = setTimeout(() => controller.abort(), 270_000); // 4.5 min
+    //
+    // 9 min (was 4.5 min) — thinking 模型 (qwen3.5-plus) 在生成大结构化 JSON
+    // 比如完整量表/课程蓝图时, 即使设了 enable_thinking:false 经常仍要 3-6 分钟
+    // 才回完整 4K tokens. 实测 270s 经常触发 AbortError. 把窗口拉到 9 分钟,
+    // 路由层 socket 同步抬到 10 分钟 (ai-shared.ts).
+    const FETCH_TIMEOUT_MS = 540_000;
+    const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
 
     const model = options?.model || this.defaultModel;
-    const response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${this.apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        temperature: options?.temperature ?? 0.7,
-        max_tokens: options?.maxTokens ?? 2048,
-        // Disable thinking/reasoning for models that support it (saves tokens and time)
-        enable_thinking: false,
-      }),
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
+    const t0 = Date.now();
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${this.apiKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          temperature: options?.temperature ?? 0.7,
+          max_tokens: options?.maxTokens ?? 2048,
+          // Disable thinking/reasoning for models that support it (saves tokens and time)
+          enable_thinking: false,
+        }),
+        signal: controller.signal,
+      });
+    } catch (err) {
+      const elapsed = Date.now() - t0;
+      // 超时 → 抛带时长的可读错误,前端可据此提示 "请简化需求或重试"
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`AI 调用超时 (${Math.round(elapsed / 1000)}s, 上限 ${FETCH_TIMEOUT_MS / 1000}s) — 请简化需求或重试`);
+      }
+      throw err;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const error = await response.text().catch(() => 'Unknown error');

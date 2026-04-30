@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import {
   useNoteGuidanceChat, useSuggestTreatmentPlan,
   useSimulatedClient, useSupervision,
@@ -15,6 +15,21 @@ interface ChatMessage {
   role: 'user' | 'assistant';
   content: string;
   suggestion?: { field: string; content: string; rationale: string };
+}
+
+/**
+ * Phase I imperative API:
+ * - Issue 2 (loadConversation): EpisodeDetail 在用户从 LeftPanel 点击某条
+ *   ai_conversation 历史时, 触发 ChatWorkspace 切到对应 mode + 注入
+ *   messages, 实现"续写"而不是只读 viewer.
+ * - Issue 1 (bindCurrentNoteToSession): EpisodeDetail 在用户保存 sessionNote
+ *   后调用此方法把当前 mode='note' 的 conversation.sessionNoteId 关联过
+ *   去, LeftPanel 因此把"草稿对话"显示在"会谈记录"区. 返回值用于 toast
+ *   反馈但 EpisodeDetail 一般不消费 (fire-and-forget).
+ */
+export interface ChatWorkspaceHandle {
+  loadConversation: (mode: WorkMode, messages: ChatMessage[], conversationId: string) => void;
+  bindCurrentNoteToSession: (sessionNoteId: string) => Promise<void>;
 }
 
 const modeConfig: Record<WorkMode, { icon: React.ReactNode; label: string; placeholder: string; color: string }> = {
@@ -57,12 +72,12 @@ interface Props {
   initialMode?: WorkMode;
 }
 
-export function ChatWorkspace({
+export const ChatWorkspace = forwardRef<ChatWorkspaceHandle, Props>(function ChatWorkspace({
   episodeId, clientId, chiefComplaint, activePlan,
   clientContext, sessionHistorySummary, assessmentSummary, lastNoteSummary,
   onNoteFieldsUpdate, onPlanSuggestion, onModeChange, onNoteFormatChange,
   isCrisisEpisode, initialMode,
-}: Props) {
+}: Props, ref) {
   const [mode, setModeInternal] = useState<WorkMode>(
     initialMode || (isCrisisEpisode ? 'crisis' : 'note'),
   );
@@ -101,6 +116,44 @@ export function ChatWorkspace({
   // Auto-save hooks for simulate/supervise
   const createConversation = useCreateAiConversation();
   const updateConversation = useUpdateAiConversation();
+
+  /*
+   * Phase I Issue 2: 暴露 imperative API 给 EpisodeDetail.
+   * loadConversation: 当用户从 sidebar 点击历史对话, EpisodeDetail 调用这
+   * 个方法把对应 mode + messages + conversationId 注入 state, 用户可继续
+   * 对话 (而不是只读 viewer).
+   * bindCurrentNoteToSession: Phase I Issue 1, 用户保存 sessionNote 后调.
+   */
+  useImperativeHandle(ref, () => ({
+    loadConversation: (loadMode, loadMessages, loadConvId) => {
+      // 强制 setMode 先于 setMessages, 防止 onModeChange 触发的 effect 看到
+      // 旧 mode 的 messages 渲染.
+      setMode(loadMode);
+      setMessages((prev) => ({ ...prev, [loadMode]: loadMessages }));
+      setConversationIds((prev) => ({ ...prev, [loadMode]: loadConvId }));
+    },
+    bindCurrentNoteToSession: async (sessionNoteId) => {
+      const noteConvId = conversationIds.note;
+      if (!noteConvId) {
+        // 没有 conversation 就不需要绑定 (用户没跟 AI 对话直接手填 SOAP form 也走这条路径)
+        return;
+      }
+      try {
+        await updateConversation.mutateAsync({ id: noteConvId, sessionNoteId });
+        // 绑定后清掉本地 noteConvId, 让下次写新笔记开新 conversation
+        setConversationIds((prev) => {
+          const next = { ...prev };
+          delete next.note;
+          return next;
+        });
+        // 同时清空当前 note mode 的 messages, 让下次 mode='note' 是空白起点
+        setMessages((prev) => ({ ...prev, note: [] }));
+      } catch (err) {
+        // 绑定失败不阻断保存 — sessionNote 已建好, conversation 留作 "AI 对话" 区
+        console.warn('[ChatWorkspace] bind note conv failed:', err);
+      }
+    },
+  }), [conversationIds, updateConversation]);
 
   // AI hooks
   const noteChat = useNoteGuidanceChat();
@@ -243,14 +296,28 @@ export function ChatWorkspace({
       const finalMsgs = [...newMsgs, { role: 'assistant' as const, content: assistantContent }];
       setMessages({ ...messages, [mode]: finalMsgs });
 
-      // Auto-save for simulate/supervise
-      if (mode === 'simulate' || mode === 'supervise') {
+      /*
+       * BUG-009: 之前只对 simulate/supervise 归档, note/plan 漏归档:
+       * 1. 4 mode 共用 chat UI 但只 2 个保留对话历史 — UX 不一致
+       * 2. 督导 mode 右侧 panel 取 "最近笔记 / session history" 时, 因
+       *    note 对话没存, 始终显示 "暂无会谈记录", 失去 context
+       * 3. 用户无法回看 AI 推理过程 (e.g. "AI 当时为啥建议这个 SOAP 字段?")
+       *
+       * 改成 4 mode 全归档. 每个 mode 一条独立 ai_conversations 行,
+       * 同 mode 多次发送追加到同一条 (conversationIds 内存 map 跟踪).
+       */
+      if (mode !== 'crisis') {
         const saveMsgs = finalMsgs.map((m) => ({ role: m.role, content: m.content }));
         const convId = conversationIds[mode];
         if (convId) {
           updateConversation.mutate({ id: convId, messages: saveMsgs });
         } else {
-          const modeLabel = mode === 'simulate' ? '模拟练习' : '督导对话';
+          const modeLabel = ({
+            note: '笔记草稿',
+            plan: '方案讨论',
+            simulate: '模拟练习',
+            supervise: '督导对话',
+          } as const)[mode];
           const title = `${modeLabel} · ${new Date().toLocaleDateString('zh-CN')}`;
           createConversation.mutateAsync({ careEpisodeId: episodeId, mode, title }).then((conv) => {
             setConversationIds((prev) => ({ ...prev, [mode]: conv.id }));
@@ -299,7 +366,7 @@ export function ChatWorkspace({
       {mode === 'crisis' ? (
         // Crisis mode: the chat area shows static guidance; the real action
         // happens in OutputPanel → CrisisChecklistPanel (right column).
-        <div className="flex-1 overflow-y-auto p-6 flex flex-col items-center justify-center text-center">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-6 flex flex-col items-center justify-center text-center">
           <div className="text-4xl mb-3">⚠️</div>
           <div className="text-sm font-medium text-red-700 mb-1">危机处置模式</div>
           <div className="text-xs text-slate-500 max-w-xs">
@@ -308,7 +375,7 @@ export function ChatWorkspace({
         </div>
       ) : (
       /* Chat messages */
-      <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3">
         {currentMessages.length === 0 && (
           <div className="text-center py-8">
             <div className="text-3xl mb-2">
@@ -409,5 +476,5 @@ export function ChatWorkspace({
       )}
     </div>
   );
-}
+});
 

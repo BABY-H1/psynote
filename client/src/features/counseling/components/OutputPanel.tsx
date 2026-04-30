@@ -40,6 +40,12 @@ interface Props {
   // Phase 13: crisis case (only passed when episode is a crisis episode)
   crisisCase?: CrisisCase | null;
   clientName?: string;
+  /*
+   * Phase I Issue 1: 用户保存 sessionNote 后调用, EpisodeDetail 用此 hook
+   * 通过 chatWsRef.current?.bindCurrentNoteToSession(savedNote.id) 把当前
+   * mode='note' 的 ai_conversation 关联到该 sessionNote.
+   */
+  onNoteSaved?: (savedNote: SessionNote) => void;
 }
 
 export function OutputPanel({
@@ -51,6 +57,7 @@ export function OutputPanel({
   viewingResult, onCloseResult,
   viewingConversation, onCloseConversation,
   crisisCase, clientName,
+  onNoteSaved,
 }: Props) {
   const createNote = useCreateSessionNote();
   const updateGoalStatus = useUpdateGoalStatus();
@@ -93,7 +100,7 @@ export function OutputPanel({
   return (
     <div className="flex flex-col h-full">
       {/* Mode-specific output — NO shared header */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden">
         {mode === 'note' && (
           <NoteOutput
             fields={noteFields}
@@ -118,8 +125,10 @@ export function OutputPanel({
                 } else {
                   data.fields = noteFields;
                 }
-                await createNote.mutateAsync(data);
+                const saved = await createNote.mutateAsync(data);
                 toast('笔记已保存', 'success');
+                // Phase I Issue 1: 触发关联当前 ai_conversation 到这个 sessionNote
+                onNoteSaved?.(saved as SessionNote);
               } catch {
                 toast('保存失败', 'error');
               }
@@ -470,7 +479,7 @@ function ResultDetailPanel({ result, onClose }: { result: any; onClose: () => vo
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4">
         {/* Scale & date */}
         <div>
           <div className="text-sm font-medium text-slate-800">{scaleLabel}</div>
@@ -532,8 +541,15 @@ function ConversationViewer({ conversation, onClose }: { conversation: any; onCl
   const [editingTitle, setEditingTitle] = useState(false);
   const [title, setTitle] = useState(conversation.title || '');
   const messages = (conversation.messages as any[]) || [];
-  const modeLabel = conversation.mode === 'simulate' ? '模拟练习' : '督导对话';
-  const modeIcon = conversation.mode === 'simulate' ? '🗣️' : '🎓';
+  // BUG-009: 之前只识别 simulate/supervise, 4 mode 归档后扩展.
+  const modeMeta = ({
+    note: { label: '笔记草稿', icon: '📝' },
+    plan: { label: '方案讨论', icon: '🎯' },
+    simulate: { label: '模拟练习', icon: '🗣️' },
+    supervise: { label: '督导对话', icon: '🎓' },
+  } as const)[conversation.mode as 'note' | 'plan' | 'simulate' | 'supervise'] ?? { label: 'AI 对话', icon: '💬' };
+  const modeLabel = modeMeta.label;
+  const modeIcon = modeMeta.icon;
 
   const handleSaveTitle = async () => {
     try {
@@ -582,7 +598,7 @@ function ConversationViewer({ conversation, onClose }: { conversation: any; onCl
         {messages.length}条消息 · {new Date(conversation.createdAt).toLocaleString('zh-CN')}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-3">
         {messages.map((msg: any, i: number) => (
           <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${

@@ -433,6 +433,143 @@ async function seedE2E() {
   `;
   console.log('  + system_config.limits.rateLimitMax = 500 (E2E smoke headroom)');
 
+  // 8. Phase J — research-triage dispatch e2e fixtures.
+  //
+  // Spec: e2e/smoke/triage-dispatch-counselor.spec.ts walks the path
+  //   counselor → /research-triage → click 李同学 row → 点 "课程"
+  //   → pick "E2E 演示课程" → toast "已报名到".
+  //
+  // To make that work deterministically we need:
+  //   8.1 client_assignment   — so dataScopeGuard ('assigned') admits
+  //                              the counselor to the client's result
+  //   8.2 assessment_result   — one filled-out mini assessment for 李同学,
+  //                              riskLevel='level_3' so it lands in the
+  //                              "严重" bucket and the candidate row is
+  //                              visible without an L-level filter
+  //   8.3 course + instance   — InstancePicker filters out
+  //                              closed/archived/completed; status='active'
+  //                              keeps "E2E 演示课程" eligible
+  //
+  // All idempotent: lookup-by-natural-key first, only insert if missing.
+
+  // 8.1 client_assignment — counselor 张咨询师 ← → 来访者 李同学
+  const counselingClientId = userIds['counselingClient'];
+  const existingAssn = await sql<{ id: string }[]>`
+    SELECT id FROM client_assignments
+    WHERE org_id = ${countOrgId}
+      AND client_id = ${counselingClientId}
+      AND counselor_id = ${counselorId}
+    LIMIT 1
+  `;
+  if (!existingAssn.length) {
+    await sql`
+      INSERT INTO client_assignments (org_id, client_id, counselor_id, is_primary)
+      VALUES (${countOrgId}, ${counselingClientId}, ${counselorId}, true)
+    `;
+  }
+  console.log('  + 1 client_assignment (counselor ↔ 李同学)');
+
+  // 8.2 assessment_result — 李同学 已完成 e2e mini 量表, level_3.
+  //     answers / dimension_scores 用最小合法 jsonb (notNull 约束).
+  const TRIAGE_RESULT_ID = demoUUID('e2e-triage-result');
+  const triageAnswers = JSON.stringify({
+    [MINI.item0Id]: 1,
+    [MINI.item1Id]: 1,
+  });
+  const triageDimScores = JSON.stringify({
+    [MINI.dimId]: 2,
+  });
+  const triageRecommendations = JSON.stringify([
+    {
+      title: '加入认知行为团辅',
+      rationale: '总分偏高，建议进入团辅小组',
+      suggestedAction: '推荐 8 周 CBT 团辅课程',
+    },
+  ]);
+  // Phase K — AI 合规水印. seed 一份固定 provenance 让 dev 环境
+  // 直接能看到 <AIBadge /> 在 detail panel 的"AI 解读" / "AI 建议"
+  // 旁边渲染. 真实跑过 AI 的 result 由 triage-automation.service.ts
+  // 写入 (model 取自 env.AI_MODEL).
+  const triageProvenance = JSON.stringify({
+    aiGenerated: true,
+    aiModel: 'e2e-stub-model',
+    aiPipeline: 'triage-auto',
+    aiGeneratedAt: '2026-04-29T10:00:00.000Z',
+    aiConfidence: 0.86,
+  });
+  const existingTriageResult = await sql<{ id: string }[]>`
+    SELECT id FROM assessment_results WHERE id = ${TRIAGE_RESULT_ID} LIMIT 1
+  `;
+  if (!existingTriageResult.length) {
+    await sql`
+      INSERT INTO assessment_results (
+        id, org_id, assessment_id, user_id,
+        answers, dimension_scores, total_score, risk_level,
+        ai_interpretation, recommendations, ai_provenance, created_by
+      )
+      VALUES (
+        ${TRIAGE_RESULT_ID}, ${countOrgId}, ${MINI.assessmentId}, ${counselingClientId},
+        ${triageAnswers}::jsonb, ${triageDimScores}::jsonb, '2', 'level_3',
+        '中度风险，建议 1-2 周内安排面谈', ${triageRecommendations}::jsonb,
+        ${triageProvenance}::jsonb, ${counselingClientId}
+      )
+    `;
+  } else {
+    // Re-running seed should resync the level + provenance so the spec
+    // is stable even if a prior run mutated risk_level via the override
+    // route or the column existed but was nulled.
+    await sql`
+      UPDATE assessment_results
+      SET risk_level = 'level_3',
+          recommendations = ${triageRecommendations}::jsonb,
+          ai_provenance = ${triageProvenance}::jsonb
+      WHERE id = ${TRIAGE_RESULT_ID}
+    `;
+  }
+  console.log('  + 1 assessment_result (李同学, level_3, mini 量表)');
+
+  // 8.3 course + course_instance — picker 渲染源.
+  const COURSE_ID = demoUUID('e2e-course');
+  const COURSE_INSTANCE_ID = demoUUID('e2e-course-instance');
+  const existingCourse = await sql<{ id: string }[]>`
+    SELECT id FROM courses WHERE id = ${COURSE_ID} LIMIT 1
+  `;
+  if (!existingCourse.length) {
+    await sql`
+      INSERT INTO courses (
+        id, org_id, title, description, status, creation_mode, created_by
+      )
+      VALUES (
+        ${COURSE_ID}, ${countOrgId}, 'E2E 演示课程蓝本',
+        'E2E 派单 happy path 课程蓝本',
+        'published', 'manual', ${counselorId}
+      )
+    `;
+  }
+  const existingCi = await sql<{ id: string }[]>`
+    SELECT id FROM course_instances WHERE id = ${COURSE_INSTANCE_ID} LIMIT 1
+  `;
+  if (!existingCi.length) {
+    await sql`
+      INSERT INTO course_instances (
+        id, org_id, course_id, title, description,
+        publish_mode, status, capacity, created_by
+      )
+      VALUES (
+        ${COURSE_INSTANCE_ID}, ${countOrgId}, ${COURSE_ID}, 'E2E 演示课程',
+        'E2E 派单 happy path 实例', 'assign', 'active', 20, ${counselorId}
+      )
+    `;
+  } else {
+    // Same idempotent re-sync — keep status 'active' so the picker shows it.
+    await sql`
+      UPDATE course_instances
+      SET status = 'active', title = 'E2E 演示课程'
+      WHERE id = ${COURSE_INSTANCE_ID}
+    `;
+  }
+  console.log('  + 1 course + 1 active course_instance (E2E 演示课程)');
+
   console.log('\n--- E2E seed completed ---');
   console.log('Accounts (all passwords = admin123):');
   for (const u of Object.values(USERS)) {

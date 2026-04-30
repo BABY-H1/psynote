@@ -105,12 +105,17 @@ export interface ArchiveTimelineEvent {
 // ─── List people ─────────────────────────────────────────────────
 
 /**
- * Return all users in this org who have at least one service touchpoint.
+ * Return all users in this org who are either:
+ *   - members with role='client' (freshly registered, even before any touchpoint)
+ *   - have at least one service touchpoint (counseling / group / course / assessment)
  *
- * Implementation: a single SQL UNION across the 4 source tables, grouped by
- * user_id, with a LEFT JOIN to `users` for name/email. The four sub-selects
- * each yield rows of (user_id, kind, last_activity_at). The outer GROUP BY
- * collapses them to one row per user with kind counts and the latest activity.
+ * Implementation: SQL UNION across 4 touchpoint tables PLUS the org_members table
+ * (filtered to role='client'), grouped by user_id with LEFT JOIN to `users` for
+ * name/email. The membership branch ensures freshly registered C-side users
+ * (no service activity yet) are visible to counselors so they can be assigned
+ * to episodes / appointments. Membership rows yield kind='member' which
+ * doesn't count toward any per-kind counter (counseling/group/course/assessment
+ * remain 0 until a real touchpoint exists), but the user shows up in the list.
  */
 export async function listPeople(orgId: string, limit = 200): Promise<PersonSummary[]> {
   const cap = Math.min(Math.max(limit, 1), 1000);
@@ -154,6 +159,19 @@ export async function listPeople(orgId: string, limit = 200): Promise<PersonSumm
       WHERE ar.org_id = ${orgId}
         AND ar.user_id IS NOT NULL
         AND ar.deleted_at IS NULL
+
+      UNION ALL
+
+      -- Bare membership: client members with no touchpoint yet still appear
+      -- so counselors can find freshly-registered users to schedule with.
+      SELECT
+        om.user_id::text  AS user_id,
+        'member'::text    AS kind,
+        COALESCE(om.created_at, NOW()) AS last_activity_at
+      FROM org_members om
+      WHERE om.org_id = ${orgId}
+        AND om.role = 'client'
+        AND om.status = 'active'
     )
     SELECT
       t.user_id,

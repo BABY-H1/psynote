@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { OrgTier } from '@psynote/shared';
 import { api } from '../../../../api/client';
+import { useToast } from '../../../../shared/components';
 import type { BasicInfoDraft, ServiceConfig } from './types';
 
 /**
@@ -16,6 +17,7 @@ export function useTenantActions(opts: {
   reloadServices: () => Promise<void>;
 }) {
   const { orgId, reloadTenant, reloadServices } = opts;
+  const { toast } = useToast();
 
   const addMember = useCallback(
     async (
@@ -46,6 +48,23 @@ export function useTenantActions(opts: {
     catch (err) { console.error('Failed to change role:', err); }
   }, [orgId, reloadTenant]);
 
+  // Phase 1.5: 单点开通"临床执业身份" — 把 phi_full 加进/移出该成员的
+  // access_profile.dataClasses。clinic_admin 默认不读 phi_full,但小诊所
+  // 老板兼咨询师可以打开此开关恢复全文访问。
+  const setClinicalPractitioner = useCallback(
+    async (memberId: string, on: boolean) => {
+      if (!orgId) return;
+      try {
+        await api.patch(`/admin/tenants/${orgId}/members/${memberId}`, { clinicalPractitioner: on });
+        await reloadTenant();
+        toast(on ? '已标记为临床执业身份(可读 phi_full)' : '已取消临床执业身份', 'success');
+      } catch (err: any) {
+        toast(err?.message || '操作失败', 'error');
+      }
+    },
+    [orgId, reloadTenant, toast],
+  );
+
   const issueLicense = useCallback(
     async (
       form: { tier: OrgTier; maxSeats: number; months: number; validFrom?: string },
@@ -61,22 +80,30 @@ export function useTenantActions(opts: {
         await api.post('/admin/licenses/issue', { orgId, ...form });
         onSuccess();
         await reloadTenant();
+        toast('许可证已签发', 'success');
       } catch (err: any) { setError(err?.message || '签发失败'); }
     },
-    [orgId, reloadTenant],
+    [orgId, reloadTenant, toast],
   );
 
   const renewLicense = useCallback(async () => {
     if (!orgId) return;
-    try { await api.post('/admin/licenses/renew', { orgId, months: 12 }); await reloadTenant(); }
-    catch (err: any) { alert(err?.message || '续期失败'); }
-  }, [orgId, reloadTenant]);
+    try {
+      const res = await api.post<{ expiresAt: string }>('/admin/licenses/renew', { orgId, months: 12 });
+      await reloadTenant();
+      const newExpiry = res?.expiresAt ? new Date(res.expiresAt).toLocaleDateString('zh-CN') : '';
+      toast(newExpiry ? `续期成功，新到期日：${newExpiry}` : '续期成功', 'success');
+    } catch (err: any) { toast(err?.message || '续期失败', 'error'); }
+  }, [orgId, reloadTenant, toast]);
 
   const revokeLicense = useCallback(async () => {
     if (!orgId || !confirm('确定撤销该租户的许可证？')) return;
-    try { await api.post('/admin/licenses/revoke', { orgId }); await reloadTenant(); }
-    catch (err: any) { alert(err?.message || '撤销失败'); }
-  }, [orgId, reloadTenant]);
+    try {
+      await api.post('/admin/licenses/revoke', { orgId });
+      await reloadTenant();
+      toast('许可证已撤销', 'success');
+    } catch (err: any) { toast(err?.message || '撤销失败', 'error'); }
+  }, [orgId, reloadTenant, toast]);
 
   const modifyLicense = useCallback(
     async (
@@ -90,9 +117,10 @@ export function useTenantActions(opts: {
         await api.post('/admin/licenses/modify', { orgId, ...form });
         onSuccess();
         await reloadTenant();
+        toast('许可证已修改', 'success');
       } catch (err: any) { setError(err?.message || '修改失败'); }
     },
-    [orgId, reloadTenant],
+    [orgId, reloadTenant, toast],
   );
 
   /**
@@ -155,6 +183,7 @@ export function useTenantActions(opts: {
     addMember,
     removeMember,
     changeMemberRole,
+    setClinicalPractitioner,
     issueLicense,
     renewLicense,
     revokeLicense,
