@@ -9,7 +9,8 @@ import { ValidationError } from '../../lib/errors.js';
 import { getBootValue } from '../../lib/config-service.js';
 import { authGuard } from '../../middleware/auth.js';
 
-const JWT_SECRET = env.JWT_SECRET || 'psynote-dev-secret-change-in-production';
+// env.ts validates JWT_SECRET is ≥ 32 chars at startup. No fallback here.
+const JWT_SECRET = env.JWT_SECRET;
 const ACCESS_TOKEN_EXPIRY = getBootValue('security', 'accessTokenExpiry', '7d');
 const REFRESH_TOKEN_EXPIRY = getBootValue('security', 'refreshTokenExpiry', '30d');
 

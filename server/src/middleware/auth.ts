@@ -3,7 +3,8 @@ import jwt from 'jsonwebtoken';
 import { env } from '../config/env.js';
 import { UnauthorizedError } from '../lib/errors.js';
 
-const JWT_SECRET = env.JWT_SECRET || 'psynote-dev-secret-change-in-production';
+// env.ts validates JWT_SECRET is ≥ 32 chars at startup. No fallback here.
+const JWT_SECRET = env.JWT_SECRET;
 
 export interface AuthUser {
   id: string;

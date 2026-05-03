@@ -45,7 +45,8 @@ import type {
   MyChildEntry,
 } from '@psynote/shared';
 
-const JWT_SECRET = env.JWT_SECRET || 'psynote-dev-secret-change-in-production';
+// env.ts validates JWT_SECRET is ≥ 32 chars at startup. No fallback here.
+const JWT_SECRET = env.JWT_SECRET;
 
 const VALID_RELATIONS: ParentRelation[] = ['father', 'mother', 'guardian', 'other'];
 
