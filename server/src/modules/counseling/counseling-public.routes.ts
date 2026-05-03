@@ -23,7 +23,7 @@ import {
   users,
   clientProfiles,
 } from '../../db/schema.js';
-import { ValidationError, NotFoundError } from '../../lib/errors.js';
+import { ValidationError, NotFoundError, UnauthorizedError } from '../../lib/errors.js';
 import { env } from '../../config/env.js';
 
 const JWT_SECRET = env.JWT_SECRET;
@@ -113,7 +113,12 @@ export async function counselingPublicRoutes(app: FastifyInstance) {
 
     // 看 user 是否已存在
     const [existingUser] = await db
-      .select({ id: users.id, email: users.email, isSystemAdmin: users.isSystemAdmin })
+      .select({
+        id: users.id,
+        email: users.email,
+        isSystemAdmin: users.isSystemAdmin,
+        passwordHash: users.passwordHash,
+      })
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
@@ -122,7 +127,29 @@ export async function counselingPublicRoutes(app: FastifyInstance) {
     let isNewUser = false;
 
     if (existingUser) {
-      userRow = existingUser;
+      // W0.4 安全审计修复 (2026-05-03):
+      // 之前此处直接 userRow = existingUser 然后签 token,任何知道 email + orgSlug
+      // 的人都能登入对应账户。现在分两种情形:
+      //   - existingUser.passwordHash 非空 → 必须 bcrypt.compare 验密码 (防接管)
+      //   - existingUser.passwordHash 为空 → 用户尚未设密码(可能由课程公开报名 /
+      //     家长邀请等流程预创建过 user 行),此次注册视为 claim 账户,设新密码
+      if (existingUser.passwordHash) {
+        const valid = await bcrypt.compare(body.password, existingUser.passwordHash);
+        if (!valid) {
+          throw new UnauthorizedError('邮箱或密码错误');
+        }
+      } else {
+        const newHash = await bcrypt.hash(body.password, 10);
+        await db
+          .update(users)
+          .set({ passwordHash: newHash, name: body.name.trim() })
+          .where(eq(users.id, existingUser.id));
+      }
+      userRow = {
+        id: existingUser.id,
+        email: existingUser.email,
+        isSystemAdmin: existingUser.isSystemAdmin,
+      };
     } else {
       const passwordHash = await bcrypt.hash(body.password, 10);
       const [newUser] = await db.insert(users).values({
