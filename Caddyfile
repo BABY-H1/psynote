@@ -12,6 +12,31 @@
 {$CADDY_DOMAIN} {
 	encode gzip zstd
 
+	# 安全 headers (W1.8 security audit 2026-05-03)
+	#
+	# 设计依据:
+	#   - HSTS: 强制 HTTPS, 一年期 + 子域名. preload 暂不启 (需要先稳定运行
+	#     6 个月再考虑提交到 HSTS preload list).
+	#   - X-Content-Type-Options: 阻止 MIME-sniff. 与 W2.1+2.2 文件上传 fix
+	#     配套, 防止 .pdf 内含 HTML 时浏览器渲染为 HTML 触发 stored XSS.
+	#   - X-Frame-Options: 拒绝被 iframe 嵌入, 防点击劫持.
+	#   - Referrer-Policy: 只在同源传 referrer, 防外链拿到敏感路径 (含 token).
+	#   - Permissions-Policy: 关闭不需要的浏览器能力 (相机 / 麦克风 / 地理).
+	#   - CSP: 暂用 frame-ancestors=none + 较松散的内容策略, 等前端清完
+	#     inline script / style 再收紧到 strict-dynamic. 后续 W7+ 专题.
+	#
+	# 注: HTTPS-only 由 Caddy 自动 redirect 80→443 处理, 不必在此配置.
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		Content-Security-Policy "default-src 'self'; img-src 'self' data: blob: https:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'"
+		# 移除 Server header (默认会暴露 Caddy 版本)
+		-Server
+	}
+
 	# API 反代
 	handle /api/* {
 		reverse_proxy app:4000
