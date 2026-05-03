@@ -1,7 +1,17 @@
 // Stress test: generate full scale (10 items, multi-dim, full rules) — the same
 // kind of prompt that timed out under qwen3.5-plus.
-const KEY = 'sk-okvTVg9by5WnkuEiDVOSQwCuwZCF5tSLADDeAajRQvCQEE5X';
-const BASE = 'https://api.newcoin.top';
+//
+// Usage: AI_API_KEY=sk-... node scripts/probe-ai-models-stress.mjs
+//
+// SECURITY: Never inline an API key here. See probe-ai-models.mjs for context.
+const KEY = process.env.AI_API_KEY;
+const BASE = process.env.AI_BASE_URL || 'https://api.newcoin.top';
+
+if (!KEY) {
+  console.error('ERROR: AI_API_KEY env var is required.');
+  console.error('Usage: AI_API_KEY=sk-... node scripts/probe-ai-models-stress.mjs');
+  process.exit(1);
+}
 
 const PROMPT = `直接生成一份完整的"大学生考试焦虑量表"JSON,要求:
 - 12 个题目(含 3 个反向计分题), 5 点 likert

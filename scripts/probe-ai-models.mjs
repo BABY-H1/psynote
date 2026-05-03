@@ -1,6 +1,18 @@
 // One-off: probe newcoin.top model catalog + benchmark a few fast candidates.
-const KEY = 'sk-okvTVg9by5WnkuEiDVOSQwCuwZCF5tSLADDeAajRQvCQEE5X';
-const BASE = 'https://api.newcoin.top';
+//
+// Usage: AI_API_KEY=sk-... node scripts/probe-ai-models.mjs
+//
+// SECURITY: Never inline an API key here. The previous version had a key
+// committed at this exact line — it has been rotated. If you need to share a
+// throwaway key with a teammate, do it out-of-band, not in git.
+const KEY = process.env.AI_API_KEY;
+const BASE = process.env.AI_BASE_URL || 'https://api.newcoin.top';
+
+if (!KEY) {
+  console.error('ERROR: AI_API_KEY env var is required.');
+  console.error('Usage: AI_API_KEY=sk-... node scripts/probe-ai-models.mjs');
+  process.exit(1);
+}
 
 console.log('Fetching model list...');
 const r = await fetch(`${BASE}/v1/models`, { headers: { Authorization: `Bearer ${KEY}` } });
