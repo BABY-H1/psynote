@@ -51,7 +51,6 @@ graph TB
     end
 
     subgraph External["External Services"]
-        Supabase["Supabase Auth"]
         LLM["LLM API\n(OpenAI)"]
         Email["Email\n(Nodemailer)"]
     end
@@ -72,7 +71,6 @@ graph TB
     Modules --> Services
     Services --> PG
     Services --> Redis
-    Auth -.->|JWT verify| Supabase
     AI -.->|generate| LLM
     Notification -.->|send| Email
 
@@ -304,7 +302,7 @@ sequenceDiagram
 | Styling | Tailwind CSS 3.4 |
 | Backend | Fastify 5 |
 | ORM | Drizzle ORM (PostgreSQL) |
-| Auth | Supabase Auth (JWT) |
+| Auth | 自建 JWT (bcrypt + jsonwebtoken) |
 | Validation | Zod |
 | Jobs | BullMQ (Redis) |
 | AI | OpenAI API (configurable) |
