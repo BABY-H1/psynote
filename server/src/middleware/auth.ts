@@ -30,7 +30,11 @@ export async function authGuard(request: FastifyRequest, _reply: FastifyReply) {
   const token = authHeader.slice(7);
 
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as {
+    // W3.4 (security audit 2026-05-03): pin algorithm to prevent algorithm-
+    // confusion class attacks. Without algorithms, jsonwebtoken accepts any
+    // HMAC variant, which becomes exploitable if a public key is ever used
+    // as JWT_SECRET (HS256↔RSA confusion).
+    const payload = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as {
       sub: string;
       email?: string;
       isSystemAdmin?: boolean;

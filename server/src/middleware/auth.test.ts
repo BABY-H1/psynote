@@ -124,4 +124,35 @@ describe('authGuard', () => {
     const body = JSON.parse(res.body);
     expect(body.user.isSystemAdmin).toBe(true);
   });
+
+  // ─── W3.4 — Algorithm pin (defense-in-depth) ───────────────────
+  // Without `algorithms: ['HS256']`, jsonwebtoken accepts any HMAC variant
+  // (HS256/HS384/HS512) — algorithm confusion class CVEs (e.g. HS256↔RSA
+  // key swaps) become exploitable if a future code path ever exposes a
+  // public key as the JWT_SECRET. Pinning to a specific algorithm is the
+  // standard defense.
+
+  it('rejects a JWT signed with HS512 (algorithm pin = HS256 only)', async () => {
+    const wrongAlg = jwt.sign({ sub: 'u1', email: 'u1@x' }, JWT_SECRET, {
+      algorithm: 'HS512',
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/protected',
+      headers: { authorization: `Bearer ${wrongAlg}` },
+    });
+    expect(res.statusCode).toBe(401);
+  });
+
+  it('rejects a JWT signed with HS384 (algorithm pin = HS256 only)', async () => {
+    const wrongAlg = jwt.sign({ sub: 'u1', email: 'u1@x' }, JWT_SECRET, {
+      algorithm: 'HS384',
+    });
+    const res = await app.inject({
+      method: 'GET',
+      url: '/protected',
+      headers: { authorization: `Bearer ${wrongAlg}` },
+    });
+    expect(res.statusCode).toBe(401);
+  });
 });

@@ -109,7 +109,8 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     try {
-      const payload = jwt.verify(refreshToken, JWT_SECRET) as { sub: string; type?: string };
+      // W3.4 (security audit 2026-05-03): pin algorithm — see middleware/auth.ts
+      const payload = jwt.verify(refreshToken, JWT_SECRET, { algorithms: ['HS256'] }) as { sub: string; type?: string };
 
       if (payload.type !== 'refresh') {
         throw new ValidationError('Invalid refresh token');
