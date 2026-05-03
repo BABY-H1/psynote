@@ -306,6 +306,23 @@ export async function publicEnrollRoutes(app: FastifyInstance) {
 
     if (!session) return reply.status(404).send({ error: '未找到该活动场次' });
 
+    // W2.8 (security audit 2026-05-03): verify enrollment belongs to THIS
+    // instance. Without this check, an attacker can POST any enrollmentId
+    // (e.g. from another group) and we'd write attendance for an arbitrary
+    // user under this group's session — arbitrary check-in forgery.
+    const [enrollmentInInstance] = await db
+      .select({ id: groupEnrollments.id })
+      .from(groupEnrollments)
+      .where(and(
+        eq(groupEnrollments.id, enrollmentId),
+        eq(groupEnrollments.instanceId, instanceId),
+      ))
+      .limit(1);
+
+    if (!enrollmentInInstance) {
+      return reply.status(404).send({ error: '该报名记录不属于此活动' });
+    }
+
     // Check if already checked in
     const [existing] = await db
       .select()
