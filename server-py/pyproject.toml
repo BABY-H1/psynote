@@ -1,0 +1,128 @@
+# Psynote Python server — Fastify → FastAPI 迁移目标 (Option C)
+#
+# 包管理: uv (https://docs.astral.sh/uv/) — 比 Poetry 快 10x, lock 兼容
+# Python: 3.12+ (Pydantic v2 + SQLAlchemy 2.0 都受益于较新版本类型系统)
+#
+# 安装:  cd server-py && uv sync
+# 启动:  uv run uvicorn app.main:app --reload --port 8001
+# 测试:  uv run pytest
+# Lint:  uv run ruff check . && uv run ruff format --check .
+# Type:  uv run mypy app
+
+[project]
+name = "psynote-server"
+version = "0.1.0"
+description = "Psynote FastAPI backend (replacing Fastify Node server)"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Proprietary" }
+
+dependencies = [
+    # Web framework
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.18",            # FastAPI UploadFile (替代 @fastify/multipart)
+    "slowapi>=0.1.9",                       # 速率限制 (替代 @fastify/rate-limit)
+
+    # Validation / config
+    "pydantic>=2.10.0",                     # 替代 zod
+    "pydantic-settings>=2.7.0",             # 替代 dotenv + zod env schema
+
+    # Database
+    "sqlalchemy[asyncio]>=2.0.36",          # ORM (替代 drizzle-orm) — async + Mapped[] 风格
+    "asyncpg>=0.30.0",                      # async Postgres driver
+    "alembic>=1.14.0",                      # migrations (替代 drizzle-kit)
+    "psycopg[binary]>=3.2.0",               # 同步 driver (Alembic + 一些 utility 用)
+
+    # Auth / crypto
+    "passlib[bcrypt]>=1.7.4",               # bcrypt 兼容 (替代 bcryptjs)
+    "pyjwt>=2.10.0",                        # JWT (替代 jsonwebtoken) — 需 algorithms=['HS256'] pin
+
+    # Jobs / queue
+    "celery[redis]>=5.4.0",                 # 替代 BullMQ
+    "redis>=5.2.0",                         # async client (替代 ioredis)
+
+    # PDF / Email
+    "weasyprint>=63.0",                     # HTML → PDF (替代 pdfkit)
+    "jinja2>=3.1.0",                        # PDF 模板渲染
+    "aiosmtplib>=3.0.0",                    # async SMTP (替代 nodemailer)
+    "email-validator>=2.2.0",
+
+    # HTTP client (AI provider)
+    "httpx>=0.28.0",                        # 替代 fetch wrapper
+
+    # Logging
+    "structlog>=24.4.0",
+]
+
+[dependency-groups]
+dev = [
+    # Test — httpx 不在此处, 因为它已是 main 依赖 (AI client 用), TestClient
+    # 直接复用. 防止主/dev 双声明导致版本漂移.
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.25.0",
+    "pytest-cov>=6.0.0",
+    "freezegun>=1.5.0",                     # 时间相关测试
+
+    # Lint / format / type
+    "ruff>=0.9.0",
+    "mypy>=1.13.0",
+    "types-passlib",
+    "types-redis",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
+
+# ─── Tool config ────────────────────────────────────────────────
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+# 默认 + import-order + bugbear + naming + pyupgrade
+select = ["E", "F", "I", "B", "N", "UP", "W", "C4", "SIM", "RUF"]
+ignore = [
+    "E501",  # line-too-long (formatter 处理)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+# SQLAlchemy 2.0 + asyncio 在 strict 下会报 generic 类型, 单独放宽
+disallow_any_generics = false
+warn_return_any = false
+
+[[tool.mypy.overrides]]
+# 第三方包没有 stubs 的不报
+module = ["weasyprint", "celery.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+filterwarnings = [
+    "error",
+    # SQLAlchemy 2.0 在某些场景仍 emit 旧 warnings, 目前只忽略已知确定无害的
+    "ignore::DeprecationWarning:passlib.*",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = ["app/main.py"]  # 入口文件覆盖率意义不大
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]

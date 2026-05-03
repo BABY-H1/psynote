@@ -11,6 +11,34 @@
 # 进容器: docker compose exec app sh
 # 跑 seed: docker compose exec app npx tsx server/src/seed.ts
 
+# ─── 共享 env 块 (anchor) ────────────────────────────────────────────
+# Node app 与 FastAPI app-py 用同一份业务 env (DATABASE_URL/JWT_SECRET/AI_*/SMTP_*),
+# 只有 PORT 不同 (4000 vs 8001)。YAML anchor 避免两边 env 列表 drift —— Phase 1
+# 加新 env 只在此处加一次, 两个服务自动同步。
+#
+# `<<:` merge key 合并 anchor 后, service 自己的 environment 字段会覆盖同名键。
+x-app-env: &app-env
+  # 默认 production;本地隧道模式可在 .env 里 NODE_ENV=development 关掉 mailer 强校验
+  NODE_ENV: ${NODE_ENV:-production}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-psynote}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-psynote}
+  REDIS_URL: redis://redis:6379
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+  AI_API_KEY: ${AI_API_KEY}
+  AI_BASE_URL: ${AI_BASE_URL:-https://api.openai.com/v1}
+  AI_MODEL: ${AI_MODEL:-gpt-4o}
+  # production 部署需配置公网可访问的 URL;本地隧道模式第一次启动可先用 http://localhost,
+  # 起 cloudflared 拿到 trycloudflare URL 后回填此处并 restart app
+  CLIENT_URL: ${CLIENT_URL:-http://localhost}
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
+  # SMTP 在 production 是硬约束(server/src/lib/mailer.ts assertMailerReady 会拒启),
+  # 在 development 不填仅 warn —— 本地隧道测试 1-2 人用不到邮件时可缺省
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USER: ${SMTP_USER:-}
+  SMTP_PASS: ${SMTP_PASS:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  HOST: 0.0.0.0
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -49,31 +77,43 @@ services:
       redis:
         condition: service_healthy
     environment:
-      # 默认 production;本地隧道模式可在 .env 里 NODE_ENV=development 关掉 mailer 强校验
-      NODE_ENV: ${NODE_ENV:-production}
-      DATABASE_URL: postgresql://${POSTGRES_USER:-psynote}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-psynote}
-      REDIS_URL: redis://redis:6379
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
-      AI_API_KEY: ${AI_API_KEY}
-      AI_BASE_URL: ${AI_BASE_URL:-https://api.openai.com/v1}
-      AI_MODEL: ${AI_MODEL:-gpt-4o}
-      # production 部署需配置公网可访问的 URL;本地隧道模式第一次启动可先用 http://localhost,
-      # 起 cloudflared 拿到 trycloudflare URL 后回填此处并 restart app
-      CLIENT_URL: ${CLIENT_URL:-http://localhost}
-      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
-      # SMTP 在 production 是硬约束(server/src/lib/mailer.ts assertMailerReady 会拒启),
-      # 在 development 不填仅 warn —— 本地隧道测试 1-2 人用不到邮件时可缺省
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_PORT: ${SMTP_PORT:-587}
-      SMTP_USER: ${SMTP_USER:-}
-      SMTP_PASS: ${SMTP_PASS:-}
-      SMTP_FROM: ${SMTP_FROM:-}
+      <<: *app-env
       PORT: 4000
-      HOST: 0.0.0.0
     volumes:
       - client-static:/mnt/client-static
     expose:
       - "4000"
+
+  # ─── FastAPI 迁移目标 (Option C, 2026-05-03 起) ─────────────────────
+  # Phase 0 阶段 Caddy 不路由到本服务, 仅确保起得来 + /health 可达。
+  # Phase 6 切流时, Caddy /api/* 改指向 app-py:8001。
+  #
+  # 共享 postgres + redis (与 app 同一份 dev DB / 队列), 这样 Phase 1+
+  # 写出来的 endpoint 直接跑现有数据。Phase 2 用 alembic stamp head 把
+  # drizzle 已应用的 26 个 migration 视作基线, 之后改动从 Python 这边走。
+  app-py:
+    build:
+      context: ./server-py
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      # app-py 的 Pydantic Settings (server-py/app/core/config.py) 镜像 Node
+      # env.ts schema 字段名 1:1, 共用 *app-env 块。Python 服务用 8001 与
+      # Node 4000 错开 (Phase 6 切流前两者并存)。
+      <<: *app-env
+      PORT: 8001
+    expose:
+      - "8001"
+    # Phase 0 验证 (host 直连): docker compose up app-py 后
+    #   curl http://localhost:8001/health → {"status":"ok",...}
+    # Phase 1+ 起删 ports 段, 走 Caddy 反代。
+    ports:
+      - "8001:8001"
 
   caddy:
     image: caddy:2-alpine

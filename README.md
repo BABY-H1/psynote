@@ -1,6 +1,11 @@
 # Psynote
 
-AI 驱动的心理服务管理平台，为心理咨询机构提供全流程数字化解决方案。
+> ⚠️ **2026-05-03 起 Node 端冻结** — 本仓库正在执行 Fastify → FastAPI 全量迁移
+> (Option C, 计划详见 `~/.claude/plans/optimized-swimming-sunset.md`)。
+> Node 端 (`server/`) 仅接受 critical bug fix; 新功能一律去 `server-py/`。
+> 原 6-14 launch 推迟到 2026 Q4-2027 Q1, 切流后 Node 端将整体下线。
+
+AI 驱动的心理服务管理平台，为心理服务单位 (counseling/school/enterprise/solo/hospital) 提供全流程数字化解决方案。
 
 ## 技术栈
 
