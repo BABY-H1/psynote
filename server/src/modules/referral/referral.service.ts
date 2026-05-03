@@ -363,6 +363,12 @@ export async function listIncomingReferrals(receiverUserId: string) {
 /**
  * Verify a download token and return the data package — used by the
  * external mode one-time download URL. Token must match and not be expired.
+ *
+ * W2.9 (security audit 2026-05-03): single-use enforcement. After all
+ * validations pass, nullify the token before resolving the data so
+ * subsequent requests with the same URL return 404. Trade-off accepted:
+ * if resolveDataPackage / network delivery fails after this point, the
+ * sender must re-issue (security > convenience for external PHI link).
  */
 export async function getByDownloadToken(token: string) {
   const [referral] = await db
@@ -377,5 +383,11 @@ export async function getByDownloadToken(token: string) {
   if (referral.status !== 'consented' && referral.status !== 'completed') {
     throw new ValidationError('Referral is not in a downloadable state');
   }
+
+  await db
+    .update(referrals)
+    .set({ downloadToken: null })
+    .where(eq(referrals.id, referral.id));
+
   return resolveDataPackage(referral.id);
 }
