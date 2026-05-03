@@ -8,7 +8,7 @@ import bcrypt from 'bcryptjs';
  * POST /api/public/counseling/:orgSlug/register
  *   1. 按 orgSlug 查 organizations;非 counseling 类 → 404
  *   2. 邮箱已在平台有 user → 必须 bcrypt.compare 验密码 (W0.4 安全审计修复)
- *      - 有 passwordHash + 密码对 → 加入 org / 已是成员则 already_registered
+ *      - 有 passwordHash + 密码对 → 加入 org (已是成员也走同一响应,W2.10)
  *      - 有 passwordHash + 密码错 → 401 (防接管)
  *      - 无 passwordHash → 视作 claim,设新密码后加入
  *   3. 邮箱是新的 → 建 user + org_members + clientProfile
@@ -205,7 +205,7 @@ describe('POST /:orgSlug/register', () => {
     expect(vi.mocked(bcrypt.compare)).not.toHaveBeenCalled();
   });
 
-  it('已存在用户 + 已是该 org 成员 + 密码正确 → 200 already_registered + tokens', async () => {
+  it('已存在用户 + 已是该 org 成员 + 密码正确 → 201 registered + tokens (W2.10: 与"加入"分支响应一致, 不泄露 org membership)', async () => {
     vi.mocked(bcrypt.compare).mockResolvedValue(true);
     const app = await buildApp();
     dbResults.push([counselingOrg()]);
@@ -217,8 +217,10 @@ describe('POST /:orgSlug/register', () => {
       url: '/sunshine/register',
       payload: { email: 'e@x.com', password: 'secret123', name: '张三' },
     });
-    expect(res.statusCode).toBe(200);
-    expect(res.json().status).toBe('already_registered');
+    // W2.10: 状态码 + status 字符串与"未加入"分支统一
+    expect(res.statusCode).toBe(201);
+    expect(res.json().status).toBe('registered');
+    expect(res.json().status).not.toBe('already_registered');
     expect(res.json().accessToken).toBeTypeOf('string');
   });
 

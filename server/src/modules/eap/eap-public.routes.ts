@@ -167,8 +167,11 @@ export async function eapPublicRoutes(app: FastifyInstance) {
       .limit(1);
 
     if (existingMember) {
-      // Already registered, just return success
-      return { status: 'already_registered', orgId: org.id };
+      // W2.10 (security audit 2026-05-03): unify response with the
+      // "registered" branch to avoid leaking org-membership status.
+      // See counseling-public.routes.ts for full reasoning.
+      reply.code(201);
+      return { status: 'registered', orgId: org.id, isNewUser };
     }
 
     // Add as client member

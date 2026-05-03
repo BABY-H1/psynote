@@ -176,13 +176,17 @@ export async function counselingPublicRoutes(app: FastifyInstance) {
       .limit(1);
 
     if (existingMember) {
-      // 已是成员 —— 不重复建 profile,返回 200 + 登录 token 让前端直接跳 Portal
+      // W2.10 (security audit 2026-05-03): 之前此处返回 200 + status='already_registered',
+      // 与"非成员加入"分支的 201 + 'registered' 不同 → 给攻击者(已掌握正确密码者)
+      // 告知"这个用户是不是该机构成员", 是 org-membership 信息泄露. 现统一返回
+      // 201 + 'registered'. 前端如需区分可读 isNewUser, 但 isNewUser 仅区分
+      // "本次是否新建 user 行", 不暴露 org membership.
       const tokens = signTokens(userRow);
-      return reply.code(200).send({
-        status: 'already_registered',
+      return reply.code(201).send({
+        status: 'registered',
         orgId: org.id,
         userId: userRow.id,
-        isNewUser: false,
+        isNewUser,
         ...tokens,
       });
     }

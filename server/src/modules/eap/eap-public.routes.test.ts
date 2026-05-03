@@ -8,7 +8,7 @@ import bcrypt from 'bcryptjs';
  * POST /api/public/eap/:orgSlug/register
  *   1. 按 orgSlug 查 organizations + 校验 EAP 资质
  *   2. 邮箱已在平台有 user → 必须 bcrypt.compare 验密码 (W0.4 安全审计修复)
- *      - 有 passwordHash + 密码对 → 加入 org / 已是成员则 already_registered
+ *      - 有 passwordHash + 密码对 → 加入 org (已是成员也走同一响应,W2.10)
  *      - 有 passwordHash + 密码错 → 401 (防接管)
  *      - 无 passwordHash → 视作 claim,设新密码后加入
  *   3. 邮箱是新的 → 建 user + org_members(client) + eapEmployeeProfile
@@ -188,5 +188,26 @@ describe('POST /:orgSlug/register (EAP)', () => {
       payload: { email: 'e@a.com', password: 'wrongpw', name: '员工' },
     });
     expect(res.statusCode).toBe(401);
+  });
+
+  // ─── W2.10 — Email enumeration mitigation ───────────────────────
+
+  it('已存在用户 + 已是成员 + 密码正确 → 201 registered (W2.10: 与"加入"分支响应一致)', async () => {
+    vi.mocked(bcrypt.compare).mockResolvedValue(true);
+    const app = await buildApp();
+    dbResults.push([eapOrg()]);
+    dbResults.push([{ id: 'user-e', email: 'e@a.com', passwordHash: 'real-hash' }]);
+    dbResults.push([{ id: 'member-1' }]); // 已是成员
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/acme/register',
+      payload: { email: 'e@a.com', password: 'secret123', name: '员工' },
+    });
+    // 与"未加入"分支响应一致, 不暴露 org membership
+    expect(res.statusCode).toBe(201);
+    expect(res.json().status).toBe('registered');
+    expect(res.json().status).not.toBe('already_registered');
+    expect(res.json().isNewUser).toBe(false);
   });
 });
