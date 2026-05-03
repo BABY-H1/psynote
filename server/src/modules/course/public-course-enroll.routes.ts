@@ -107,7 +107,14 @@ export async function publicCourseEnrollRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: '该课程不接受公开报名' });
     }
 
-    // Find or create user by email
+    // Find or create user by email.
+    //
+    // W0.4 安全审计修复 (2026-05-03):
+    // 之前此处 passwordHash: randomUUID() — fake hash 既阻塞 email 真实主人
+    // 注册(因 email UNIQUE),也无法通过 bcrypt.compare 登入。改为 null,配合
+    // counseling-public.routes 的 claim flow,真实主人来时可以认领并设密码。
+    // auth.routes.ts:80-86 已对 null passwordHash 做 fail-closed 处理(任何
+    // 密码登录尝试都失败),所以创建出 null-hash 用户行是安全的。
     let [user] = await db.select().from(users).where(eq(users.email, body.email)).limit(1);
     if (!user) {
       [user] = await db
@@ -116,7 +123,7 @@ export async function publicCourseEnrollRoutes(app: FastifyInstance) {
           id: randomUUID(),
           name: body.name,
           email: body.email,
-          passwordHash: randomUUID(),
+          passwordHash: null,
         })
         .returning();
     }

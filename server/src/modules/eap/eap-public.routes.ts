@@ -17,7 +17,7 @@ import {
   users,
   eapEmployeeProfiles,
 } from '../../db/schema.js';
-import { ValidationError, NotFoundError } from '../../lib/errors.js';
+import { ValidationError, NotFoundError, UnauthorizedError } from '../../lib/errors.js';
 import { hasFeature, planToTier } from '@psynote/shared';
 import { verifyLicense } from '../../lib/license/verify.js';
 
@@ -117,7 +117,7 @@ export async function eapPublicRoutes(app: FastifyInstance) {
 
     // Check if user exists
     let [existingUser] = await db
-      .select({ id: users.id })
+      .select({ id: users.id, passwordHash: users.passwordHash })
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
@@ -126,6 +126,22 @@ export async function eapPublicRoutes(app: FastifyInstance) {
     let isNewUser = false;
 
     if (existingUser) {
+      // W0.4 安全审计修复 (2026-05-03): same takeover-prevention pattern as
+      // counseling-public.routes.ts. EAP variant didn't issue tokens, but it
+      // still attached an arbitrary user row to the attacker's org as a
+      // `client` member without any proof of ownership.
+      if (existingUser.passwordHash) {
+        const valid = await bcrypt.compare(body.password, existingUser.passwordHash);
+        if (!valid) {
+          throw new UnauthorizedError('邮箱或密码错误');
+        }
+      } else {
+        const newHash = await bcrypt.hash(body.password, 10);
+        await db
+          .update(users)
+          .set({ passwordHash: newHash, name: body.name.trim() })
+          .where(eq(users.id, existingUser.id));
+      }
       userId = existingUser.id;
     } else {
       // Create new user
