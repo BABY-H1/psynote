@@ -4,13 +4,11 @@ Authorize middleware (Phase 1.4) — `require_action` Dependency factory + `asse
 镜像 server/src/middleware/authorize.ts (Node) 的 requireAction / assertAuthorized,
 建立 RBAC 入口。decision 决策器走 app.shared.policy.authorize (Phase 1.3 已实现)。
 
-设计折中:
-  Phase 1.4 时 1.5 (data_scope) 和 1.6 (org_context) 还没真实现, 所以这里只
-  声明 OrgContext / DataScope 数据形状 + stub Dependencies (raise
-  NotImplementedError)。tests 用 FastAPI dependency_overrides 注入测试数据。
-
-  Phase 1.5/1.6 完成后会在本模块替换 get_data_scope / get_org_context 的实现,
-  require_action / assert_authorized 的 API 表面不变, 测试无需改。
+模块布局 (Phase 1.5 后):
+  - OrgContext + get_org_context: app/middleware/org_context.py (1.6 stub)
+  - DataScope  + get_data_scope:  app/middleware/data_scope.py (1.5 实装)
+  - 本文件: ResourceSelector + require_action + assert_authorized + decision 编排
+  本文件保 backward compat re-export 上面 4 个名字, 老 import 路径不破。
 
 用法 (Phase 3+ 路由层)::
 
@@ -55,93 +53,27 @@ from dataclasses import dataclass
 from typing import Annotated, Any
 
 from fastapi import Depends, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, Field
 
 from app.middleware.auth import AuthUser, get_current_user
+
+# OrgContext / get_org_context 在 1.5 时移到 org_context.py (Phase 1.6 stub),
+# DataScope / get_data_scope 在 1.5 时移到 data_scope.py (Phase 1.5 实装)。
+# 此处 re-export 保 backward compat — 老代码 `from app.middleware.authorize import
+# OrgContext` 仍然能 work。新代码请 import canonical 位置。
+from app.middleware.data_scope import DataScope, get_data_scope
+from app.middleware.org_context import OrgContext, get_org_context
 from app.shared.policy import Actor, Resource, Scope, authorize
 from app.shared.roles import legacy_role_to_v2
 
-# ─── 数据形状 (Phase 1.5/1.6 填实现时复用) ─────────────────────────
-
-
-class OrgContext(BaseModel):
-    """
-    当前请求的 org 成员上下文。Phase 1.6 (get_org_context) 从 org_members +
-    access_profile 读出来填充。
-
-    role 用 legacy 枚举 (org_admin/counselor/client) 与 Node 端 request.org.role
-    保持兼容; role_v2 是新枚举 (RoleV2), 优先生效。
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    org_id: str
-    org_type: str
-    role: str  # legacy: 'org_admin' | 'counselor' | 'client'
-    role_v2: str | None = None
-    is_supervisor: bool = False
-    full_practice_access: bool = False
-    # ROLE_DATA_CLASS_POLICY[role] ∪ access_profile.dataClasses (org_context 已合并)。
-    # None → fallback role 默认策略; 显式 () → 比 role 默认更紧。
-    allowed_data_classes: tuple[str, ...] | None = None
-    guardian_of_user_ids: tuple[str, ...] = Field(default_factory=tuple)
-    supervisee_user_ids: tuple[str, ...] = Field(default_factory=tuple)
-
-
-class DataScope(BaseModel):
-    """
-    当前请求的可见数据范围。Phase 1.5 (get_data_scope) 按 role + 分派关系
-    resolve 出来。
-
-    type 含义:
-      'all'             — 全机构可见 (system_admin / clinic_admin 等)
-      'assigned'        — 仅被分派的 client (counselor / supervisee)
-      'aggregate_only'  — 仅看聚合统计 (HR / school_leader)
-      'none'            — 无可见 (新成员 / 未配置)
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    type: str  # 'all' | 'assigned' | 'aggregate_only' | 'none'
-    allowed_client_ids: tuple[str, ...] = Field(default_factory=tuple)
-
-
-# ─── Stub Dependencies (Phase 1.5/1.6 fill in real impl) ─────────
-
-
-async def get_org_context(
-    user: Annotated[AuthUser, Depends(get_current_user)],
-) -> OrgContext | None:
-    """
-    Phase 1.6 实现: 读 org_members 行 + access_profile, 解析 effective_data_classes,
-    构造 OrgContext。
-
-    返回 ``None`` 的合法情形:
-      - user.is_system_admin = True (平台管理员不绑定具体 org, 走全局视图)
-
-    其他情形 Phase 1.4 暂 raise NotImplementedError —— 真实环境会立刻 500 提醒
-    尚未接入 1.6。tests 用 dependency_overrides 绕过。
-    """
-    if user.is_system_admin:
-        return None
-    raise NotImplementedError(
-        "Phase 1.6: get_org_context 尚未实现 — 真实环境需先 wire org_members 查询"
-    )
-
-
-async def get_data_scope(
-    user: Annotated[AuthUser, Depends(get_current_user)],
-) -> DataScope | None:
-    """
-    Phase 1.5 实现: 按 actor.role + assignments 推 dataScope。
-
-    返回 ``None`` 同 get_org_context: system_admin 无 scope 概念, 走全局。
-    """
-    if user.is_system_admin:
-        return None
-    raise NotImplementedError(
-        "Phase 1.5: get_data_scope 尚未实现 — 真实环境需先 wire assignments 查询"
-    )
+__all__ = [
+    "DataScope",
+    "OrgContext",
+    "ResourceSelector",
+    "assert_authorized",
+    "get_data_scope",
+    "get_org_context",
+    "require_action",
+]
 
 
 # ─── ResourceSelector + helpers ──────────────────────────────────

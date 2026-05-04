@@ -82,18 +82,26 @@ def _org(
     guardian_of_user_ids: tuple[str, ...] = (),
     supervisee_user_ids: tuple[str, ...] = (),
 ) -> Any:
+    """构造 OrgContext (Phase 1.6 后扩展) — 缺省 role_v2 时按 legacy_role_to_v2 派生。"""
     from app.middleware.authorize import OrgContext
+    from app.middleware.org_context import LicenseInfo
+    from app.shared.roles import legacy_role_to_v2, principal_of
 
+    resolved_role_v2 = role_v2 or legacy_role_to_v2(org_type, role)
     return OrgContext(
         org_id="org-1",
         org_type=org_type,
         role=role,
-        role_v2=role_v2,
+        role_v2=resolved_role_v2,
+        member_id="member-test-1",
         is_supervisor=is_supervisor,
         full_practice_access=full_practice_access,
         allowed_data_classes=allowed_data_classes,
         guardian_of_user_ids=guardian_of_user_ids,
         supervisee_user_ids=supervisee_user_ids,
+        tier="starter",
+        license=LicenseInfo(status="none"),
+        principal_class=principal_of(resolved_role_v2),
     )
 
 
@@ -399,42 +407,9 @@ def test_assert_authorized_non_admin_without_org_returns_403(
 # ─── stub deps raise NotImplementedError 直到 1.5/1.6 实现 ────
 
 
-@pytest.mark.asyncio
-async def test_get_org_context_stub_not_implemented_for_non_admin() -> None:
-    """Phase 1.6 会替换。在那之前, 非 sysadm 调用必须 fail loud."""
-    from app.middleware.auth import AuthUser
-    from app.middleware.authorize import get_org_context
-
-    user = AuthUser(id="u", email="x@y", is_system_admin=False)
-    with pytest.raises(NotImplementedError):
-        await get_org_context(user=user)
+# 注: get_org_context 的 stub 测试在 Phase 1.6 后转移到 tests/middleware/test_org_context.py
+# (1.6 里 get_org_context 已替换为真实实现, 不再 raise NotImplementedError)。
 
 
-@pytest.mark.asyncio
-async def test_get_org_context_returns_none_for_system_admin() -> None:
-    """sysadm 不绑定具体 org, 返回 None 让 require_action 顶部 bypass 生效."""
-    from app.middleware.auth import AuthUser
-    from app.middleware.authorize import get_org_context
-
-    sysadm = AuthUser(id="sa", email="sa@x", is_system_admin=True)
-    assert await get_org_context(user=sysadm) is None
-
-
-@pytest.mark.asyncio
-async def test_get_data_scope_stub_not_implemented_for_non_admin() -> None:
-    """Phase 1.5 会替换。在那之前, 非 sysadm 调用必须 fail loud."""
-    from app.middleware.auth import AuthUser
-    from app.middleware.authorize import get_data_scope
-
-    user = AuthUser(id="u", email="x@y", is_system_admin=False)
-    with pytest.raises(NotImplementedError):
-        await get_data_scope(user=user)
-
-
-@pytest.mark.asyncio
-async def test_get_data_scope_returns_none_for_system_admin() -> None:
-    from app.middleware.auth import AuthUser
-    from app.middleware.authorize import get_data_scope
-
-    sysadm = AuthUser(id="sa", email="sa@x", is_system_admin=True)
-    assert await get_data_scope(user=sysadm) is None
+# 注: get_data_scope 的 stub 测试在 Phase 1.5 后转移到 tests/middleware/test_data_scope.py
+# (因为 1.5 里 get_data_scope 已替换为真实实现, 不再 raise NotImplementedError)。
