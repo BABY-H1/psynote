@@ -1,10 +1,39 @@
 name: CI
 
+# Node 端 (server/client/packages) CI。Python 端 (server-py/) 走独立 workflow
+# python.yml, 路径互斥: 改 server-py/ 不触发本 workflow, 反之亦然。
+#
+# typecheck 当前因 PR #1 合并遗留的 @psynote/client-portal 工程问题持续 fail —
+# Node 在 FastAPI 迁移期 (Option C, 2026-05-03 起) 冻结, 这块红保留作为提醒,
+# 不阻塞 server-py/ 主线。
+
 on:
   push:
     branches: [main]
+    paths:
+      - 'server/**'
+      - 'client/**'
+      - 'packages/**'
+      - 'e2e/**'
+      - 'package*.json'
+      - 'tsconfig*.json'
+      - 'playwright.config.ts'
+      - 'vitest.config.ts'
+      - 'Dockerfile'
+      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'server/**'
+      - 'client/**'
+      - 'packages/**'
+      - 'e2e/**'
+      - 'package*.json'
+      - 'tsconfig*.json'
+      - 'playwright.config.ts'
+      - 'vitest.config.ts'
+      - 'Dockerfile'
+      - '.github/workflows/ci.yml'
   # Manual re-run button in the Actions UI (e.g. when a flaky E2E needs
   # a retry without pushing a no-op commit).
   workflow_dispatch:
@@ -16,48 +45,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ─── FastAPI 迁移目标 (server-py/) ──────────────────────────────────
-  # Fastify → FastAPI 全量迁移 (Option C, 2026-05-03 起) 中, server-py/
-  # 用 uv + pytest + ruff + mypy。Phase 0 仅校验 config / main / database
-  # 三个 core 模块, Phase 1+ 起测试覆盖会大幅扩展。
-  python-server:
-    name: Python (ruff + mypy + pytest)
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    defaults:
-      run:
-        working-directory: ./server-py
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install uv
-        uses: astral-sh/setup-uv@v4
-        with:
-          version: '0.5.11'
-          # 缓存 ~/.cache/uv keyed on uv.lock, 跳过 ~150MB wheels 重下。
-          # 命中后 setup-uv 阶段从 ~30-60s 降到 <5s。
-          enable-cache: true
-          cache-dependency-glob: "server-py/uv.lock"
-      - name: Set up Python 3.12
-        run: uv python install 3.12
-      - name: Sync deps
-        # --frozen: 严格按 uv.lock, 防 lock 漂移。任何 pyproject ≠ lock 立刻 fail
-        # → 提醒贡献者 commit lock 一起改。
-        run: uv sync --frozen
-      - name: Lint (ruff)
-        run: uv run ruff check .
-      - name: Format check (ruff)
-        run: uv run ruff format --check .
-      - name: Type check (mypy)
-        run: uv run mypy app
-      - name: Pytest
-        # Phase 0 测试不需要 Postgres (engine 是 lazy connect, 不真连)。
-        # Phase 2 起加集成测试时需要 services.postgres, 跟 e2e job 学。
-        env:
-          DATABASE_URL: postgresql://ci:ci@localhost/ci_test
-          JWT_SECRET: ci-jwt-secret-must-be-at-least-32-chars
-          NODE_ENV: test
-        run: uv run pytest -v
-
   typecheck:
     name: Typecheck (4 workspaces)
     runs-on: ubuntu-latest

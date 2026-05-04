@@ -1,0 +1,65 @@
+name: Python CI
+
+# 独立 workflow 让 server-py/ (FastAPI 迁移目标) 跟 Node 端 ci.yml 解耦:
+#   - 改 server-py/ 不会触发 Node typecheck/vitest/e2e
+#     (后者持续 fail 是 PR #1 合并遗留的 @psynote/client-portal 工程问题, Node 在
+#     冻结期不修也不阻塞)
+#   - 改 Node 端 (server/client/packages) 不会触发 Python CI
+#     (Python 不依赖 Node 代码, 跑了也是浪费 CI 时间)
+#   - 混合 commit 两个 workflow 都触发, 各自跑各自的
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server-py/**'
+      - '.github/workflows/python.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'server-py/**'
+      - '.github/workflows/python.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: python-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python-server:
+    name: Python (ruff + mypy + pytest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: ./server-py
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: '0.5.11'
+          # 缓存 ~/.cache/uv keyed on uv.lock, 跳过 ~150MB wheels 重下。
+          # 命中后 setup-uv 阶段从 ~30-60s 降到 <5s。
+          enable-cache: true
+          cache-dependency-glob: "server-py/uv.lock"
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Sync deps
+        # --frozen: 严格按 uv.lock, 防 lock 漂移。任何 pyproject ≠ lock 立刻 fail
+        # → 提醒贡献者 commit lock 一起改。
+        run: uv sync --frozen
+      - name: Lint (ruff)
+        run: uv run ruff check .
+      - name: Format check (ruff)
+        run: uv run ruff format --check .
+      - name: Type check (mypy)
+        run: uv run mypy app
+      - name: Pytest
+        # Phase 0/1 测试不需要 Postgres (engine 是 lazy connect, 不真连)。
+        # Phase 2 起加集成测试时需要 services.postgres, 跟 e2e job 学。
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost/ci_test
+          JWT_SECRET: ci-jwt-secret-must-be-at-least-32-chars
+          NODE_ENV: test
+        run: uv run pytest -v
