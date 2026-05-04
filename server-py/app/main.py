@@ -21,6 +21,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
+from app.api.v1.auth import router as auth_router
 from app.core.config import get_settings
 from app.middleware.error_handler import register_error_handlers
 
@@ -60,6 +61,10 @@ def create_app() -> FastAPI:
     # Phase 1.7: AppError / RequestValidationError / 未知异常的统一映射
     # → JSON {error, message} 格式, 与 Node 端 error-handler.ts 对齐
     register_error_handlers(fastapi_app)
+
+    # ─── Phase 3 routers ─────────────────────────────────────
+    # 路径前缀 /api/auth 与 Node 一致, Caddy /api/* → app-py 切流时 0 改动。
+    fastapi_app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
 
     @fastapi_app.get("/health", tags=["meta"])
     async def health() -> dict[str, Any]:
