@@ -26,9 +26,7 @@ TEST_SECRET = "phase1-cross-compat-secret-32chars-min"
 TEST_PASSWORD = "test-password-1234"
 
 # bcryptjs.hashSync(TEST_PASSWORD, 10) — passlib.verify 必须能验
-NODE_BCRYPTJS_HASH = (
-    "$2b$10$MfaM7CYl3MlfxVPRBgtdce9saJZONCZOG..uKRknS9B1FuJM/sNV2"
-)
+NODE_BCRYPTJS_HASH = "$2b$10$MfaM7CYl3MlfxVPRBgtdce9saJZONCZOG..uKRknS9B1FuJM/sNV2"
 
 # jsonwebtoken.sign({sub,email,isSystemAdmin}, secret, alg=HS256, exp=7d)
 # 这个 token 在 7 天后会过期, 测试只验 decode 不验时间敏感断言。
@@ -54,8 +52,7 @@ NODE_EXPIRED_TOKEN = (
 
 # alg=none 攻击向量 (W3.4): header={alg:none}, signature 为空字符串
 ALG_NONE_TOKEN = (
-    "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0."
-    "eyJzdWIiOiJhdHRhY2tlciIsImlzU3lzdGVtQWRtaW4iOnRydWV9."
+    "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhdHRhY2tlciIsImlzU3lzdGVtQWRtaW4iOnRydWV9."
 )
 
 
@@ -115,9 +112,7 @@ def test_create_access_token_returns_string(
     base_env.setenv("JWT_SECRET", TEST_SECRET)
     from app.core.security import create_access_token
 
-    token = create_access_token(
-        user_id="u1", email="a@b.com", is_system_admin=False
-    )
+    token = create_access_token(user_id="u1", email="a@b.com", is_system_admin=False)
     assert isinstance(token, str)
     assert token.count(".") == 2  # JWT 三段式
 
@@ -129,9 +124,7 @@ def test_access_token_payload_matches_node_shape(
     base_env.setenv("JWT_SECRET", TEST_SECRET)
     from app.core.security import create_access_token, decode_token
 
-    token = create_access_token(
-        user_id="user-42", email="x@y.com", is_system_admin=True
-    )
+    token = create_access_token(user_id="user-42", email="x@y.com", is_system_admin=True)
     payload = decode_token(token)
     assert payload["sub"] == "user-42"
     assert payload["email"] == "x@y.com"

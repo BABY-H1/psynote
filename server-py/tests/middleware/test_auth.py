@@ -34,8 +34,7 @@ NODE_EXPIRED_TOKEN = (
     "q2W_6WKhQ3tfIQ4zpgyUCbd0PcKOlXx1KmspYOsiU2g"
 )
 ALG_NONE_TOKEN = (
-    "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0."
-    "eyJzdWIiOiJhdHRhY2tlciIsImlzU3lzdGVtQWRtaW4iOnRydWV9."
+    "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhdHRhY2tlciIsImlzU3lzdGVtQWRtaW4iOnRydWV9."
 )
 
 
@@ -94,23 +93,17 @@ def test_garbage_token_returns_401(client: TestClient) -> None:
 
 
 def test_expired_token_returns_401(client: TestClient) -> None:
-    response = client.get(
-        "/whoami", headers={"Authorization": f"Bearer {NODE_EXPIRED_TOKEN}"}
-    )
+    response = client.get("/whoami", headers={"Authorization": f"Bearer {NODE_EXPIRED_TOKEN}"})
     assert response.status_code == 401
 
 
 def test_alg_none_attack_returns_401(client: TestClient) -> None:
     """W3.4: alg=none 必须被 decode_token 的 algorithms=['HS256'] pin 拒, 不能 200"""
-    response = client.get(
-        "/whoami", headers={"Authorization": f"Bearer {ALG_NONE_TOKEN}"}
-    )
+    response = client.get("/whoami", headers={"Authorization": f"Bearer {ALG_NONE_TOKEN}"})
     assert response.status_code == 401
 
 
-def test_wrong_secret_returns_401(
-    base_env: pytest.MonkeyPatch, protected_app: FastAPI
-) -> None:
+def test_wrong_secret_returns_401(base_env: pytest.MonkeyPatch, protected_app: FastAPI) -> None:
     """换 JWT_SECRET 后旧 token 必须失效"""
     # 注: protected_app fixture 已经拿了 TEST_SECRET 构造 client; 但 dependency
     # 每次调用都重读 settings, 所以现在改 secret 仍然影响后续请求。
@@ -119,9 +112,7 @@ def test_wrong_secret_returns_401(
 
     get_settings.cache_clear()
     client = TestClient(protected_app)
-    response = client.get(
-        "/whoami", headers={"Authorization": f"Bearer {NODE_ACCESS_TOKEN}"}
-    )
+    response = client.get("/whoami", headers={"Authorization": f"Bearer {NODE_ACCESS_TOKEN}"})
     assert response.status_code == 401
 
 
@@ -147,14 +138,10 @@ def test_valid_python_signed_token_returns_200(
     assert body["is_system_admin"] is False
 
 
-def test_valid_token_with_admin_flag(
-    base_env: pytest.MonkeyPatch, client: TestClient
-) -> None:
+def test_valid_token_with_admin_flag(base_env: pytest.MonkeyPatch, client: TestClient) -> None:
     from app.core.security import create_access_token
 
-    token = create_access_token(
-        user_id="admin-1", email="admin@p.com", is_system_admin=True
-    )
+    token = create_access_token(user_id="admin-1", email="admin@p.com", is_system_admin=True)
     response = client.get("/whoami", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
     assert response.json()["is_system_admin"] is True
@@ -174,9 +161,7 @@ def test_token_without_email_defaults_to_empty_string(
     assert response.json()["email"] == ""
 
 
-def test_payload_missing_sub_returns_401(
-    base_env: pytest.MonkeyPatch, client: TestClient
-) -> None:
+def test_payload_missing_sub_returns_401(base_env: pytest.MonkeyPatch, client: TestClient) -> None:
     """
     auth.ts:43-45: payload.sub 缺失 → throw UnauthorizedError('Invalid token payload')。
     用 PyJWT 直接签一个无 sub 的 token 模拟这个场景。
@@ -192,9 +177,7 @@ def test_payload_missing_sub_returns_401(
         TEST_SECRET,
         algorithm="HS256",
     )
-    response = client.get(
-        "/whoami", headers={"Authorization": f"Bearer {bogus_token}"}
-    )
+    response = client.get("/whoami", headers={"Authorization": f"Bearer {bogus_token}"})
     assert response.status_code == 401
 
 
@@ -209,9 +192,7 @@ async def test_get_current_user_returns_authuser_instance(
     from app.core.security import create_access_token
     from app.middleware.auth import AuthUser, get_current_user
 
-    token = create_access_token(
-        user_id="direct-1", email="d@e.com", is_system_admin=False
-    )
+    token = create_access_token(user_id="direct-1", email="d@e.com", is_system_admin=False)
     user = await get_current_user(authorization=f"Bearer {token}")
     assert isinstance(user, AuthUser)
     assert user.id == "direct-1"

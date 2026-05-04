@@ -91,7 +91,11 @@ target-version = "py312"
 # 默认 + import-order + bugbear + naming + pyupgrade
 select = ["E", "F", "I", "B", "N", "UP", "W", "C4", "SIM", "RUF"]
 ignore = [
-    "E501",  # line-too-long (formatter 处理)
+    "E501",   # line-too-long (formatter 处理)
+    # RUF002/003 警告"歧义 unicode" (Cyrillic 'a' 混 Latin 'a' 之类). 我们故意
+    # 用数学符号 ×/∪/∈ 作 RBAC 文档 + CJK 标点贯穿全代码, 这条规则在本代码库
+    # 全是误报。
+    "RUF001", "RUF002", "RUF003",
 ]
 
 # B008 误报 white-list: FastAPI 的 Depends/Header/Query/... 在参数 default 调用是

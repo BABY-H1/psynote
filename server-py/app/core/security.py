@@ -76,9 +76,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 # ─── JWT ────────────────────────────────────────────────────────
 
 
-def create_access_token(
-    *, user_id: str, email: str | None, is_system_admin: bool
-) -> str:
+def create_access_token(*, user_id: str, email: str | None, is_system_admin: bool) -> str:
     """
     签发 access token。Claims 与 Node signTokens() (auth.routes.ts:18-22) 一致:
       { sub, email, isSystemAdmin, iat, exp }
