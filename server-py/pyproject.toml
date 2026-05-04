@@ -35,7 +35,10 @@ dependencies = [
     "psycopg[binary]>=3.2.0",               # 同步 driver (Alembic + 一些 utility 用)
 
     # Auth / crypto
-    "passlib[bcrypt]>=1.7.4",               # bcrypt 兼容 (替代 bcryptjs)
+    # 直接用 bcrypt 库 (不走 passlib) — passlib 1.7.4 读 bcrypt.__about__ 但 bcrypt
+    # 4.0+ 删了这个属性, 导致 passlib 把 bcrypt backend 标 unavailable, 所有 hash/verify
+    # 都 fail。passlib 1.8 还没 release, 等不起。bcrypt 直接 API 也更简单。
+    "bcrypt>=4.2.0",                        # 替代 bcryptjs, 与之 hash 格式 1:1 兼容
     "pyjwt>=2.10.0",                        # JWT (替代 jsonwebtoken) — 需 algorithms=['HS256'] pin
 
     # Jobs / queue
@@ -67,8 +70,8 @@ dev = [
     # Lint / format / type
     "ruff>=0.9.0",
     "mypy>=1.13.0",
-    "types-passlib",
     "types-redis",
+    # 不需要 types-bcrypt (bcrypt 自带 py.typed); types-passlib 已下架, 一并移除。
 ]
 
 [build-system]
@@ -89,6 +92,20 @@ target-version = "py312"
 select = ["E", "F", "I", "B", "N", "UP", "W", "C4", "SIM", "RUF"]
 ignore = [
     "E501",  # line-too-long (formatter 处理)
+]
+
+# B008 误报 white-list: FastAPI 的 Depends/Header/Query/... 在参数 default 调用是
+# 框架推荐的标准用法 (依赖注入), 不是真正的 mutable default。
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = [
+    "fastapi.Depends",
+    "fastapi.Header",
+    "fastapi.Query",
+    "fastapi.Path",
+    "fastapi.Body",
+    "fastapi.Form",
+    "fastapi.Cookie",
+    "fastapi.File",
 ]
 
 [tool.ruff.format]
@@ -112,8 +129,8 @@ testpaths = ["tests"]
 asyncio_mode = "auto"
 filterwarnings = [
     "error",
-    # SQLAlchemy 2.0 在某些场景仍 emit 旧 warnings, 目前只忽略已知确定无害的
-    "ignore::DeprecationWarning:passlib.*",
+    # SQLAlchemy 2.0 在某些场景仍 emit 旧 warnings, 目前只忽略已知确定无害的。
+    # 切到 bcrypt 直接调用后 passlib 那条已无关。
 ]
 
 [tool.coverage.run]
