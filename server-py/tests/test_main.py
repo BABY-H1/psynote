@@ -104,3 +104,27 @@ def test_app_startup_fails_when_jwt_secret_too_short(
     with pytest.raises(SystemExit) as exc:
         get_settings()
     assert exc.value.code == 1
+
+
+# ─── Phase 1.7: error_handler wired into create_app ─────────────
+
+
+def test_app_app_error_handler_wired(client: TestClient) -> None:
+    """
+    Phase 1.7 验证: register_error_handlers 在 create_app() 内被调用,
+    routes 抛 AppError 时返回正确的 {error, message} 响应。
+    """
+    from app.lib.errors import NotFoundError
+    from app.main import app
+
+    # 临时挂一条触发 AppError 的 route
+    @app.get("/__test/raises_not_found")
+    async def _raise() -> None:
+        raise NotFoundError(resource="TestThing", resource_id="42")
+
+    response = client.get("/__test/raises_not_found")
+    assert response.status_code == 404
+    body = response.json()
+    assert body["error"] == "NOT_FOUND"
+    assert "TestThing" in body["message"]
+    assert "42" in body["message"]

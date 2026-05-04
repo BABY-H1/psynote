@@ -22,6 +22,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from app.core.config import get_settings
+from app.middleware.error_handler import register_error_handlers
 
 
 @lru_cache(maxsize=1)
@@ -55,6 +56,10 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url=None,
     )
+
+    # Phase 1.7: AppError / RequestValidationError / 未知异常的统一映射
+    # → JSON {error, message} 格式, 与 Node 端 error-handler.ts 对齐
+    register_error_handlers(fastapi_app)
 
     @fastapi_app.get("/health", tags=["meta"])
     async def health() -> dict[str, Any]:
