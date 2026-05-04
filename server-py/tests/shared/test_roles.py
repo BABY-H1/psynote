@@ -130,6 +130,44 @@ def test_staff_roles() -> None:
         assert principal_of(role) == "staff", role
 
 
+# ─── Drift prevention: _SUBJECT_ROLES / _PROXY_ROLES ⊆ RoleV2 全集 ─
+
+
+def test_subject_and_proxy_role_sets_are_subset_of_rolev2() -> None:
+    """
+    _SUBJECT_ROLES + _PROXY_ROLES 必须是合法 RoleV2 子集。
+
+    防 drift 场景: 如果 RoleV2 union 增删了角色 (e.g. 新增 'volunteer'),
+    但忘了在 _SUBJECT_ROLES / _PROXY_ROLES 里分类, principal_of 会默认
+    返回 'staff' (fail-open). 这条测试不能直接防那种情况, 但保证现有集合
+    里的字符串都是合法 RoleV2 (catch typo / stale string).
+    """
+    from app.shared.roles import (
+        _PROXY_ROLES,
+        _SUBJECT_ROLES,
+        ROLES_BY_ORG_TYPE,
+    )
+
+    all_role_v2: set[str] = set()
+    for roles in ROLES_BY_ORG_TYPE.values():
+        all_role_v2.update(roles)
+
+    bad_subjects = _SUBJECT_ROLES - all_role_v2
+    bad_proxies = _PROXY_ROLES - all_role_v2
+    assert not bad_subjects, f"_SUBJECT_ROLES 含未定义 RoleV2: {bad_subjects}"
+    assert not bad_proxies, f"_PROXY_ROLES 含未定义 RoleV2: {bad_proxies}"
+
+
+def test_every_subject_proxy_role_classified_in_principal_of() -> None:
+    """每个 _SUBJECT_ROLES / _PROXY_ROLES 成员经 principal_of 应正确返回。"""
+    from app.shared.roles import _PROXY_ROLES, _SUBJECT_ROLES, principal_of
+
+    for role in _SUBJECT_ROLES:
+        assert principal_of(role) == "subject", f"{role} 应是 subject"
+    for role in _PROXY_ROLES:
+        assert principal_of(role) == "proxy", f"{role} 应是 proxy"
+
+
 # ─── legacy_role_to_v2 ──────────────────────────────────────────
 
 

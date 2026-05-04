@@ -23,30 +23,36 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from app.shared.actions import role_can_perform_action
-from app.shared.data_class import role_allows_data_class
-from app.shared.roles import principal_of
+from app.shared.actions import Action, role_can_perform_action
+from app.shared.data_class import DataClass, role_allows_data_class
+from app.shared.roles import RoleV2, principal_of
+from app.shared.tier import OrgType
 
 
 @dataclass(frozen=True)
 class Actor:
-    """权限决策的主体 — 当前请求的用户在某 org 的角色身份。"""
+    """权限决策的主体 — 当前请求的用户在某 org 的角色身份。
 
-    org_type: str
-    role: str
+    `org_type` / `role` 用 Literal 类型, 保证调用方拿到的是 RoleV2 / OrgType
+    enum 值 (来自 `OrgContext.role_v2` 与 `org_type`)。负向测试构造非法 role 时
+    用 `# type: ignore` 越过 mypy。
+    """
+
+    org_type: OrgType
+    role: RoleV2
     user_id: str
     is_supervisor: bool = False
     # role 默认策略 + access_profile 单点放开 = 实际可触达的 data class。
     # 不传 → 走 ROLE_DATA_CLASS_POLICY[role] 默认。传空 tuple → 显式全拒。
-    effective_data_classes: tuple[str, ...] | None = None
+    effective_data_classes: tuple[DataClass, ...] | None = None
 
 
 @dataclass(frozen=True)
 class Resource:
     """被访问的资源元数据 — 决策只看 data_class + owner_user_id, 不看 type/org_id。"""
 
-    type: str  # 仅日志/审计用
-    data_class: str
+    type: str  # 仅日志/审计用 (任意字符串, 不是 enum)
+    data_class: DataClass
     owner_user_id: str | None = None
     org_id: str | None = None  # 暂未参与决策, 保留扩展
 
@@ -71,7 +77,7 @@ class Decision:
 
 def authorize(
     actor: Actor,
-    action: str,
+    action: Action,
     resource: Resource,
     scope: Scope | None = None,
 ) -> Decision:

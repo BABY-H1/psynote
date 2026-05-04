@@ -254,14 +254,9 @@ async def test_client_role_returns_none_scope(base_env: pytest.MonkeyPatch) -> N
     assert result.type == "none"
 
 
-@pytest.mark.asyncio
-async def test_unknown_role_falls_through_to_none(base_env: pytest.MonkeyPatch) -> None:
-    """fail-soft: 未识别的 legacy role → none (策略层 + scope 层都安全)"""
-    from app.middleware.data_scope import resolve_data_scope
-
-    result = await resolve_data_scope(user=_user(), org=_org(role="bogus_role"), db=AsyncMock())
-    assert result is not None
-    assert result.type == "none"
+# 注: test_unknown_role_falls_through_to_none 在 LegacyRole 改 Literal 后无法构造
+# (Pydantic 拒绝非法 role 值, 这正是 strict typing 想要的)。fall-through 到 'none' 的
+# 唯一合法 legacy_role 是 'client', 已被 test_client_role_returns_none_scope 覆盖。
 
 
 # ─── _resolve_counselor_assignments helper 占位行为 ───────────

@@ -31,7 +31,7 @@ Phase 1.5 实装注:
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import Depends
 from pydantic import BaseModel, ConfigDict, Field
@@ -40,6 +40,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+
+DataScopeType = Literal["all", "assigned", "aggregate_only", "none"]
 
 
 class DataScope(BaseModel):
@@ -55,7 +57,7 @@ class DataScope(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    type: str
+    type: DataScopeType
     allowed_client_ids: tuple[str, ...] = Field(default_factory=tuple)
 
 

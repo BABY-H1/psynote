@@ -148,12 +148,16 @@ def test_counselor_blocked_from_unassigned_client(base_env: pytest.MonkeyPatch) 
 
 
 def test_hr_admin_blocked_from_phi_full(base_env: pytest.MonkeyPatch) -> None:
-    """HR 硬红线: 仅 aggregate, 任何 PHI 拒绝"""
+    """HR 硬红线: 仅 aggregate, 任何 PHI 拒绝。
+
+    legacy ``role='org_admin'`` + ``org_type='enterprise'`` → role_v2='hr_admin'
+    (合规硬隔离, 见 legacy_role_to_v2)。helper 自动派生 role_v2。
+    """
     _, client = _build_protected_app(
         "view",
         "phi_full",
         extract_owner=lambda r: r.path_params["owner_id"],
-        org_context=_org(role="hr_admin", org_type="enterprise"),
+        org_context=_org(role="org_admin", org_type="enterprise"),
         data_scope=_scope("all"),
     )
     response = client.get("/protected/anything")
@@ -195,13 +199,15 @@ def test_clinic_admin_with_access_profile_phi_full(
     """
     clinic_admin 默认无 phi_full, 但 allowed_data_classes (access_profile 单点
     放开后 effective 集合) 包含 phi_full → 通过。
+
+    legacy ``role='org_admin'`` + ``org_type='counseling'`` → role_v2='clinic_admin'.
     """
     _, client = _build_protected_app(
         "view",
         "phi_full",
         extract_owner=lambda r: r.path_params["owner_id"],
         org_context=_org(
-            role="clinic_admin",
+            role="org_admin",
             org_type="counseling",
             allowed_data_classes=("phi_full", "phi_summary", "de_identified", "aggregate"),
         ),
@@ -217,7 +223,7 @@ def test_clinic_admin_default_no_phi_full(base_env: pytest.MonkeyPatch) -> None:
         "view",
         "phi_full",
         extract_owner=lambda r: r.path_params["owner_id"],
-        org_context=_org(role="clinic_admin", org_type="counseling"),
+        org_context=_org(role="org_admin", org_type="counseling"),
         data_scope=_scope("all"),
     )
     response = client.get("/protected/c1")

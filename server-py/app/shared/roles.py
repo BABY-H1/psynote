@@ -83,9 +83,11 @@ def is_role_valid_for_org_type(org_type: str, role: str) -> bool:
 
 # ─── Role → Principal 映射 ───────────────────────────────────────
 
-# subject = 服务对象本人
+# 显式声明哪些 RoleV2 是 subject / proxy 类。用 frozenset[str] (不是 RoleV2 union)
+# 是因为 isinstance 检查 + drift 测试方便。tests/shared/test_roles.py 强制
+# _SUBJECT_ROLES ∪ _PROXY_ROLES ⊆ RoleV2 全集; 加 RoleV2 时 mypy + 测试都会
+# 提醒分类 (默认 staff, 但显式分类比默认安全)。
 _SUBJECT_ROLES: frozenset[str] = frozenset({"client", "student", "employee", "patient"})
-# proxy = 代理人 / 监护人
 _PROXY_ROLES: frozenset[str] = frozenset({"parent", "family"})
 
 

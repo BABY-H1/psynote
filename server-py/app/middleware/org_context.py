@@ -40,19 +40,20 @@ Phase 1.6 实装注:
 
 from __future__ import annotations
 
-import re
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, status
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.middleware.auth import AuthUser, get_current_user
-from app.shared.data_class import ROLE_DATA_CLASS_POLICY
-from app.shared.roles import legacy_role_to_v2, principal_of
-from app.shared.tier import plan_to_tier
+from app.shared.data_class import ROLE_DATA_CLASS_POLICY, DataClass
+from app.shared.principal import Principal
+from app.shared.roles import LegacyRole, RoleV2, legacy_role_to_v2, principal_of
+from app.shared.tier import OrgTier, OrgType, plan_to_tier
 
 # ─── Models ─────────────────────────────────────────────────────
 
@@ -74,34 +75,54 @@ class OrgContext(BaseModel):
 
     role 用 legacy 枚举 (``org_admin`` / ``counselor`` / ``client``) 与 Node
     端 ``request.org.role`` 兼容; ``role_v2`` 是新枚举 (RoleV2), 优先生效。
+
+    `is_supervisor` / `principal_class` 是 ``@computed_field`` 派生属性 —
+    根据 ``role_v2`` + ``full_practice_access`` 即时计算, 防止存储字段与
+    role_v2 漂移。如果 DB 有显式 ``principal_class`` 列 (proxy 账号特殊
+    身份), 通过 ``principal_class_override`` 注入。
     """
 
     model_config = ConfigDict(frozen=True)
 
     org_id: str
-    org_type: str
-    role: str  # legacy
-    role_v2: str
+    org_type: OrgType
+    role: LegacyRole  # 'org_admin' | 'counselor' | 'client'
+    role_v2: RoleV2
     member_id: str
     supervisor_id: str | None = None
     full_practice_access: bool = False
-    is_supervisor: bool = False
     supervisee_user_ids: tuple[str, ...] = Field(default_factory=tuple)
     guardian_of_user_ids: tuple[str, ...] = Field(default_factory=tuple)
     # ROLE_DATA_CLASS_POLICY[role_v2] ∪ access_profile.dataClasses
-    allowed_data_classes: tuple[str, ...] | None = None
-    tier: str  # OrgTier
+    allowed_data_classes: tuple[DataClass, ...] | None = None
+    tier: OrgTier
     license: LicenseInfo
-    principal_class: str  # Principal
+    # 仅当 DB 显式标了 principal_class (e.g. proxy 账号) 时注入, 否则 None;
+    # 通过 .principal_class computed_field 透出 (override 优先, 否则 principal_of(role_v2))
+    principal_class_override: Principal | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def is_supervisor(self) -> bool:
+        """
+        派生: role_v2 在 supervisor-class OR (legacy counselor + fullPractice)。
+        与 Node org-context.ts:219-225 同语义。
+
+        是 computed 而非存储字段 — 派生自 role_v2 + full_practice_access, 防漂移。
+        """
+        return self.role_v2 in _SUPERVISOR_LIKE_ROLES_V2 or (
+            self.role == "counselor" and self.full_practice_access
+        )
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def principal_class(self) -> Principal:
+        """显式 override 优先 (proxy 等), 否则 principal_of(role_v2)。"""
+        return self.principal_class_override or principal_of(self.role_v2)
 
 
 # ─── 常量 ────────────────────────────────────────────────────────
 
-
-_UUID_RE = re.compile(
-    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-    re.IGNORECASE,
-)
 
 _NO_LICENSE = LicenseInfo(status="none")
 
@@ -195,7 +216,7 @@ async def _resolve_tier(
     org_id: str,
     license_key: str | None,
     db_plan: str | None,
-) -> tuple[str, LicenseInfo]:
+) -> tuple[OrgTier, LicenseInfo]:
     """
     Phase 1.6: lib/license/verify (RSA + JWT) 没 port, 一律按 'no license'
     走, tier 由 plan 推。Phase X TBD: 加入 license 验证后, 这里走 license
@@ -220,8 +241,12 @@ async def resolve_org_context(
     if org_id is None:
         return None
 
-    if not _UUID_RE.match(org_id):
-        raise _not_found()
+    # UUID 校验 — stdlib 比手写正则可读且少一份维护点 (与 Node 行为一致:
+    # 非 UUID 形态先 404, 防 Postgres "invalid input syntax" 暴 500)
+    try:
+        UUID(org_id)
+    except ValueError as exc:
+        raise _not_found() from exc
 
     if user.is_system_admin:
         return await _build_sysadm_context(org_id, db)
@@ -236,14 +261,15 @@ async def _build_sysadm_context(org_id: str, db: AsyncSession) -> OrgContext:
         raise _not_found()
 
     org_settings: dict[str, Any] = org_row.get("settings") or {}
-    org_type: str = org_settings.get("orgType", "counseling")
+    org_type: OrgType = org_settings.get("orgType", "counseling")
     tier, license_info = await _resolve_tier(
         org_id, org_row.get("license_key"), org_row.get("plan")
     )
 
-    role_v2 = legacy_role_to_v2(org_type, "org_admin")
+    role_v2 = cast("RoleV2", legacy_role_to_v2(org_type, "org_admin"))
     policy_classes = ROLE_DATA_CLASS_POLICY.get(role_v2, ())
 
+    # is_supervisor / principal_class 走 computed_field 自动派生
     return OrgContext(
         org_id=org_id,
         org_type=org_type,
@@ -252,13 +278,11 @@ async def _build_sysadm_context(org_id: str, db: AsyncSession) -> OrgContext:
         member_id="system-admin",
         supervisor_id=None,
         full_practice_access=True,
-        is_supervisor=True,
         supervisee_user_ids=(),
         guardian_of_user_ids=(),
         allowed_data_classes=tuple(policy_classes),
         tier=tier,
         license=license_info,
-        principal_class=principal_of(role_v2),
     )
 
 

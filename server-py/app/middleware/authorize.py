@@ -62,8 +62,9 @@ from app.middleware.auth import AuthUser, get_current_user
 # OrgContext` 仍然能 work。新代码请 import canonical 位置。
 from app.middleware.data_scope import DataScope, get_data_scope
 from app.middleware.org_context import OrgContext, get_org_context
+from app.shared.actions import Action
+from app.shared.data_class import DataClass
 from app.shared.policy import Actor, Resource, Scope, authorize
-from app.shared.roles import legacy_role_to_v2
 
 __all__ = [
     "DataScope",
@@ -91,8 +92,8 @@ class ResourceSelector:
     extract_org_id:             从 Request 抽 org_id; None → 取 org_context.org_id
     """
 
-    type: str
-    data_class: str
+    type: str  # 任意标签 (审计用), 不是 enum
+    data_class: DataClass
     extract_owner_user_id: Callable[[Request], str | None] | None = None
     extract_org_id: Callable[[Request], str | None] | None = None
 
@@ -103,18 +104,16 @@ def _forbidden(detail: str) -> HTTPException:
 
 def _resolve_actor(user: AuthUser, org: OrgContext) -> Actor:
     """
-    User + OrgContext → Actor. role_v2 优先, 空则 legacy_role_to_v2 推。
+    User + OrgContext → Actor.
 
-    isSupervisor: org_context 显式标 || (legacy counselor + fullPracticeAccess) —
-    与 Node 端 authorize.ts:137-139 完全一致。
+    OrgContext 已经把 ``role_v2`` (含 legacy fallback) 与 ``is_supervisor``
+    (含 counselor+fpa 派生) 算好, 这里直接透传, 避免 two-sources-of-truth。
     """
-    role = org.role_v2 or legacy_role_to_v2(org.org_type, org.role)
-    is_supervisor = org.is_supervisor or (org.role == "counselor" and org.full_practice_access)
     return Actor(
         org_type=org.org_type,
-        role=role,
+        role=org.role_v2,
         user_id=user.id,
-        is_supervisor=is_supervisor,
+        is_supervisor=org.is_supervisor,
         effective_data_classes=org.allowed_data_classes,
     )
 
@@ -134,10 +133,8 @@ def _resolve_scope(org: OrgContext, data_scope: DataScope, owner_user_id: str | 
     return Scope(
         allowed_client_ids=allowed_client_ids,
         guardian_of_user_ids=org.guardian_of_user_ids,
-        # 督导下属的 supervisee 只在 supervisor 身份下生效
-        supervised_user_ids=(
-            org.supervisee_user_ids if (org.is_supervisor or org.full_practice_access) else ()
-        ),
+        # OrgContext.is_supervisor 已含 (counselor+fpa) 派生, 不需在此再 OR
+        supervised_user_ids=org.supervisee_user_ids if org.is_supervisor else (),
     )
 
 
@@ -145,15 +142,16 @@ def _do_authorize(
     user: AuthUser,
     org: OrgContext,
     data_scope: DataScope,
-    action: str,
+    action: Action,
     selector: ResourceSelector,
     owner_user_id: str | None,
     org_id_override: str | None,
 ) -> None:
-    """共享决策核心 (require_action 与 assert_authorized 都走它)。"""
-    if user.is_system_admin:
-        return  # bypass
+    """共享决策核心 (require_action 与 assert_authorized 都走它)。
 
+    sysadm bypass 在两个 caller (require_action.dep / assert_authorized) 都做,
+    本函数只在两者已确认非 sysadm + 有 org context 后才被调用, 不重复检查。
+    """
     actor = _resolve_actor(user, org)
     org_id = org_id_override if org_id_override is not None else org.org_id
     resource = Resource(
@@ -173,7 +171,7 @@ def _do_authorize(
 # ─── require_action factory (preHandler 风格) ─────────────────────
 
 
-def require_action(action: str, selector: ResourceSelector) -> Callable[..., Any]:
+def require_action(action: Action, selector: ResourceSelector) -> Callable[..., Any]:
     """
     返回一个 FastAPI Dependency, 挂在路由的 dependencies=[] 上做 RBAC 守门。
 
@@ -218,7 +216,7 @@ def assert_authorized(
     user: AuthUser,
     org: OrgContext | None,
     data_scope: DataScope | None,
-    action: str,
+    action: Action,
     selector: ResourceSelector,
     owner_user_id: str | None,
     org_id: str | None = None,
