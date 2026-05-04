@@ -98,6 +98,15 @@ async def resolve_data_scope(
         # tuple 排序保证测试可重复 (set 顺序不固定)
         return DataScope(type="assigned", allowed_client_ids=tuple(sorted(client_ids)))
 
+    # 5.5 班主任 (Phase 2 决策 2026-05-04): 范围 = 自己班的学生 (assigned, 不是 all)
+    # 数据级别 phi_summary 由 data_class.py ROLE_DATA_CLASS_POLICY 定 (含法规背书)
+    # 注: 用 role_v2 判断, 因 legacy role 无 'homeroom_teacher' 一档
+    if org.role_v2 == "homeroom_teacher":
+        student_ids = await _resolve_homeroom_students(
+            db=db, org_id=org.org_id, teacher_user_id=user.id
+        )
+        return DataScope(type="assigned", allowed_client_ids=tuple(sorted(student_ids)))
+
     # 6. client / 其他 → none (portal 路由自己做 self-only filtering)
     return DataScope(type="none")
 
@@ -152,9 +161,55 @@ async def _resolve_counselor_assignments(
 
     Phase 1.5 阶段返回空 set —— role 路由完整, counselor 的实际 allowed_client_ids
     在 Phase 2 接 ORM 后才填。集成测试 (Phase 2 起加) 会捕捉这块。
+
+    ⚠ Phase 3 实装警告 (Phase 2 review agent 提出, 见 plan Phase 3 backlog):
+      - 此 helper 在每个 counselor 用户的每次 API 请求都被调用 (走 get_data_scope Dependency)
+      - 上面 demo 的 3 个 select 串行 await 会造成 **每请求 3 次 DB round-trip**
+      - 实装时**必须**用 ``UNION`` 单查询 (1 round-trip) + ``contextvars`` 或
+        FastAPI ``request.state`` 做 request-scope cache (同一请求内复用结果)
+      - 可选 Redis 短 TTL cache (5-30s, key=``scope:{user_id}:{org_id}``)
+        — counselor 分配变更不频繁, 5s stale 可接受
     """
     # 参数被 referenced 让 lint 不警告 (Phase 2 替换时这些就是 select 的过滤项)
     _ = (db, org_id, counselor_user_id, supervisee_user_ids)
+    return set()
+
+
+async def _resolve_homeroom_students(
+    db: AsyncSession,
+    org_id: str,
+    teacher_user_id: str,
+) -> set[str]:
+    """
+    班主任能看的学生 user_id 集合 (Phase 2 stub, Phase 3 ORM 后填实)。
+
+    Phase 3 实装::
+
+        from app.db.models.school_classes import SchoolClass
+        from app.db.models.school_student_profiles import SchoolStudentProfile
+
+        # 找到该 teacher 担任 homeroom 的所有班级
+        my_classes = select(SchoolClass.id).where(
+            SchoolClass.org_id == org_id,
+            SchoolClass.homeroom_teacher_id == teacher_user_id,
+        )
+        # 这些班级的所有学生 user_id
+        student_q = select(SchoolStudentProfile.user_id).where(
+            SchoolStudentProfile.org_id == org_id,
+            SchoolStudentProfile.class_id.in_(my_classes),
+        )
+        result = await db.execute(student_q)
+        return set(result.scalars().all())
+
+    Phase 2 阶段返回空 set —— SQLAlchemy 模型已建 (school_classes / school_student_profiles
+    在 Batch 5b), 但路由层 ORM 接通是 Phase 3 工作。
+
+    ⚠ Phase 3 实装警告 (与 _resolve_counselor_assignments 同):
+      - 班主任每次请求都过 data_scope, 此 helper 调用频率 = QPS
+      - 上面 demo 的子查询模式比 counselor 路径少 round-trip (单查询 OK)
+      - 但仍建议 request-scope cache (班主任同一 session 的 student set 极稳定)
+    """
+    _ = (db, org_id, teacher_user_id)
     return set()
 
 

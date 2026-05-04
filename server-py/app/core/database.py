@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import MetaData
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
     AsyncSession,
@@ -27,6 +28,21 @@ from sqlalchemy.ext.asyncio import (
 from sqlalchemy.orm import DeclarativeBase
 
 from app.core.config import get_settings
+
+# 命名约定 — 让 Alembic autogenerate 给新表 (e.g. ai_credentials) 起的索引/约束名
+# 风格与现有 26 个 Drizzle migration 对齐 (idx_xxx / uq_xxx / fk_xxx), 这样
+# stamp head 后 alembic check 不会因命名差异认 schema drift。
+#
+# 历史表 (75 张) 的索引/约束名靠手写 Index() / __table_args__ 跟 Drizzle 一致,
+# 不依赖 autogenerate; 此 convention 主要给 Phase 2 新增的 ai_credentials +
+# 未来 Phase 3+ 加的表用。
+NAMING_CONVENTION: dict[str, str] = {
+    "ix": "idx_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
 
 
 def _normalize_async_url(url: str) -> str:
@@ -48,7 +64,13 @@ def _normalize_async_url(url: str) -> str:
 
 
 class Base(DeclarativeBase):
-    """所有 ORM 模型的根。Phase 2 起 75 表 (users / organizations / ...) 继承此类。"""
+    """所有 ORM 模型的根。Phase 2 起 75 表 (users / organizations / ...) 继承此类。
+
+    metadata 挂 NAMING_CONVENTION 让 Alembic autogenerate 起的约束名跟 Drizzle 风格
+    一致 (idx_/uq_/fk_/ck_/pk_ 前缀)。
+    """
+
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 
 def _create_engine() -> AsyncEngine:

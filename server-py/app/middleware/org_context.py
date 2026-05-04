@@ -326,7 +326,9 @@ async def _build_member_context(user: AuthUser, org_id: str, db: AsyncSession) -
     )
 
     # allowed_data_classes = ROLE_DATA_CLASS_POLICY[role_v2] ∪ access_profile.dataClasses
-    policy_classes = ROLE_DATA_CLASS_POLICY.get(role_v2, ())
+    # cast: ROLE_DATA_CLASS_POLICY 现在 typed dict[RoleV2, ...], role_v2 来自 DB 是 str,
+    # 用 cast 仅为 mypy 通过 (runtime: dict.get(unknown) → () default 走 fail-closed)
+    policy_classes = ROLE_DATA_CLASS_POLICY.get(cast("RoleV2", role_v2), ())
     access_profile: dict[str, Any] = member.get("access_profile") or {}
     profile_extras: list[str] = access_profile.get("dataClasses") or []
     allowed_data_classes: tuple[str, ...] = tuple(sorted(set(policy_classes) | set(profile_extras)))

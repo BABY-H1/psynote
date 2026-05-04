@@ -35,14 +35,18 @@ def _org(
     *,
     role: str = "counselor",
     org_type: str = "counseling",
+    role_v2_override: str | None = None,
     full_practice_access: bool = False,
     supervisee_user_ids: tuple[str, ...] = (),
 ) -> Any:
-    """构造 OrgContext (Phase 1.6 后字段扩展) — 自动派生 role_v2 / principal_class。"""
+    """构造 OrgContext (Phase 1.6 后字段扩展) — 默认从 legacy 派生 role_v2,
+    可通过 ``role_v2_override`` 显式传入 (e.g. 'homeroom_teacher' 这类无 legacy 等价)。"""
     from app.middleware.org_context import LicenseInfo, OrgContext
     from app.shared.roles import legacy_role_to_v2, principal_of
 
-    role_v2 = legacy_role_to_v2(org_type, role)
+    role_v2 = (
+        role_v2_override if role_v2_override is not None else legacy_role_to_v2(org_type, role)
+    )
     return OrgContext(
         org_id="org-1",
         org_type=org_type,
@@ -257,6 +261,90 @@ async def test_client_role_returns_none_scope(base_env: pytest.MonkeyPatch) -> N
 # 注: test_unknown_role_falls_through_to_none 在 LegacyRole 改 Literal 后无法构造
 # (Pydantic 拒绝非法 role 值, 这正是 strict typing 想要的)。fall-through 到 'none' 的
 # 唯一合法 legacy_role 是 'client', 已被 test_client_role_returns_none_scope 覆盖。
+
+
+# ─── 分支 5.5: 班主任 (Phase 2 决策 2026-05-04) ────────────────
+
+
+@pytest.mark.asyncio
+async def test_homeroom_teacher_returns_assigned_scope(base_env: pytest.MonkeyPatch) -> None:
+    """班主任 role_v2='homeroom_teacher' → DataScope(assigned), 自己班学生集合。
+
+    Phase 2 阶段 _resolve_homeroom_students stub 返回空, 实际 ORM 接通在 Phase 3。
+    """
+    from app.middleware.data_scope import resolve_data_scope
+
+    # 班主任 legacy role 填 'client' (legacy schema 没 homeroom 等价), 业务用 role_v2
+    result = await resolve_data_scope(
+        user=_user(),
+        org=_org(role="client", org_type="school", role_v2_override="homeroom_teacher"),
+        db=AsyncMock(),
+    )
+    assert result is not None
+    assert result.type == "assigned"
+    # Phase 2 stub 阶段空, Phase 3 接通后会含自己班所有学生 user_id
+    assert result.allowed_client_ids == ()
+
+
+@pytest.mark.asyncio
+async def test_homeroom_teacher_helper_called_with_org_and_user(
+    base_env: pytest.MonkeyPatch, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    把 _resolve_homeroom_students mock 成具体集合, 验证 resolve 调对了 helper +
+    包成 (排序后的 tuple)。
+    """
+    from app.middleware import data_scope as ds_module
+
+    captured: dict[str, Any] = {}
+
+    async def mock_resolve(db: Any, org_id: str, teacher_user_id: str) -> set[str]:
+        captured["org_id"] = org_id
+        captured["teacher_user_id"] = teacher_user_id
+        return {"student-3", "student-1", "student-2"}
+
+    monkeypatch.setattr(ds_module, "_resolve_homeroom_students", mock_resolve)
+
+    result = await ds_module.resolve_data_scope(
+        user=_user(),
+        org=_org(role="client", org_type="school", role_v2_override="homeroom_teacher"),
+        db=AsyncMock(),
+    )
+
+    assert result is not None
+    assert result.type == "assigned"
+    # 排序保证测试稳定
+    assert result.allowed_client_ids == ("student-1", "student-2", "student-3")
+    assert captured["org_id"] == "org-1"
+    assert captured["teacher_user_id"] == "user-1"
+
+
+@pytest.mark.asyncio
+async def test_homeroom_helper_returns_empty_phase_2_stub(
+    base_env: pytest.MonkeyPatch,
+) -> None:
+    """Phase 2 阶段 _resolve_homeroom_students stub 返回空 set (Phase 3 ORM 接通后填实)"""
+    from app.middleware.data_scope import _resolve_homeroom_students
+
+    result = await _resolve_homeroom_students(
+        db=AsyncMock(), org_id="org-1", teacher_user_id="teacher-1"
+    )
+    assert result == set()
+
+
+# ─── 分支 5: data_class.py 中 homeroom_teacher 拿 phi_summary ──
+
+
+def test_homeroom_teacher_data_class_includes_phi_summary() -> None:
+    """Phase 2 决策 2026-05-04: 班主任拿 phi_summary 摘要级别 (非 phi_full / 非 仅 aggregate)"""
+    from app.shared.data_class import ROLE_DATA_CLASS_POLICY
+
+    classes = ROLE_DATA_CLASS_POLICY["homeroom_teacher"]
+    assert "phi_summary" in classes, "班主任应能看 phi_summary 摘要"
+    assert "de_identified" in classes
+    assert "aggregate" in classes
+    # 但不能直读临床原文
+    assert "phi_full" not in classes
 
 
 # ─── _resolve_counselor_assignments helper 占位行为 ───────────
