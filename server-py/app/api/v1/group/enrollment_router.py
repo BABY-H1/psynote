@@ -44,6 +44,7 @@ from app.db.models.group_instances import GroupInstance
 from app.db.models.org_members import OrgMember
 from app.db.models.users import User
 from app.lib.errors import ConflictError, ForbiddenError, NotFoundError, ValidationError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -52,13 +53,6 @@ router = APIRouter()
 
 
 # ─── Utility ─────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
@@ -263,8 +257,8 @@ async def enroll_batch(
     每条单独 try/except — 单条失败不打断其它. 与 Node 一致.
     """
     _require_org_admin(org, allow_roles=("counselor",))
-    org_uuid = _parse_uuid(org_id, "orgId")
-    inst_uuid = _parse_uuid(instance_id, "instanceId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     if not body.members:
         raise ValidationError("members array is required")
@@ -276,7 +270,7 @@ async def enroll_batch(
         try:
             user_uuid: uuid.UUID | None = None
             if m.user_id:
-                user_uuid = _parse_uuid(m.user_id, "userId")
+                user_uuid = parse_uuid_or_raise(m.user_id, field="userId")
             elif m.email:
                 user_uuid = await _find_or_create_user_by_email(
                     db, email=m.email, name=m.name, phone=m.phone, org_id=org_uuid
@@ -327,15 +321,21 @@ async def enroll_single(
     if org is None:
         raise ForbiddenError("org_context_required")
 
-    org_uuid = _parse_uuid(org_id, "orgId")
-    inst_uuid = _parse_uuid(instance_id, "instanceId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     user_uuid = (
-        _parse_uuid(body.user_id, "userId") if body.user_id else _parse_uuid(user.id, "userId")
+        parse_uuid_or_raise(body.user_id, field="userId")
+        if body.user_id
+        else parse_uuid_or_raise(user.id, field="userId")
     )
-    care_uuid = _parse_uuid(body.care_episode_id, "careEpisodeId") if body.care_episode_id else None
+    care_uuid = (
+        parse_uuid_or_raise(body.care_episode_id, field="careEpisodeId")
+        if body.care_episode_id
+        else None
+    )
     screening_uuid = (
-        _parse_uuid(body.screening_result_id, "screeningResultId")
+        parse_uuid_or_raise(body.screening_result_id, field="screeningResultId")
         if body.screening_result_id
         else None
     )
@@ -380,8 +380,8 @@ async def update_enrollment_status(
 ) -> EnrollmentRow:
     """审批状态 (admin / counselor). 镜像 enrollment.routes.ts:84-101 + service.ts:139-180."""
     _require_org_admin(org, allow_roles=("counselor",))
-    org_uuid = _parse_uuid(org_id, "orgId")
-    enr_uuid = _parse_uuid(enrollment_id, "enrollmentId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    enr_uuid = parse_uuid_or_raise(enrollment_id, field="enrollmentId")
 
     q = select(GroupEnrollment).where(GroupEnrollment.id == enr_uuid).limit(1)
     enrollment = (await db.execute(q)).scalar_one_or_none()
@@ -403,7 +403,7 @@ async def update_enrollment_status(
             "waitlisted": "已加入团辅等候列表",
         }
         title = labels.get(body.status) or f"团辅报名状态: {body.status}"
-        approved_uuid = _parse_uuid(user.id, "userId") if user.id else None
+        approved_uuid = parse_uuid_or_raise(user.id, field="userId") if user.id else None
         db.add(
             CareTimeline(
                 care_episode_id=enrollment.care_episode_id,

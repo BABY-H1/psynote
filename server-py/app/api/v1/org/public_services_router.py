@@ -45,7 +45,8 @@ from app.db.models.org_members import OrgMember
 from app.db.models.organizations import Organization
 from app.db.models.service_intakes import ServiceIntake
 from app.db.models.users import User
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import ForbiddenError, NotFoundError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -53,13 +54,6 @@ from app.middleware.org_context import OrgContext, get_org_context
 # 两个 router (路径 prefix 不同, app/main.py 分别 include)
 public_router = APIRouter()
 intake_router = APIRouter()
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_org_admin(org: OrgContext | None) -> None:
@@ -166,7 +160,7 @@ async def submit_public_intake(
         # preferred counselor (来自 query / link)
         preferred_uuid: uuid.UUID | None = None
         if body.counselor_id:
-            preferred_uuid = _parse_uuid(body.counselor_id, "counselorId")
+            preferred_uuid = parse_uuid_or_raise(body.counselor_id, field="counselorId")
 
         # 创建 intake
         intake = ServiceIntake(
@@ -251,7 +245,7 @@ async def list_pending_intakes(
         .join(User, User.id == ServiceIntake.client_user_id)
         .where(
             and_(
-                ServiceIntake.org_id == _parse_uuid(org.org_id, "orgId"),
+                ServiceIntake.org_id == parse_uuid_or_raise(org.org_id, field="orgId"),
                 ServiceIntake.status == "pending",
             )
         )
@@ -298,9 +292,9 @@ async def assign_intake(
     _require_org_admin(org)
     assert org is not None
 
-    intake_uuid = _parse_uuid(intake_id, "intakeId")
-    counselor_uuid = _parse_uuid(body.counselor_id, "counselorId")
-    org_uuid = _parse_uuid(org_id, "orgId")
+    intake_uuid = parse_uuid_or_raise(intake_id, field="intakeId")
+    counselor_uuid = parse_uuid_or_raise(body.counselor_id, field="counselorId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     q = select(ServiceIntake).where(ServiceIntake.id == intake_uuid).limit(1)
     intake = (await db.execute(q)).scalar_one_or_none()

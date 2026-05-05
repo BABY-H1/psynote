@@ -21,36 +21,25 @@ from datetime import date as date_type
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
-
-class _CamelModel(BaseModel):
-    """所有 group schema 的基类 — wire camelCase, Python snake_case."""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        # 防 dump 时多写 alias key (e.g. 既 access_token 又 accessToken)
-        serialize_by_alias=True,
-    )
-
+from app.api.v1._schema_base import CamelModel
 
 # ─── 通用 ─────────────────────────────────────────────────────
 
 
-class OkResponse(_CamelModel):
+class OkResponse(CamelModel):
     ok: bool = True
 
 
-class SuccessResponse(_CamelModel):
+class SuccessResponse(CamelModel):
     success: bool = True
 
 
 # ─── Scheme — group_schemes 模板 ──────────────────────────────────
 
 
-class SchemeSessionInput(_CamelModel):
+class SchemeSessionInput(CamelModel):
     """嵌入 SchemeCreateRequest 的 session 设计 (与 group_scheme_sessions 列对应).
 
     镜像 scheme.service.ts:85-98 的 SessionInput interface.
@@ -70,7 +59,7 @@ class SchemeSessionInput(_CamelModel):
     related_assessments: list[str] | None = None
 
 
-class SchemeCreateRequest(_CamelModel):
+class SchemeCreateRequest(CamelModel):
     """``POST /``. 镜像 scheme.routes.ts:24-38 的 body."""
 
     title: str = Field(min_length=1)
@@ -95,7 +84,7 @@ class SchemeCreateRequest(_CamelModel):
     sessions: list[SchemeSessionInput] | None = None
 
 
-class SchemeUpdateRequest(_CamelModel):
+class SchemeUpdateRequest(CamelModel):
     """``PATCH /:schemeId``. 镜像 scheme.routes.ts:40-50 — 所有字段可选."""
 
     title: str | None = None
@@ -120,7 +109,7 @@ class SchemeUpdateRequest(_CamelModel):
     sessions: list[SchemeSessionInput] | None = None
 
 
-class SchemeSessionRow(_CamelModel):
+class SchemeSessionRow(CamelModel):
     id: str
     scheme_id: str
     title: str
@@ -137,7 +126,7 @@ class SchemeSessionRow(_CamelModel):
     related_assessments: list[str] = Field(default_factory=list)
 
 
-class SchemeRow(_CamelModel):
+class SchemeRow(CamelModel):
     """``GET / / :schemeId``  + ``POST /`` / ``PATCH /:schemeId`` 响应."""
 
     id: str
@@ -170,7 +159,7 @@ class SchemeRow(_CamelModel):
 # ─── Instance — group_instances 实例化 ─────────────────────────────
 
 
-class InstanceCreateRequest(_CamelModel):
+class InstanceCreateRequest(CamelModel):
     """``POST /``. 镜像 instance.routes.ts:45-76."""
 
     title: str = Field(min_length=1)
@@ -190,7 +179,7 @@ class InstanceCreateRequest(_CamelModel):
     assessment_config: dict[str, Any] | None = None
 
 
-class InstanceUpdateRequest(_CamelModel):
+class InstanceUpdateRequest(CamelModel):
     """``PATCH /:instanceId``. 镜像 instance.routes.ts:78-102."""
 
     title: str | None = None
@@ -209,7 +198,7 @@ class InstanceUpdateRequest(_CamelModel):
     assessment_config: dict[str, Any] | None = None
 
 
-class InstanceRow(_CamelModel):
+class InstanceRow(CamelModel):
     """``GET /`` 列表项 / ``POST /`` / ``PATCH /:instanceId`` 响应."""
 
     id: str
@@ -234,12 +223,12 @@ class InstanceRow(_CamelModel):
     updated_at: datetime | None = None
 
 
-class InstanceUserSummary(_CamelModel):
+class InstanceUserSummary(CamelModel):
     name: str | None = None
     email: str | None = None
 
 
-class InstanceEnrollmentRow(_CamelModel):
+class InstanceEnrollmentRow(CamelModel):
     """instance detail 中的 enrollment 项 (含 user 摘要)."""
 
     id: str
@@ -262,7 +251,7 @@ class InstanceDetail(InstanceRow):
 # ─── Session — records + attendance ────────────────────────────────
 
 
-class SessionRecordCreateRequest(_CamelModel):
+class SessionRecordCreateRequest(CamelModel):
     """``POST /:instanceId/sessions`` ad-hoc 创建. 镜像 session.routes.ts:36-54."""
 
     title: str = Field(min_length=1)
@@ -270,7 +259,7 @@ class SessionRecordCreateRequest(_CamelModel):
     date: date_type | None = None
 
 
-class SessionRecordUpdateRequest(_CamelModel):
+class SessionRecordUpdateRequest(CamelModel):
     """``PATCH /:instanceId/sessions/:sessionId``. 镜像 session.routes.ts:57-71."""
 
     status: str | None = None
@@ -279,7 +268,7 @@ class SessionRecordUpdateRequest(_CamelModel):
     title: str | None = None
 
 
-class SessionRecordRow(_CamelModel):
+class SessionRecordRow(CamelModel):
     """``GET / / POST / PATCH`` 单条 record 响应."""
 
     id: str
@@ -301,13 +290,13 @@ class SessionRecordListItem(SessionRecordRow):
     total_attendance: int = 0
 
 
-class SessionAttendanceUserSummary(_CamelModel):
+class SessionAttendanceUserSummary(CamelModel):
     id: str | None = None
     name: str | None = None
     email: str | None = None
 
 
-class SessionAttendanceItem(_CamelModel):
+class SessionAttendanceItem(CamelModel):
     id: str
     session_record_id: str
     enrollment_id: str
@@ -323,7 +312,7 @@ class SessionRecordDetail(SessionRecordRow):
     attendance: list[SessionAttendanceItem] = Field(default_factory=list)
 
 
-class AttendanceInputItem(_CamelModel):
+class AttendanceInputItem(CamelModel):
     """``POST /:instanceId/sessions/:sessionId/attendance`` 子项."""
 
     enrollment_id: str
@@ -331,11 +320,11 @@ class AttendanceInputItem(_CamelModel):
     note: str | None = None
 
 
-class AttendanceBatchRequest(_CamelModel):
+class AttendanceBatchRequest(CamelModel):
     attendances: list[AttendanceInputItem]
 
 
-class AttendanceRow(_CamelModel):
+class AttendanceRow(CamelModel):
     id: str
     session_record_id: str
     enrollment_id: str
@@ -346,28 +335,28 @@ class AttendanceRow(_CamelModel):
 # ─── Enrollment — admin/portal ────────────────────────────────────
 
 
-class EnrollMemberInput(_CamelModel):
+class EnrollMemberInput(CamelModel):
     user_id: str | None = None
     name: str | None = None
     email: str | None = None
     phone: str | None = None
 
 
-class EnrollBatchRequest(_CamelModel):
+class EnrollBatchRequest(CamelModel):
     members: list[EnrollMemberInput]
 
 
-class EnrollBatchErrorEntry(_CamelModel):
+class EnrollBatchErrorEntry(CamelModel):
     index: int
     message: str
 
 
-class EnrollBatchResponse(_CamelModel):
+class EnrollBatchResponse(CamelModel):
     enrolled: int
     errors: list[EnrollBatchErrorEntry] = Field(default_factory=list)
 
 
-class EnrollSelfRequest(_CamelModel):
+class EnrollSelfRequest(CamelModel):
     """``POST /:instanceId/enroll``. 镜像 enrollment.routes.ts:65-82."""
 
     user_id: str | None = None
@@ -375,7 +364,7 @@ class EnrollSelfRequest(_CamelModel):
     screening_result_id: str | None = None
 
 
-class EnrollmentRow(_CamelModel):
+class EnrollmentRow(CamelModel):
     id: str
     instance_id: str
     user_id: str
@@ -386,7 +375,7 @@ class EnrollmentRow(_CamelModel):
     created_at: datetime | None = None
 
 
-class EnrollmentStatusUpdateRequest(_CamelModel):
+class EnrollmentStatusUpdateRequest(CamelModel):
     """``PATCH /enrollments/:enrollmentId``. 镜像 enrollment.routes.ts:85-101."""
 
     status: str = Field(min_length=1)
@@ -395,7 +384,7 @@ class EnrollmentStatusUpdateRequest(_CamelModel):
 # ─── Public Enroll — 公开 (无 auth) ───────────────────────────────
 
 
-class PublicSchemeInfo(_CamelModel):
+class PublicSchemeInfo(CamelModel):
     title: str
     description: str | None = None
     theory: str | None = None
@@ -409,7 +398,7 @@ class PublicSchemeInfo(_CamelModel):
     session_count: int = 0
 
 
-class PublicInstanceInfo(_CamelModel):
+class PublicInstanceInfo(CamelModel):
     """``GET /:instanceId`` (无 auth) 招募页用.
 
     注: 这个 schema 不强制由 router 用 — router 直接 dict 返回, 与 Node 端的 ``error: 'not_found'`` 错误信封一致.
@@ -430,7 +419,7 @@ class PublicInstanceInfo(_CamelModel):
     scheme: PublicSchemeInfo | None = None
 
 
-class PublicApplyRequest(_CamelModel):
+class PublicApplyRequest(CamelModel):
     """``POST /:instanceId/apply`` 公开申请."""
 
     name: str = Field(min_length=1)
@@ -438,7 +427,7 @@ class PublicApplyRequest(_CamelModel):
     phone: str | None = None
 
 
-class PublicCheckinRequest(_CamelModel):
+class PublicCheckinRequest(CamelModel):
     """``POST /:instanceId/checkin/:sessionId``."""
 
     enrollment_id: str = Field(min_length=1)

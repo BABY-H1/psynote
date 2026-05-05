@@ -49,8 +49,8 @@ from app.db.models.users import User
 from app.lib.errors import (
     ForbiddenError,
     NotFoundError,
-    ValidationError,
 )
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
 
@@ -58,13 +58,6 @@ router = APIRouter()
 
 
 # ─── 工具 ─────────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_admin_or_counselor(org: OrgContext | None) -> OrgContext:
@@ -111,10 +104,10 @@ async def list_feedback_forms(
 ) -> list[FeedbackFormOutput]:
     """``GET /{instance_id}/feedback-forms`` (镜像 service.ts:5-16)."""
     _reject_client(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     conditions = [CourseFeedbackForm.instance_id == instance_uuid]
     if chapter_id:
-        chapter_uuid = _parse_uuid(chapter_id, "chapterId")
+        chapter_uuid = parse_uuid_or_raise(chapter_id, field="chapterId")
         conditions.append(CourseFeedbackForm.chapter_id == chapter_uuid)
     q = (
         select(CourseFeedbackForm)
@@ -139,10 +132,10 @@ async def create_feedback_form(
 ) -> FeedbackFormOutput:
     """``POST /{instance_id}/feedback-forms`` (admin/counselor)."""
     _require_admin_or_counselor(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     chapter_uuid: uuid.UUID | None = None
     if body.chapter_id:
-        chapter_uuid = _parse_uuid(body.chapter_id, "chapterId")
+        chapter_uuid = parse_uuid_or_raise(body.chapter_id, field="chapterId")
 
     questions: list[Any] = list(body.questions) if body.questions else []
     form = CourseFeedbackForm(
@@ -174,7 +167,7 @@ async def update_feedback_form(
 ) -> FeedbackFormOutput:
     """``PATCH /{instance_id}/feedback-forms/{form_id}`` (admin/counselor)."""
     _require_admin_or_counselor(org)
-    form_uuid = _parse_uuid(form_id, "formId")
+    form_uuid = parse_uuid_or_raise(form_id, field="formId")
     q = select(CourseFeedbackForm).where(CourseFeedbackForm.id == form_uuid).limit(1)
     form = (await db.execute(q)).scalar_one_or_none()
     if form is None:
@@ -203,7 +196,7 @@ async def delete_feedback_form(
 ) -> Response:
     """``DELETE /{instance_id}/feedback-forms/{form_id}`` (admin/counselor)."""
     _require_admin_or_counselor(org)
-    form_uuid = _parse_uuid(form_id, "formId")
+    form_uuid = parse_uuid_or_raise(form_id, field="formId")
     q = select(CourseFeedbackForm).where(CourseFeedbackForm.id == form_uuid).limit(1)
     form = (await db.execute(q)).scalar_one_or_none()
     if form is None:
@@ -229,7 +222,7 @@ async def list_feedback_responses(
 ) -> list[FeedbackResponseOutput]:
     """``GET .../responses`` (admin/counselor). 镜像 service.ts:89-101."""
     _require_admin_or_counselor(org)
-    form_uuid = _parse_uuid(form_id, "formId")
+    form_uuid = parse_uuid_or_raise(form_id, field="formId")
     q = (
         select(CourseFeedbackResponse, User.name, User.email)
         .join(CourseEnrollment, CourseEnrollment.id == CourseFeedbackResponse.enrollment_id)
@@ -271,9 +264,9 @@ async def submit_feedback_response(
     必须有 enrollment 才能提交; upsert 形式 (已提交则更新).
     """
     _reject_client(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
-    form_uuid = _parse_uuid(form_id, "formId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
+    form_uuid = parse_uuid_or_raise(form_id, field="formId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     enroll_q = (
         select(CourseEnrollment)
@@ -350,7 +343,7 @@ async def feedback_stats(
 ) -> list[FeedbackStatsItem]:
     """``GET /{instance_id}/feedback-stats`` (admin/counselor). 镜像 service.ts:103-114."""
     _require_admin_or_counselor(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     q = (
         select(
             CourseFeedbackResponse.form_id,

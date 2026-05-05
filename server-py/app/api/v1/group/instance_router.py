@@ -47,7 +47,8 @@ from app.db.models.group_scheme_sessions import GroupSchemeSession
 from app.db.models.group_session_records import GroupSessionRecord
 from app.db.models.notifications import Notification
 from app.db.models.users import User
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import ForbiddenError, NotFoundError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -57,13 +58,6 @@ logger = logging.getLogger(__name__)
 
 
 # ─── Utility ─────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
@@ -126,7 +120,7 @@ async def list_instances(
     _reject_client(org)
     assert org is not None
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     conds: list[Any] = [GroupInstance.org_id == org_uuid]
     if instance_status:
         conds.append(GroupInstance.status == instance_status)
@@ -159,7 +153,7 @@ async def get_instance(
 ) -> InstanceDetail:
     """详情 + enrollments. 镜像 instance.service.ts:20-47."""
     _reject_client(org)
-    inst_uuid = _parse_uuid(instance_id, "instanceId")
+    inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     inst_q = select(GroupInstance).where(GroupInstance.id == inst_uuid).limit(1)
     inst = (await db.execute(inst_q)).scalar_one_or_none()
@@ -208,11 +202,13 @@ async def create_instance(
     Transactional: instance + (若 scheme_id) 自动派生 session records 一起 commit.
     """
     _require_org_admin(org, allow_roles=("counselor",))
-    org_uuid = _parse_uuid(org_id, "orgId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
-    leader_uuid = _parse_uuid(body.leader_id, "leaderId") if body.leader_id else user_uuid
-    scheme_uuid = _parse_uuid(body.scheme_id, "schemeId") if body.scheme_id else None
+    leader_uuid = (
+        parse_uuid_or_raise(body.leader_id, field="leaderId") if body.leader_id else user_uuid
+    )
+    scheme_uuid = parse_uuid_or_raise(body.scheme_id, field="schemeId") if body.scheme_id else None
 
     try:
         inst = GroupInstance(
@@ -295,8 +291,8 @@ async def update_instance(
     若状态切到 ended/archived: best-effort 派生 follow-up plans (按 assessment_config.followUp).
     """
     _require_org_admin(org, allow_roles=("counselor",))
-    org_uuid = _parse_uuid(org_id, "orgId")
-    inst_uuid = _parse_uuid(instance_id, "instanceId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     q = select(GroupInstance).where(GroupInstance.id == inst_uuid).limit(1)
     inst = (await db.execute(q)).scalar_one_or_none()
@@ -307,7 +303,7 @@ async def update_instance(
 
     # leader_id / scheme_id (本端不允许改 scheme_id; instance.service.ts 也不让) 处理 UUID 转换
     if "leader_id" in update_data and update_data["leader_id"] is not None:
-        update_data["leader_id"] = _parse_uuid(update_data["leader_id"], "leaderId")
+        update_data["leader_id"] = parse_uuid_or_raise(update_data["leader_id"], field="leaderId")
 
     for k, v in update_data.items():
         setattr(inst, k, v)
@@ -346,8 +342,8 @@ async def delete_instance(
 ) -> None:
     """删除 instance (org_admin only). 镜像 instance.service.ts:213-221."""
     _require_org_admin(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
-    inst_uuid = _parse_uuid(instance_id, "instanceId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     q = select(GroupInstance).where(GroupInstance.id == inst_uuid).limit(1)
     inst = (await db.execute(q)).scalar_one_or_none()
@@ -414,7 +410,9 @@ async def _create_follow_up_plans_for_instance(db: AsyncSession, instance: Group
                         care_episode_id=enr.care_episode_id,
                         counselor_id=counselor_id,
                         plan_type="group_followup",
-                        assessment_id=_parse_uuid(str(assessments_arr[0]), "assessmentId"),
+                        assessment_id=parse_uuid_or_raise(
+                            str(assessments_arr[0]), field="assessmentId"
+                        ),
                         frequency=f"once_after_{delay_days}d",
                         next_due=due,
                         notes=f"{instance.title} - {label or f'{delay_days}天随访'}",

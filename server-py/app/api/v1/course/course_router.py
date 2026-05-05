@@ -72,8 +72,8 @@ from app.lib.errors import (
     ConflictError,
     ForbiddenError,
     NotFoundError,
-    ValidationError,
 )
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -82,14 +82,6 @@ router = APIRouter()
 
 
 # ─── 工具 ─────────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    """str → UUID, 失败抛 ValidationError。"""
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_admin_or_counselor(org: OrgContext | None) -> OrgContext:
@@ -116,7 +108,7 @@ async def _assert_course_owned_by_org(db: AsyncSession, course_id: uuid.UUID, or
     与 Node ``server/src/middleware/library-ownership.ts`` 行为一致: org_id IS NULL
     (平台级) 也允许 (admin 能改平台课). 否则必须 org_id 匹配。
     """
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = select(Course.org_id).where(Course.id == course_id).limit(1)
     row = (await db.execute(q)).first()
     if row is None:
@@ -230,7 +222,7 @@ async def list_courses(
     跨机构平台级公开课程也包含在内 (Phase 1 知识库分发决策, Drizzle 已 port)。
     """
     _reject_client(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     q = (
         select(Course)
@@ -275,7 +267,7 @@ async def list_template_tags(
 ) -> list[TemplateTagOutput]:
     """``GET /template-tags`` 列表 (镜像 course.routes.ts:232-234)。"""
     _reject_client(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = (
         select(CourseTemplateTag)
         .where(CourseTemplateTag.org_id == org_uuid)
@@ -307,7 +299,7 @@ async def create_template_tag(
 ) -> TemplateTagOutput:
     """``POST /template-tags`` 创建标签 (admin/counselor only)。"""
     _require_admin_or_counselor(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     tag = CourseTemplateTag(
         org_id=org_uuid,
         name=body.name,
@@ -337,7 +329,7 @@ async def delete_template_tag(
 ) -> Response:
     """``DELETE /template-tags/{tag_id}`` (admin/counselor only)."""
     _require_admin_or_counselor(org)
-    tag_uuid = _parse_uuid(tag_id, "tagId")
+    tag_uuid = parse_uuid_or_raise(tag_id, field="tagId")
     q = select(CourseTemplateTag).where(CourseTemplateTag.id == tag_uuid).limit(1)
     tag = (await db.execute(q)).scalar_one_or_none()
     if tag is None:
@@ -364,7 +356,7 @@ async def update_progress(
     """
     # 此端点 path 不含 course_id, 但仍在 /api/orgs/{org_id}/courses 下, 需要走 rejectClient
     _reject_client(org)
-    enroll_uuid = _parse_uuid(enrollment_id, "enrollmentId")
+    enroll_uuid = parse_uuid_or_raise(enrollment_id, field="enrollmentId")
     q = select(CourseEnrollment).where(CourseEnrollment.id == enroll_uuid).limit(1)
     enrollment = (await db.execute(q)).scalar_one_or_none()
     if enrollment is None:
@@ -388,7 +380,7 @@ async def get_course(
 ) -> CourseDetail:
     """``GET /{course_id}`` 详情 (含 chapters, 镜像 service.ts:45-61)."""
     _reject_client(org)
-    course_uuid = _parse_uuid(course_id, "courseId")
+    course_uuid = parse_uuid_or_raise(course_id, field="courseId")
     cq = select(Course).where(Course.id == course_uuid).limit(1)
     course = (await db.execute(cq)).scalar_one_or_none()
     if course is None:
@@ -416,8 +408,8 @@ async def create_course(
     Transactional: course + chapters 一起 insert, 失败 rollback.
     """
     _require_admin_or_counselor(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     try:
         course = Course(
@@ -448,7 +440,9 @@ async def create_course(
             for idx, ch in enumerate(body.chapters):
                 related_uuid: uuid.UUID | None = None
                 if ch.related_assessment_id:
-                    related_uuid = _parse_uuid(ch.related_assessment_id, "relatedAssessmentId")
+                    related_uuid = parse_uuid_or_raise(
+                        ch.related_assessment_id, field="relatedAssessmentId"
+                    )
                 chapter = CourseChapter(
                     course_id=course.id,
                     title=ch.title,
@@ -493,7 +487,7 @@ async def update_course(
 ) -> CourseSummary:
     """``PATCH /{course_id}`` 部分更新 (admin/counselor only). 镜像 routes.ts:84-110."""
     _require_admin_or_counselor(org)
-    course_uuid = _parse_uuid(course_id, "courseId")
+    course_uuid = parse_uuid_or_raise(course_id, field="courseId")
     await _assert_course_owned_by_org(db, course_uuid, org_id)
 
     q = select(Course).where(Course.id == course_uuid).limit(1)
@@ -504,7 +498,7 @@ async def update_course(
     updates = body.model_dump(exclude_unset=True, by_alias=False)
     if "responsible_id" in updates:
         rid = updates.pop("responsible_id")
-        course.responsible_id = _parse_uuid(rid, "responsibleId") if rid else None
+        course.responsible_id = parse_uuid_or_raise(rid, field="responsibleId") if rid else None
     for field, value in updates.items():
         setattr(course, field, value)
     course.updated_at = datetime.now(UTC)
@@ -533,7 +527,7 @@ async def delete_course(
 ) -> Response:
     """``DELETE /{course_id}`` (admin/counselor only). 镜像 routes.ts:112-120."""
     _require_admin_or_counselor(org)
-    course_uuid = _parse_uuid(course_id, "courseId")
+    course_uuid = parse_uuid_or_raise(course_id, field="courseId")
     await _assert_course_owned_by_org(db, course_uuid, org_id)
     q = select(Course).where(Course.id == course_uuid).limit(1)
     course = (await db.execute(q)).scalar_one_or_none()
@@ -580,7 +574,7 @@ async def publish_course(
 ) -> CourseSummary:
     """``POST /{course_id}/publish`` (admin/counselor)."""
     _require_admin_or_counselor(org)
-    course_uuid = _parse_uuid(course_id, "courseId")
+    course_uuid = parse_uuid_or_raise(course_id, field="courseId")
     course = await _set_course_status(db, course_uuid, "published")
     await record_audit(
         db=db,
@@ -605,7 +599,7 @@ async def archive_course(
 ) -> CourseSummary:
     """``POST /{course_id}/archive`` (admin/counselor)."""
     _require_admin_or_counselor(org)
-    course_uuid = _parse_uuid(course_id, "courseId")
+    course_uuid = parse_uuid_or_raise(course_id, field="courseId")
     course = await _set_course_status(db, course_uuid, "archived")
     await record_audit(
         db=db,
@@ -642,9 +636,9 @@ async def clone_course(
       - chapters / lesson_blocks 全量复制 (拿到 ID 链接到新 chapter/course)
     """
     _require_admin_or_counselor(org)
-    course_uuid = _parse_uuid(course_id, "courseId")
-    org_uuid = _parse_uuid(org_id, "orgId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    course_uuid = parse_uuid_or_raise(course_id, field="courseId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     # 取源课程 + chapters
     sq = select(Course).where(Course.id == course_uuid).limit(1)
@@ -752,7 +746,7 @@ async def confirm_blueprint(
     删旧 chapters + 按 sessions 重建 + 设 status='content_authoring'. 单 transaction.
     """
     _require_admin_or_counselor(org)
-    course_uuid = _parse_uuid(course_id, "courseId")
+    course_uuid = parse_uuid_or_raise(course_id, field="courseId")
 
     try:
         await db.execute(delete(CourseChapter).where(CourseChapter.course_id == course_uuid))
@@ -799,7 +793,7 @@ async def list_lesson_blocks(
 ) -> list[LessonBlockOutput]:
     """``GET /{course_id}/chapters/{chapter_id}/blocks`` 列表."""
     _reject_client(org)
-    chapter_uuid = _parse_uuid(chapter_id, "chapterId")
+    chapter_uuid = parse_uuid_or_raise(chapter_id, field="chapterId")
     q = (
         select(CourseLessonBlock)
         .where(CourseLessonBlock.chapter_id == chapter_uuid)
@@ -826,7 +820,7 @@ async def upsert_lesson_blocks(
     简单 bulk upsert: 删全部 + 重建.
     """
     _require_admin_or_counselor(org)
-    chapter_uuid = _parse_uuid(chapter_id, "chapterId")
+    chapter_uuid = parse_uuid_or_raise(chapter_id, field="chapterId")
     try:
         await db.execute(
             delete(CourseLessonBlock).where(CourseLessonBlock.chapter_id == chapter_uuid)
@@ -865,7 +859,7 @@ async def update_lesson_block(
 ) -> LessonBlockOutput:
     """``PATCH /{course_id}/chapters/{chapter_id}/blocks/{block_id}`` 单 block 更新."""
     _require_admin_or_counselor(org)
-    block_uuid = _parse_uuid(block_id, "blockId")
+    block_uuid = parse_uuid_or_raise(block_id, field="blockId")
     q = select(CourseLessonBlock).where(CourseLessonBlock.id == block_uuid).limit(1)
     block = (await db.execute(q)).scalar_one_or_none()
     if block is None:
@@ -899,8 +893,8 @@ async def enroll_self(
     """``POST /{course_id}/enroll`` 自助报名 (镜像 routes.ts:191-203 + service.ts:183-235)."""
     if org is None:
         raise ForbiddenError("org_context_required")
-    course_uuid = _parse_uuid(course_id, "courseId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    course_uuid = parse_uuid_or_raise(course_id, field="courseId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     dup_q = (
         select(CourseEnrollment)
@@ -917,7 +911,7 @@ async def enroll_self(
 
     care_uuid: uuid.UUID | None = None
     if body.care_episode_id:
-        care_uuid = _parse_uuid(body.care_episode_id, "careEpisodeId")
+        care_uuid = parse_uuid_or_raise(body.care_episode_id, field="careEpisodeId")
     enrollment = CourseEnrollment(
         course_id=course_uuid,
         user_id=user_uuid,
@@ -956,9 +950,9 @@ async def assign_to_client(
 ) -> EnrollmentOutput:
     """``POST /{course_id}/assign`` counselor 指派课程给来访者 (镜像 routes.ts:205-221 + service.ts:397-433)."""
     _require_admin_or_counselor(org)
-    course_uuid = _parse_uuid(course_id, "courseId")
-    user_uuid = _parse_uuid(user.id, "userId")
-    client_uuid = _parse_uuid(body.client_user_id, "clientUserId")
+    course_uuid = parse_uuid_or_raise(course_id, field="courseId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
+    client_uuid = parse_uuid_or_raise(body.client_user_id, field="clientUserId")
 
     dup_q = (
         select(CourseEnrollment)
@@ -975,7 +969,7 @@ async def assign_to_client(
 
     care_uuid: uuid.UUID | None = None
     if body.care_episode_id:
-        care_uuid = _parse_uuid(body.care_episode_id, "careEpisodeId")
+        care_uuid = parse_uuid_or_raise(body.care_episode_id, field="careEpisodeId")
     enrollment = CourseEnrollment(
         course_id=course_uuid,
         user_id=client_uuid,

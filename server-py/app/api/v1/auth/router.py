@@ -20,13 +20,12 @@ Auth API router — 镜像 server/src/modules/auth/{auth,password-reset}.routes.
 from __future__ import annotations
 
 import hashlib
-import logging
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,8 +54,6 @@ from app.db.models.users import User
 from app.lib.errors import ValidationError
 from app.lib.mailer import send_password_reset_email
 from app.middleware.auth import AuthUser, get_current_user
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -234,9 +231,14 @@ async def change_password(
 @router.post("/forgot-password", response_model=OkResponse)
 async def forgot_password(
     body: ForgotPasswordRequest,
+    background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> OkResponse:
-    """对未知邮箱也返回 200 (防枚举)。已知邮箱: 生成 token + 存 sha256(token) + 发邮件。"""
+    """对未知邮箱也返回 200 (防枚举)。已知邮箱: 生成 token + 存 sha256(token) + 发邮件。
+
+    SMTP 用 ``BackgroundTasks`` 异步发 — 慢 / 超时的邮件不阻塞 HTTP response (用户立即拿到 200,
+    防枚举 invariant 保留: 任何邮箱响应时间一致)。BackgroundTasks 异常不影响 response, FastAPI 自己 log。
+    """
     user_q = select(User).where(User.email == body.email).limit(1)
     user = (await db.execute(user_q)).scalar_one_or_none()
 
@@ -253,11 +255,8 @@ async def forgot_password(
     db.add(new_token)
     await db.commit()
 
-    # 邮件失败不暴露给调用方 (防枚举 + 避免抖动影响 UX), 仅 logger
-    try:
-        await send_password_reset_email(body.email, _build_reset_link(plain_token))
-    except Exception:
-        logger.exception("Failed to send password reset email")
+    # SMTP 走 background task — 不阻塞 HTTP, 不影响防枚举 timing 一致性
+    background_tasks.add_task(send_password_reset_email, body.email, _build_reset_link(plain_token))
 
     return OkResponse()
 

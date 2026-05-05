@@ -13,8 +13,9 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
+
+from app.api.v1._schema_base import CamelModel
 
 # 与 service.ts:22 一致 — polymorphic enrollment_id 的判别值
 EnrollmentType = Literal["course", "group"]
@@ -22,21 +23,10 @@ EnrollmentType = Literal["course", "group"]
 SafetySeverity = Literal["critical", "warning", "info"]
 
 
-class _CamelModel(BaseModel):
-    """所有 enrollment-response schema 的基类 — wire camelCase, Python snake_case。"""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        # 防 dump 时多写 alias key (e.g. 既 enrollment_id 又 enrollmentId)
-        serialize_by_alias=True,
-    )
-
-
 # ─── POST /client/enrollment-responses 请求 (镜像 routes.ts:95-117) ──
 
 
-class SubmitResponseRequest(_CamelModel):
+class SubmitResponseRequest(CamelModel):
     """
     学员提交单个 block 响应。
 
@@ -58,7 +48,7 @@ class SubmitResponseRequest(_CamelModel):
 # ─── 单条 enrollment_block_responses 行响应 (与 Node service.ts:96-108 一致) ─
 
 
-class EnrollmentResponseRow(_CamelModel):
+class EnrollmentResponseRow(CamelModel):
     """
     单条 ``enrollment_block_responses`` 行。
 
@@ -81,7 +71,7 @@ class EnrollmentResponseRow(_CamelModel):
 # ─── safety scan crisis 资源 (镜像 keyword-scanner.ts:123-141) ───────
 
 
-class CrisisResourceItem(_CamelModel):
+class CrisisResourceItem(CamelModel):
     """单条危机干预资源 (镜像 ``packages/shared/src/types/content-block.ts:194``)。"""
 
     name: str
@@ -90,7 +80,7 @@ class CrisisResourceItem(_CamelModel):
     description: str | None = None
 
 
-class CrisisInfo(_CamelModel):
+class CrisisInfo(CamelModel):
     """``submitResponse`` 触发 critical/warning 时返的 crisis payload。"""
 
     severity: SafetySeverity
@@ -100,7 +90,7 @@ class CrisisInfo(_CamelModel):
 # ─── POST /client/enrollment-responses 响应 (与 service.ts:96-110 一致) ─
 
 
-class SubmitResponseResult(_CamelModel):
+class SubmitResponseResult(CamelModel):
     """
     ``submitResponse`` 返回 — 包外层 ``response`` + 可选 ``crisis``。
 
@@ -115,7 +105,7 @@ class SubmitResponseResult(_CamelModel):
 # ─── pending-safety 的 raw SQL 行 (服务端 join 出 user_id, 与 Node 一致) ──
 
 
-class PendingSafetyRow(_CamelModel):
+class PendingSafetyRow(CamelModel):
     """
     ``GET /pending-safety`` 元素 — 比 ``EnrollmentResponseRow`` 多 user_id (从
     course_enrollments / group_enrollments JOIN 出)。

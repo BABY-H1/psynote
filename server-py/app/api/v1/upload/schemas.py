@@ -9,21 +9,10 @@ Upload API 响应 schema (Pydantic v2)。
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
-from pydantic.alias_generators import to_camel
+from app.api.v1._schema_base import CamelModel
 
 
-class _CamelModel(BaseModel):
-    """所有 upload schema 的基类 — wire camelCase, Python snake_case。"""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        serialize_by_alias=True,
-    )
-
-
-class UploadResponse(_CamelModel):
+class UploadResponse(CamelModel):
     """
     POST 上传成功响应 (镜像 upload.routes.ts:23-28)。
 

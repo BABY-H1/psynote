@@ -58,6 +58,7 @@ from app.lib.errors import (
     NotFoundError,
     ValidationError,
 )
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -68,13 +69,6 @@ router = APIRouter()
 
 
 # ─── 工具 ─────────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_admin_or_counselor(org: OrgContext | None) -> OrgContext:
@@ -169,13 +163,13 @@ async def list_instances(
     enrollment_count (聚合).
     """
     _require_org_context(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     conditions = [CourseInstance.org_id == org_uuid]
     if status_filter:
         conditions.append(CourseInstance.status == status_filter)
     if course_id:
-        course_uuid = _parse_uuid(course_id, "courseId")
+        course_uuid = parse_uuid_or_raise(course_id, field="courseId")
         conditions.append(CourseInstance.course_id == course_uuid)
 
     # enrollment count 子查询
@@ -231,7 +225,7 @@ async def get_instance(
 ) -> InstanceDetail:
     """``GET /{instance_id}`` 详情 (镜像 instance.routes.ts:32-35 + service.ts:58-91)."""
     _require_org_context(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     q = (
         select(CourseInstance, Course.title, Course.category)
@@ -299,9 +293,9 @@ async def create_instance(
       3. 创建 instance + 通知本机构所有 admin (同 transaction commit)
     """
     _require_admin_or_counselor(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
-    user_uuid = _parse_uuid(user.id, "userId")
-    course_uuid = _parse_uuid(body.course_id, "courseId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
+    course_uuid = parse_uuid_or_raise(body.course_id, field="courseId")
 
     # 校验源 course 可用 + 已 published
     sq = (
@@ -324,7 +318,9 @@ async def create_instance(
         raise ConflictError("Only published courses can be used to create instances")
 
     responsible_uuid: uuid.UUID | None = (
-        _parse_uuid(body.responsible_id, "responsibleId") if body.responsible_id else user_uuid
+        parse_uuid_or_raise(body.responsible_id, field="responsibleId")
+        if body.responsible_id
+        else user_uuid
     )
 
     try:
@@ -385,7 +381,7 @@ async def update_instance(
 ) -> InstanceOutput:
     """``PATCH /{instance_id}`` 部分更新 (admin/counselor). 镜像 routes.ts:85-106 + service.ts:163-187."""
     _require_admin_or_counselor(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     q = select(CourseInstance).where(CourseInstance.id == instance_uuid).limit(1)
     instance = (await db.execute(q)).scalar_one_or_none()
@@ -395,7 +391,7 @@ async def update_instance(
     updates = body.model_dump(exclude_unset=True, by_alias=False)
     if "responsible_id" in updates:
         rid = updates.pop("responsible_id")
-        instance.responsible_id = _parse_uuid(rid, "responsibleId") if rid else None
+        instance.responsible_id = parse_uuid_or_raise(rid, field="responsibleId") if rid else None
     for field, value in updates.items():
         setattr(instance, field, value)
     instance.updated_at = datetime.now(UTC)
@@ -427,7 +423,7 @@ async def delete_instance(
     仅 draft 状态可删 — 否则 400 (与 Node 一致, Node 抛 generic Error → 500, 我们改 400 更准确).
     """
     _require_admin_or_counselor(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     q = select(CourseInstance).where(CourseInstance.id == instance_uuid).limit(1)
     instance = (await db.execute(q)).scalar_one_or_none()
     if instance is None:
@@ -477,7 +473,7 @@ async def activate_instance(
 ) -> InstanceOutput:
     """``POST /{instance_id}/activate`` 进入 active (admin/counselor)."""
     _require_admin_or_counselor(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     instance = await _set_instance_status(db, instance_uuid, "active")
     await record_audit(
         db=db,
@@ -502,7 +498,7 @@ async def close_instance(
 ) -> InstanceOutput:
     """``POST /{instance_id}/close`` 进入 closed (admin/counselor)."""
     _require_admin_or_counselor(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     instance = await _set_instance_status(db, instance_uuid, "closed")
     await record_audit(
         db=db,
@@ -527,7 +523,7 @@ async def archive_instance(
 ) -> InstanceOutput:
     """``POST /{instance_id}/archive`` 进入 archived (admin/counselor)."""
     _require_admin_or_counselor(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     instance = await _set_instance_status(db, instance_uuid, "archived")
     await record_audit(
         db=db,

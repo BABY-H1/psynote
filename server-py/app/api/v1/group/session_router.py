@@ -48,6 +48,7 @@ from app.db.models.group_session_attendance import GroupSessionAttendance
 from app.db.models.group_session_records import GroupSessionRecord
 from app.db.models.users import User
 from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -56,13 +57,6 @@ router = APIRouter()
 
 
 # ─── Utility ─────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
@@ -109,7 +103,7 @@ async def list_session_records(
 ) -> list[SessionRecordListItem]:
     """列表 records + 出勤计数. 镜像 session.service.ts:10-40."""
     _reject_client(org)
-    inst_uuid = _parse_uuid(instance_id, "instanceId")
+    inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     rec_q = (
         select(GroupSessionRecord)
@@ -156,7 +150,7 @@ async def get_session_record(
 ) -> SessionRecordDetail:
     """单条 record + 出勤名单. 镜像 session.service.ts:42-72."""
     _reject_client(org)
-    sess_uuid = _parse_uuid(session_id, "sessionId")
+    sess_uuid = parse_uuid_or_raise(session_id, field="sessionId")
 
     rec_q = select(GroupSessionRecord).where(GroupSessionRecord.id == sess_uuid).limit(1)
     rec = (await db.execute(rec_q)).scalar_one_or_none()
@@ -214,8 +208,8 @@ async def init_session_records(
       - records 必须为空 (重复 init 抛 ValidationError)
     """
     _require_org_admin(org, allow_roles=("counselor",))
-    org_uuid = _parse_uuid(org_id, "orgId")
-    inst_uuid = _parse_uuid(instance_id, "instanceId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     inst_q = select(GroupInstance).where(GroupInstance.id == inst_uuid).limit(1)
     inst = (await db.execute(inst_q)).scalar_one_or_none()
@@ -283,8 +277,8 @@ async def create_session_record(
 ) -> SessionRecordRow:
     """ad-hoc 单条 record (org_admin / counselor). 镜像 session.service.ts:121-136."""
     _require_org_admin(org, allow_roles=("counselor",))
-    org_uuid = _parse_uuid(org_id, "orgId")
-    inst_uuid = _parse_uuid(instance_id, "instanceId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     rec = GroupSessionRecord(
         instance_id=inst_uuid,
@@ -321,8 +315,8 @@ async def update_session_record(
 ) -> SessionRecordRow:
     """更新 session record. 镜像 session.service.ts:138-155."""
     _require_org_admin(org, allow_roles=("counselor",))
-    org_uuid = _parse_uuid(org_id, "orgId")
-    sess_uuid = _parse_uuid(session_id, "sessionId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    sess_uuid = parse_uuid_or_raise(session_id, field="sessionId")
 
     q = select(GroupSessionRecord).where(GroupSessionRecord.id == sess_uuid).limit(1)
     rec = (await db.execute(q)).scalar_one_or_none()
@@ -366,15 +360,15 @@ async def record_attendance(
     每条 (session_record, enrollment) 唯一: 已存在则 update status / note, 否则 insert.
     """
     _require_org_admin(org, allow_roles=("counselor",))
-    org_uuid = _parse_uuid(org_id, "orgId")
-    sess_uuid = _parse_uuid(session_id, "sessionId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    sess_uuid = parse_uuid_or_raise(session_id, field="sessionId")
 
     if not body.attendances:
         raise ValidationError("attendances array is required")
 
     out: list[AttendanceRow] = []
     for att in body.attendances:
-        enr_uuid = _parse_uuid(att.enrollment_id, "enrollmentId")
+        enr_uuid = parse_uuid_or_raise(att.enrollment_id, field="enrollmentId")
 
         existing_q = (
             select(GroupSessionAttendance)
@@ -453,7 +447,7 @@ async def attendance_summary(
     镜像 session.service.ts:199-240. 仅 status='completed' 的 records 计入.
     """
     _reject_client(org)
-    inst_uuid = _parse_uuid(instance_id, "instanceId")
+    inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     rec_q = select(GroupSessionRecord.id).where(
         and_(

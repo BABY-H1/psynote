@@ -52,6 +52,7 @@ from app.db.models.group_instances import GroupInstance
 from app.db.models.scale_dimensions import ScaleDimension
 from app.db.models.users import User
 from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -63,13 +64,6 @@ _UUID_REGEX_LEN = 36  # 8-4-4-4-12 hex
 
 
 # ─── 工具 ────────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _reject_client(org: OrgContext | None) -> None:
@@ -119,7 +113,7 @@ async def list_reports(
 ) -> list[ReportRow]:
     """列表 (按 org). 镜像 service:10-16."""
     _reject_client(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     q = (
         select(AssessmentReport)
@@ -139,7 +133,7 @@ async def get_report(
 ) -> ReportRow:
     """单个详情. 镜像 service:18-27."""
     _reject_client(org)
-    rid = _parse_uuid(report_id, "reportId")
+    rid = parse_uuid_or_raise(report_id, field="reportId")
     q = select(AssessmentReport).where(AssessmentReport.id == rid).limit(1)
     r = (await db.execute(q)).scalar_one_or_none()
     if r is None:
@@ -161,8 +155,8 @@ async def create_report(
 ) -> ReportRow:
     """生成报告. 镜像 routes.ts:25-98 (4 种 reportType 分发)."""
     _require_admin_or_counselor(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     if body.report_type == "individual_single":
         if not body.result_id:
@@ -231,7 +225,7 @@ async def update_report_narrative(
     """更新 narrative (admin/counselor). 镜像 service:29-38."""
     _require_admin_or_counselor(org)
 
-    rid = _parse_uuid(report_id, "reportId")
+    rid = parse_uuid_or_raise(report_id, field="reportId")
     q = select(AssessmentReport).where(AssessmentReport.id == rid).limit(1)
     r = (await db.execute(q)).scalar_one_or_none()
     if r is None:
@@ -297,7 +291,7 @@ async def _generate_individual_single_report(
     generated_by: uuid.UUID,
 ) -> AssessmentReport:
     """``individual_single`` — 单人单次报告. 镜像 service:41-105."""
-    rid = _parse_uuid(result_id, "resultId")
+    rid = parse_uuid_or_raise(result_id, field="resultId")
     r_q = select(AssessmentResult).where(AssessmentResult.id == rid).limit(1)
     result = (await db.execute(r_q)).scalar_one_or_none()
     if result is None:
@@ -369,7 +363,7 @@ async def _generate_group_single_report(
     generated_by: uuid.UUID,
 ) -> AssessmentReport:
     """``group_single`` — 团体单次报告 (多 results 聚合). 镜像 service:107-189."""
-    rid_uuids = [_parse_uuid(r, "resultId") for r in result_ids]
+    rid_uuids = [parse_uuid_or_raise(r, field="resultId") for r in result_ids]
     r_q = select(AssessmentResult).where(or_(*[AssessmentResult.id == r for r in rid_uuids]))
     results = list((await db.execute(r_q)).scalars().all())
     if not results:
@@ -446,8 +440,8 @@ async def _generate_trend_report(
     generated_by: uuid.UUID,
 ) -> AssessmentReport:
     """``individual_trend`` — 单人纵向 (>=2 次). 镜像 service:191-271."""
-    aid = _parse_uuid(assessment_id, "assessmentId")
-    uid = _parse_uuid(user_id, "userId")
+    aid = parse_uuid_or_raise(assessment_id, field="assessmentId")
+    uid = parse_uuid_or_raise(user_id, field="userId")
 
     q = (
         select(AssessmentResult)
@@ -539,7 +533,7 @@ async def _generate_group_longitudinal_report(
     generated_by: uuid.UUID,
 ) -> AssessmentReport:
     """``group_longitudinal`` — group/course PRE/POST 对比 + Cohen's d. 镜像 service:278-422."""
-    iid = _parse_uuid(instance_id, "instanceId")
+    iid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     member_user_ids: list[uuid.UUID] = []
     instance_title: str = ""

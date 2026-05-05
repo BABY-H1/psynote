@@ -14,7 +14,6 @@ Batch router — 镜像 ``server/src/modules/assessment/batch.routes.ts`` (67 �
 
 from __future__ import annotations
 
-import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, status
@@ -29,19 +28,13 @@ from app.api.v1.assessment.schemas import (
 from app.core.database import get_db
 from app.db.models.assessment_batches import AssessmentBatch
 from app.db.models.assessment_results import AssessmentResult
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import ForbiddenError, NotFoundError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
 
 router = APIRouter()
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _reject_client(org: OrgContext | None) -> None:
@@ -82,7 +75,7 @@ async def list_batches(
 ) -> list[BatchRow]:
     """列表 (本 org). 镜像 batch.service.ts:7-13."""
     _reject_client(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     q = (
         select(AssessmentBatch)
@@ -103,7 +96,7 @@ async def get_batch(
     """详情 + 实时 stats. 镜像 batch.service.ts:15-44."""
     _reject_client(org)
 
-    bid = _parse_uuid(batch_id, "batchId")
+    bid = parse_uuid_or_raise(batch_id, field="batchId")
     q = select(AssessmentBatch).where(AssessmentBatch.id == bid).limit(1)
     b = (await db.execute(q)).scalar_one_or_none()
     if b is None:
@@ -145,9 +138,9 @@ async def create_batch(
     """
     _require_org_admin(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
-    user_uuid = _parse_uuid(user.id, "userId")
-    aid = _parse_uuid(body.assessment_id, "assessmentId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
+    aid = parse_uuid_or_raise(body.assessment_id, field="assessmentId")
 
     try:
         b = AssessmentBatch(
@@ -191,7 +184,7 @@ async def close_batch(
     """关闭 batch (org_admin only). 镜像 batch.routes.ts:59-65 + service:79-87."""
     _require_org_admin(org)
 
-    bid = _parse_uuid(batch_id, "batchId")
+    bid = parse_uuid_or_raise(batch_id, field="batchId")
     q = select(AssessmentBatch).where(AssessmentBatch.id == bid).limit(1)
     b = (await db.execute(q)).scalar_one_or_none()
     if b is None:

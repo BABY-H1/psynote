@@ -21,35 +21,25 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
-
-class _CamelModel(BaseModel):
-    """所有 assessment schema 的基类 — wire camelCase, Python snake_case."""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        serialize_by_alias=True,
-    )
-
+from app.api.v1._schema_base import CamelModel
 
 # ─── 通用 ─────────────────────────────────────────────────────────
 
 
-class OkResponse(_CamelModel):
+class OkResponse(CamelModel):
     ok: bool = True
 
 
-class SuccessResponse(_CamelModel):
+class SuccessResponse(CamelModel):
     success: bool = True
 
 
 # ─── assessment core ──────────────────────────────────────────────
 
 
-class AssessmentCreateRequest(_CamelModel):
+class AssessmentCreateRequest(CamelModel):
     """``POST /api/orgs/{org_id}/assessments`` body. 镜像 assessment.routes.ts:30-41."""
 
     title: str = Field(min_length=1)
@@ -64,7 +54,7 @@ class AssessmentCreateRequest(_CamelModel):
     scale_ids: list[str] | None = None
 
 
-class AssessmentUpdateRequest(_CamelModel):
+class AssessmentUpdateRequest(CamelModel):
     """``PATCH /api/orgs/{org_id}/assessments/{assessment_id}`` body."""
 
     title: str | None = None
@@ -80,7 +70,7 @@ class AssessmentUpdateRequest(_CamelModel):
     scale_ids: list[str] | None = None
 
 
-class AssessmentRow(_CamelModel):
+class AssessmentRow(CamelModel):
     """``GET /api/orgs/{org_id}/assessments/`` 列表项 / 创建/更新返回。"""
 
     id: str
@@ -103,7 +93,7 @@ class AssessmentRow(_CamelModel):
     updated_at: datetime | None = None
 
 
-class AssessmentScaleRef(_CamelModel):
+class AssessmentScaleRef(CamelModel):
     """``GET /api/orgs/{org_id}/assessments/{assessment_id}`` 嵌套 scale 简表."""
 
     id: str
@@ -122,7 +112,7 @@ class AssessmentDetail(AssessmentRow):
 # ─── scale + dimensions + items + rules ──────────────────────────
 
 
-class DimensionRuleInput(_CamelModel):
+class DimensionRuleInput(CamelModel):
     """``dimensions[].rules[]`` create/update body 子对象。"""
 
     min_score: float
@@ -133,7 +123,7 @@ class DimensionRuleInput(_CamelModel):
     risk_level: str | None = None  # level_1 / level_2 / level_3 / level_4
 
 
-class DimensionInput(_CamelModel):
+class DimensionInput(CamelModel):
     """``POST /api/orgs/{org_id}/scales`` ``dimensions[]`` 子对象。"""
 
     name: str = Field(min_length=1)
@@ -143,14 +133,14 @@ class DimensionInput(_CamelModel):
     rules: list[DimensionRuleInput] | None = None
 
 
-class ItemOptionInput(_CamelModel):
+class ItemOptionInput(CamelModel):
     """``items[].options[]`` Likert 选项。"""
 
     label: str
     value: float
 
 
-class ItemInput(_CamelModel):
+class ItemInput(CamelModel):
     """``POST /api/orgs/{org_id}/scales`` ``items[]`` 子对象。"""
 
     text: str = Field(min_length=1)
@@ -160,7 +150,7 @@ class ItemInput(_CamelModel):
     sort_order: int | None = None
 
 
-class ScaleCreateRequest(_CamelModel):
+class ScaleCreateRequest(CamelModel):
     """``POST /api/orgs/{org_id}/scales`` body。"""
 
     title: str = Field(min_length=1)
@@ -172,7 +162,7 @@ class ScaleCreateRequest(_CamelModel):
     items: list[ItemInput] = Field(min_length=1)
 
 
-class ScaleUpdateRequest(_CamelModel):
+class ScaleUpdateRequest(CamelModel):
     """``PATCH /api/orgs/{org_id}/scales/{scale_id}`` body. 任一字段可省。"""
 
     title: str | None = None
@@ -185,7 +175,7 @@ class ScaleUpdateRequest(_CamelModel):
     items: list[ItemInput] | None = None
 
 
-class ScaleListRow(_CamelModel):
+class ScaleListRow(CamelModel):
     """``GET /api/orgs/{org_id}/scales/`` 列表项 (含 dimensionCount/itemCount)。"""
 
     id: str
@@ -202,7 +192,7 @@ class ScaleListRow(_CamelModel):
     item_count: int = 0
 
 
-class DimensionRuleOut(_CamelModel):
+class DimensionRuleOut(CamelModel):
     id: str
     min_score: str
     max_score: str
@@ -212,7 +202,7 @@ class DimensionRuleOut(_CamelModel):
     risk_level: str | None = None
 
 
-class DimensionOut(_CamelModel):
+class DimensionOut(CamelModel):
     id: str
     name: str
     description: str | None = None
@@ -221,7 +211,7 @@ class DimensionOut(_CamelModel):
     rules: list[DimensionRuleOut] = Field(default_factory=list)
 
 
-class ScaleItemOut(_CamelModel):
+class ScaleItemOut(CamelModel):
     id: str
     dimension_id: str | None = None
     text: str
@@ -230,7 +220,7 @@ class ScaleItemOut(_CamelModel):
     sort_order: int = 0
 
 
-class ScaleDetail(_CamelModel):
+class ScaleDetail(CamelModel):
     """``GET /api/orgs/{org_id}/scales/{scale_id}`` 嵌套全结构。"""
 
     id: str
@@ -250,7 +240,7 @@ class ScaleDetail(_CamelModel):
 # ─── batch ─────────────────────────────────────────────────────────
 
 
-class BatchCreateRequest(_CamelModel):
+class BatchCreateRequest(CamelModel):
     """``POST /api/orgs/{org_id}/assessment-batches`` body. 镜像 batch.routes.ts:28-35."""
 
     assessment_id: str = Field(min_length=1)
@@ -261,7 +251,7 @@ class BatchCreateRequest(_CamelModel):
     total_targets: int = Field(ge=1)
 
 
-class BatchRow(_CamelModel):
+class BatchRow(CamelModel):
     """``GET .../assessment-batches/`` 列表项 / 创建返回。"""
 
     id: str
@@ -277,7 +267,7 @@ class BatchRow(_CamelModel):
     created_at: datetime | None = None
 
 
-class BatchStats(_CamelModel):
+class BatchStats(CamelModel):
     """getBatchById 实时统计的 stats sub-object (覆盖 batch.stats)。"""
 
     total: int = 0
@@ -294,7 +284,7 @@ class BatchDetail(BatchRow):
 # ─── distribution ──────────────────────────────────────────────────
 
 
-class DistributionCreateRequest(_CamelModel):
+class DistributionCreateRequest(CamelModel):
     """``POST .../assessments/{assessment_id}/distributions`` body."""
 
     mode: str | None = None  # public / invite / embed
@@ -303,13 +293,13 @@ class DistributionCreateRequest(_CamelModel):
     schedule: dict[str, Any] | None = None
 
 
-class DistributionStatusUpdateRequest(_CamelModel):
+class DistributionStatusUpdateRequest(CamelModel):
     """``PATCH .../distributions/{distribution_id}/status`` body."""
 
     status: str = Field(min_length=1)
 
 
-class DistributionRow(_CamelModel):
+class DistributionRow(CamelModel):
     """``GET .../distributions/`` 列表项 / 创建返回。"""
 
     id: str
@@ -331,7 +321,7 @@ class DistributionRow(_CamelModel):
 ReportType = Literal["individual_single", "group_single", "group_longitudinal", "individual_trend"]
 
 
-class ReportCreateRequest(_CamelModel):
+class ReportCreateRequest(CamelModel):
     """``POST /api/orgs/{org_id}/assessment-reports`` body. 镜像 report.routes.ts:29-40."""
 
     report_type: ReportType
@@ -344,7 +334,7 @@ class ReportCreateRequest(_CamelModel):
     instance_type: Literal["group", "course"] | None = None
 
 
-class ReportRow(_CamelModel):
+class ReportRow(CamelModel):
     """``GET /api/orgs/{org_id}/assessment-reports/`` 列表项 / 创建返回。"""
 
     id: str
@@ -361,13 +351,13 @@ class ReportRow(_CamelModel):
     created_at: datetime | None = None
 
 
-class ReportNarrativeUpdateRequest(_CamelModel):
+class ReportNarrativeUpdateRequest(CamelModel):
     """``PATCH .../assessment-reports/{report_id}/narrative`` body."""
 
     narrative: str
 
 
-class BatchPDFRequest(_CamelModel):
+class BatchPDFRequest(CamelModel):
     """``POST .../assessment-reports/batch-pdf`` body."""
 
     report_ids: list[str] = Field(min_length=1)
@@ -376,7 +366,7 @@ class BatchPDFRequest(_CamelModel):
 # ─── result (PHI) ─────────────────────────────────────────────────
 
 
-class ResultSubmitRequest(_CamelModel):
+class ResultSubmitRequest(CamelModel):
     """``POST /api/orgs/{org_id}/assessment-results`` body. 镜像 result.routes.ts:51-59."""
 
     assessment_id: str = Field(min_length=1)
@@ -387,14 +377,14 @@ class ResultSubmitRequest(_CamelModel):
     answers: dict[str, float] = Field(min_length=1)
 
 
-class PublicResultSubmitRequest(_CamelModel):
+class PublicResultSubmitRequest(CamelModel):
     """``POST /api/public/assessments/{assessment_id}/submit`` (no auth)."""
 
     demographic_data: dict[str, Any] | None = None
     answers: dict[str, float] = Field(min_length=1)
 
 
-class ResultRow(_CamelModel):
+class ResultRow(CamelModel):
     """``GET .../assessment-results/`` 列表项 / 单条详情。
 
     PHI level: phi_full (含 answers / demographic_data / dimensionScores / aiInterpretation).
@@ -421,7 +411,7 @@ class ResultRow(_CamelModel):
     created_at: datetime | None = None
 
 
-class ResultInterpretation(_CamelModel):
+class ResultInterpretation(CamelModel):
     """list 端点 enrich 用的维度解读。"""
 
     dimension: str
@@ -438,19 +428,19 @@ class ResultListItem(ResultRow):
     interpretations: list[ResultInterpretation] = Field(default_factory=list)
 
 
-class ResultClientVisibleRequest(_CamelModel):
+class ResultClientVisibleRequest(CamelModel):
     """``PATCH .../assessment-results/{result_id}/client-visible`` body. Phase 9β."""
 
     visible: bool
 
 
-class ResultRecommendationsRequest(_CamelModel):
+class ResultRecommendationsRequest(CamelModel):
     """``PATCH .../assessment-results/{result_id}/recommendations`` body. Phase 9β."""
 
     recommendations: list[dict[str, Any]]
 
 
-class TrajectoryPoint(_CamelModel):
+class TrajectoryPoint(CamelModel):
     """``GET .../assessment-results/trajectory`` 单点。Phase 9β."""
 
     id: str

@@ -48,6 +48,7 @@ from app.db.models.scale_dimensions import ScaleDimension
 from app.db.models.scale_items import ScaleItem
 from app.db.models.scales import Scale
 from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -56,13 +57,6 @@ router = APIRouter()
 
 
 # ─── 工具 ────────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _reject_client(org: OrgContext | None) -> None:
@@ -104,7 +98,7 @@ async def list_scales(
     """列表: 自机构 + 平台公开 (org_id IS NULL AND is_public=true). 镜像 service:51-83."""
     _reject_client(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = (
         select(Scale)
         .where(
@@ -156,7 +150,7 @@ async def get_scale(
     """单个 scale + 嵌套 dimensions/rules/items. 镜像 service:86-150."""
     _reject_client(org)
 
-    sid = _parse_uuid(scale_id, "scaleId")
+    sid = parse_uuid_or_raise(scale_id, field="scaleId")
     s_q = select(Scale).where(Scale.id == sid).limit(1)
     s = (await db.execute(s_q)).scalar_one_or_none()
     if s is None:
@@ -300,8 +294,8 @@ async def create_scale(
 ) -> ScaleDetail:
     """创建 scale + dimensions + rules + items (单 transaction). 镜像 service:153-241."""
     _require_admin_or_counselor(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     try:
         s = Scale(
@@ -351,8 +345,8 @@ async def update_scale(
     dimensions/items 一起送或都不送 — item.dimensionIndex 需要稳定 dimension 顺序.
     """
     _require_admin_or_counselor(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
-    sid = _parse_uuid(scale_id, "scaleId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    sid = parse_uuid_or_raise(scale_id, field="scaleId")
 
     # 仅自机构 scale 可改
     s = await _assert_scale_owned_by_org(db, sid, org_uuid)
@@ -420,8 +414,8 @@ async def delete_scale(
 ) -> Response:
     """硬删 (cascade dim/items/rules). 镜像 service:387-395."""
     _require_admin_or_counselor(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
-    sid = _parse_uuid(scale_id, "scaleId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    sid = parse_uuid_or_raise(scale_id, field="scaleId")
 
     await _assert_scale_owned_by_org(db, sid, org_uuid)
 

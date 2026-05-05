@@ -64,6 +64,7 @@ from app.db.models.org_members import OrgMember
 from app.db.models.organizations import Organization
 from app.db.models.users import User
 from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -160,14 +161,6 @@ def _check_seat_limit(org: OrgContext, current_active_count: int) -> None:
         )
 
 
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    """str → UUID, 失败抛 ValidationError (而非 500)."""
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
-
-
 def _org_to_detail(org: Organization) -> OrgDetail:
     """ORM Organization → OrgDetail (统一序列化).
 
@@ -223,7 +216,7 @@ async def list_my_orgs(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[OrgSummary]:
     """当前用户参与的 orgs 列表 (镜像 org.routes.ts:21-39)."""
-    user_uuid = _parse_uuid(user.id, "userId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
     q = (
         select(Organization, OrgMember.role, OrgMember.status)
         .join(OrgMember, OrgMember.org_id == Organization.id)
@@ -271,7 +264,7 @@ async def create_org(
     if (await db.execute(existing_q)).scalar_one_or_none() is not None:
         raise ValidationError(f"Organization slug '{body.slug}' is already taken")
 
-    user_uuid = _parse_uuid(user.id, "userId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     # 单 transaction: org + 创建者 admin member
     try:
@@ -317,7 +310,7 @@ async def get_org(
     """org 详情 (staff only). 镜像 org.routes.ts:82-94."""
     _reject_client(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = select(Organization).where(Organization.id == org_uuid).limit(1)
     row = (await db.execute(q)).scalar_one_or_none()
     if row is None:
@@ -337,7 +330,7 @@ async def update_org(
     """更新 org (org_admin only). 镜像 org.routes.ts:97-112."""
     _require_org_admin(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = select(Organization).where(Organization.id == org_uuid).limit(1)
     row = (await db.execute(q)).scalar_one_or_none()
     if row is None:
@@ -374,7 +367,7 @@ async def list_members(
     """成员列表 (org_admin only). 镜像 org.routes.ts:115-147."""
     _require_org_admin(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = (
         select(OrgMember, User)
         .join(User, User.id == OrgMember.user_id)
@@ -427,7 +420,7 @@ async def invite_member(
     assert org is not None  # _require_org_admin 已校验
 
     # seat-limit (mirror requireSeat)
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     seat_q = select(OrgMember).where(
         and_(OrgMember.org_id == org_uuid, OrgMember.status == "active")
     )
@@ -505,8 +498,8 @@ async def update_my_member(
     if org is None:
         raise ForbiddenError("org_context_required")
 
-    org_uuid = _parse_uuid(org_id, "orgId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     # 找当前用户在此 org 的 member
     q = (
@@ -564,7 +557,7 @@ async def update_member(
     _require_org_admin(org)
     assert org is not None  # _require_org_admin 已校验
 
-    member_uuid = _parse_uuid(member_id, "memberId")
+    member_uuid = parse_uuid_or_raise(member_id, field="memberId")
     q = select(OrgMember).where(OrgMember.id == member_uuid).limit(1)
     member = (await db.execute(q)).scalar_one_or_none()
     if member is None:
@@ -585,7 +578,9 @@ async def update_member(
         if not has_feature(org.tier, "supervisor"):
             raise ForbiddenError("督导功能需要团队版或更高版本")
         member.supervisor_id = (
-            _parse_uuid(body.supervisor_id, "supervisorId") if body.supervisor_id else None
+            parse_uuid_or_raise(body.supervisor_id, field="supervisorId")
+            if body.supervisor_id
+            else None
         )
         has_update = True
     if body.full_practice_access is not None:
@@ -633,7 +628,7 @@ async def delete_member(
     """移除成员 (org_admin only, 不能删自己). 镜像 org.routes.ts:316-329."""
     _require_org_admin(org)
 
-    member_uuid = _parse_uuid(member_id, "memberId")
+    member_uuid = parse_uuid_or_raise(member_id, field="memberId")
     q = select(OrgMember).where(OrgMember.id == member_uuid).limit(1)
     member = (await db.execute(q)).scalar_one_or_none()
     if member is None:
@@ -665,7 +660,7 @@ async def get_triage_config(
     """读 triage config (org_admin / counselor). 镜像 org.routes.ts:332-346."""
     _require_org_admin(org, allow_roles=("counselor",))
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = select(Organization.triage_config).where(Organization.id == org_uuid).limit(1)
     row = (await db.execute(q)).first()
     if row is None:
@@ -685,7 +680,7 @@ async def update_triage_config(
     """写 triage config (org_admin only). 镜像 org.routes.ts:349-368."""
     _require_org_admin(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = select(Organization).where(Organization.id == org_uuid).limit(1)
     organization = (await db.execute(q)).scalar_one_or_none()
     if organization is None:
@@ -770,8 +765,8 @@ async def transfer_cases(
     """
     _require_org_admin(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
-    member_uuid = _parse_uuid(member_id, "memberId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    member_uuid = parse_uuid_or_raise(member_id, field="memberId")
 
     # 取 source counselor user_id
     src_q = select(OrgMember).where(OrgMember.id == member_uuid).limit(1)
@@ -782,8 +777,8 @@ async def transfer_cases(
     results: list[TransferResultEntry] = []
     for t in body.transfers:
         try:
-            client_uuid = _parse_uuid(t.client_id, "clientId")
-            target_uuid = _parse_uuid(t.to_counselor_id, "toCounselorId")
+            client_uuid = parse_uuid_or_raise(t.client_id, field="clientId")
+            target_uuid = parse_uuid_or_raise(t.to_counselor_id, field="toCounselorId")
             await _transfer_one_case(
                 db,
                 org_id=org_uuid,

@@ -5,8 +5,7 @@ User API 请求 / 响应 schemas (Pydantic v2)。
 仍调旧合约 (camelCase), 故所有 schema 走 ``alias_generator=to_camel`` +
 ``populate_by_name=True``: 内部 Python 用 snake_case, JSON wire 用 camelCase。
 
-复用 auth ``_CamelModel`` 的命名约定但不 import — 让两个模块解耦, 后续任一
-模块单独调整 config 不影响对方。
+所有 v1 schema 模块共享 ``CamelModel`` 基类 (见 ``app/api/v1/_schema_base``), 单一真理来源。
 """
 
 from __future__ import annotations
@@ -14,25 +13,12 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
-from pydantic.alias_generators import to_camel
-
-
-class _CamelModel(BaseModel):
-    """所有 user schema 的基类 — wire camelCase, Python snake_case。"""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        # 防 dump 时多写 alias key (e.g. 既 avatar_url 又 avatarUrl)
-        serialize_by_alias=True,
-    )
-
+from app.api.v1._schema_base import CamelModel
 
 # ─── GET /me ─────────────────────────────────────────────────
 
 
-class MeUser(_CamelModel):
+class MeUser(CamelModel):
     """``/me`` 响应里嵌套的 user 主体 (镜像 user.routes.ts:31-39)。"""
 
     id: str
@@ -44,7 +30,7 @@ class MeUser(_CamelModel):
     created_at: datetime | None
 
 
-class MeMember(_CamelModel):
+class MeMember(CamelModel):
     """
     ``/me`` 响应里嵌套的当前 active org_member 行 (镜像 user.routes.ts:50-59)。
 
@@ -62,7 +48,7 @@ class MeMember(_CamelModel):
     org_name: str | None
 
 
-class MeResponse(_CamelModel):
+class MeResponse(CamelModel):
     """``GET /me`` 响应 — user + 最近 active member (允许 None)。"""
 
     user: MeUser
@@ -72,7 +58,7 @@ class MeResponse(_CamelModel):
 # ─── PATCH /me ───────────────────────────────────────────────
 
 
-class PatchMeRequest(_CamelModel):
+class PatchMeRequest(CamelModel):
     """
     ``PATCH /me`` 请求体 (镜像 user.routes.ts:75-90)。
 
@@ -86,7 +72,7 @@ class PatchMeRequest(_CamelModel):
     avatar_url: str | None = None
 
 
-class PatchMeResponse(_CamelModel):
+class PatchMeResponse(CamelModel):
     """``PATCH /me`` 响应 — 更新后的 user 摘要 (镜像 user.routes.ts:96-102)。"""
 
     id: str

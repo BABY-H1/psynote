@@ -6,17 +6,16 @@ content-block.service.ts 的 JSON shape — client / portal 仍调旧合约
 (camelCase), 故所有 schema 走 ``alias_generator=to_camel`` +
 ``populate_by_name=True``: 内部 Python 用 snake_case, JSON wire 用 camelCase。
 
-复用 ``app.api.v1.auth.schemas._CamelModel`` 的同一 pattern, 但在本模块
-单独定义一个本地 ``_CamelModel`` 以让 schema 文件可独立阅读 (auth pattern
-是 baseline, 不直接 cross-module import 防耦合扩散)。
+所有 v1 schema 模块共享 ``CamelModel`` 基类 (见 ``app/api/v1/_schema_base``), 单一真理来源。
 """
 
 from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
+
+from app.api.v1._schema_base import CamelModel
 
 # ─── 与 packages/shared/src/types/content-block.ts:15 一致的 8 类 type ──
 
@@ -38,21 +37,10 @@ BlockVisibility = Literal["participant", "facilitator", "both"]
 ParentType = Literal["course", "group"]
 
 
-class _CamelModel(BaseModel):
-    """所有 content-block schema 的基类 — wire camelCase, Python snake_case。"""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        # 防 dump 时多写 alias key (e.g. 既 sort_order 又 sortOrder)
-        serialize_by_alias=True,
-    )
-
-
 # ─── POST / 创建块请求 (镜像 routes.ts:79-109) ──────────────────
 
 
-class CreateBlockRequest(_CamelModel):
+class CreateBlockRequest(CamelModel):
     """
     创建内容块。
 
@@ -76,7 +64,7 @@ class CreateBlockRequest(_CamelModel):
 # ─── PATCH /{block_id} 更新块请求 (镜像 routes.ts:117-140) ───────
 
 
-class UpdateBlockRequest(_CamelModel):
+class UpdateBlockRequest(CamelModel):
     """
     更新内容块。所有字段可选, 只更新提供的。``parentType`` 通过 query
     string 传 (与 Node 一致, 因为同一个 block_id 可能落在两表之一,
@@ -91,7 +79,7 @@ class UpdateBlockRequest(_CamelModel):
 # ─── POST /reorder body (镜像 routes.ts:164-185) ────────────────
 
 
-class ReorderBlocksRequest(_CamelModel):
+class ReorderBlocksRequest(CamelModel):
     """批量更新 sort_order — orderedIds 列表的索引即新 sort_order。"""
 
     parent_type: ParentType
@@ -102,7 +90,7 @@ class ReorderBlocksRequest(_CamelModel):
 # ─── 内容块响应 (写后返回 / 列表元素) ───────────────────────────
 
 
-class ContentBlockResponse(_CamelModel):
+class ContentBlockResponse(CamelModel):
     """
     单个内容块 — 列表 / batch / create / update 都返这个 shape。
 

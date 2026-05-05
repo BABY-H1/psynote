@@ -49,6 +49,7 @@ from app.lib.errors import (
     NotFoundError,
     ValidationError,
 )
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -57,13 +58,6 @@ router = APIRouter()
 
 
 # ─── 工具 ─────────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_admin_or_counselor(org: OrgContext | None) -> OrgContext:
@@ -97,7 +91,7 @@ async def list_enrollments(
     返回 enrollment + user.name/email join.
     """
     _reject_client(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     q = (
         select(CourseEnrollment, User.name, User.email)
         .outerjoin(User, User.id == CourseEnrollment.user_id)
@@ -159,7 +153,7 @@ async def _enroll_user(
 
     care_uuid: uuid.UUID | None = None
     if care_episode_id:
-        care_uuid = _parse_uuid(care_episode_id, "careEpisodeId")
+        care_uuid = parse_uuid_or_raise(care_episode_id, field="careEpisodeId")
 
     enrollment = CourseEnrollment(
         course_id=instance.course_id,
@@ -198,8 +192,8 @@ async def assign_users(
     enrollment_source='assigned', 含 careEpisodeId. 已存在不重复创建.
     """
     _require_admin_or_counselor(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     iq = select(CourseInstance).where(CourseInstance.id == instance_uuid).limit(1)
     instance = (await db.execute(iq)).scalar_one_or_none()
@@ -209,7 +203,7 @@ async def assign_users(
     results: list[AssignResultEntry] = []
     try:
         for raw_uid in body.user_ids:
-            uid_uuid = _parse_uuid(raw_uid, "userId")
+            uid_uuid = parse_uuid_or_raise(raw_uid, field="userId")
             entry = await _enroll_user(
                 db,
                 instance=instance,
@@ -258,8 +252,8 @@ async def batch_enroll(
     enrollment_source='class_batch', 含 group_label.
     """
     _require_admin_or_counselor(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     iq = select(CourseInstance).where(CourseInstance.id == instance_uuid).limit(1)
     instance = (await db.execute(iq)).scalar_one_or_none()
@@ -269,7 +263,7 @@ async def batch_enroll(
     results: list[AssignResultEntry] = []
     try:
         for raw_uid in body.user_ids:
-            uid_uuid = _parse_uuid(raw_uid, "userId")
+            uid_uuid = parse_uuid_or_raise(raw_uid, field="userId")
             entry = await _enroll_user(
                 db,
                 instance=instance,
@@ -324,9 +318,9 @@ async def update_enrollment_approval(
     if body.approval_status not in ("approved", "rejected"):
         raise ValidationError("approvalStatus must be 'approved' or 'rejected'")
 
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
-    enroll_uuid = _parse_uuid(enrollment_id, "enrollmentId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
+    enroll_uuid = parse_uuid_or_raise(enrollment_id, field="enrollmentId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     q = (
         select(CourseEnrollment)

@@ -31,7 +31,6 @@ Transactional 边界:
 
 from __future__ import annotations
 
-import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
@@ -54,15 +53,9 @@ from app.lib.errors import (
     NotFoundError,
     ValidationError,
 )
+from app.lib.uuid_utils import parse_uuid_or_raise
 
 router = APIRouter()
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 # ─── GET /{instance_id} 公开课程信息 ────────────────────────────
@@ -82,7 +75,7 @@ async def get_public_course_info(
 
     返回容量信息 (capacity / approvedCount / pendingCount / spotsLeft).
     """
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     iq = select(CourseInstance).where(CourseInstance.id == instance_uuid).limit(1)
     instance = (await db.execute(iq)).scalar_one_or_none()
     if instance is None:
@@ -157,7 +150,7 @@ async def apply_public_enrollment(
       b. 检查是否已报名 (返 400 already_enrolled)
       c. 创建 enrollment
     """
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     iq = select(CourseInstance).where(CourseInstance.id == instance_uuid).limit(1)
     instance = (await db.execute(iq)).scalar_one_or_none()
     if instance is None:

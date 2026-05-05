@@ -11,7 +11,6 @@ Subscription router — 镜像 ``server/src/modules/org/subscription.routes.ts``
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -24,7 +23,8 @@ from app.core.database import get_db
 from app.db.models.ai_call_logs import AICallLog
 from app.db.models.org_members import OrgMember
 from app.db.models.organizations import Organization
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import ForbiddenError, NotFoundError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.org_context import OrgContext, get_org_context
 from app.shared.tier import TIER_FEATURES
 
@@ -37,13 +37,6 @@ _TIER_LABELS: dict[str, str] = {
     "growth": "团队版",
     "flagship": "旗舰版",
 }
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _reject_client(org: OrgContext | None) -> None:
@@ -63,7 +56,7 @@ async def get_subscription(
     _reject_client(org)
     assert org is not None
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     plan_q = select(Organization.plan).where(Organization.id == org_uuid).limit(1)
     plan_row = (await db.execute(plan_q)).first()
     if plan_row is None:
@@ -100,7 +93,7 @@ async def get_ai_usage(
     """当月 AI token 用量 (任意 staff). 镜像 subscription.routes.ts:85-127."""
     _reject_client(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     settings_q = select(Organization.settings).where(Organization.id == org_uuid).limit(1)
     s_row = (await db.execute(settings_q)).first()
     if s_row is None:

@@ -40,6 +40,7 @@ from app.db.models.assessments import Assessment
 from app.db.models.scale_dimensions import ScaleDimension
 from app.db.models.scales import Scale
 from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -48,14 +49,6 @@ router = APIRouter()
 
 
 # ─── 工具 ────────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    """str → UUID, 失败抛 ValidationError."""
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _reject_client(org: OrgContext | None) -> None:
@@ -123,7 +116,7 @@ async def list_assessments(
     """列出本 org 的 assessments. 镜像 assessment.routes.ts:14-18."""
     _reject_client(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     conditions: list[Any] = [Assessment.org_id == org_uuid]
     if not include_deleted:
         conditions.append(Assessment.deleted_at.is_(None))
@@ -146,7 +139,7 @@ async def get_assessment(
     """
     _reject_client(org)
 
-    aid = _parse_uuid(assessment_id, "assessmentId")
+    aid = parse_uuid_or_raise(assessment_id, field="assessmentId")
     a_q = select(Assessment).where(Assessment.id == aid).limit(1)
     assessment = (await db.execute(a_q)).scalar_one_or_none()
     if assessment is None:
@@ -206,7 +199,7 @@ async def create_assessment(
     校验: 至少一个 scale (via scaleIds 或 blocks 的 scale 块).
     """
     _require_admin_or_counselor(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     # 至少一个 scale (镜像 routes.ts:43-50)
     blocks = body.blocks or []
@@ -220,7 +213,7 @@ async def create_assessment(
     ]
     final_scale_ids: list[str] = body.scale_ids or scale_ids_from_blocks
 
-    user_uuid = _parse_uuid(user.id, "userId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
     share_token = _generate_share_token()
 
     try:
@@ -257,7 +250,7 @@ async def create_assessment(
             insert_rows = [
                 {
                     "assessment_id": a.id,
-                    "scale_id": _parse_uuid(sid, "scaleId"),
+                    "scale_id": parse_uuid_or_raise(sid, field="scaleId"),
                     "sort_order": idx,
                 }
                 for idx, sid in enumerate(final_scale_ids)
@@ -299,7 +292,7 @@ async def update_assessment(
     """更新 assessment (admin/counselor). 镜像 assessment.routes.ts:72-93 + service:121-173."""
     _require_admin_or_counselor(org)
 
-    aid = _parse_uuid(assessment_id, "assessmentId")
+    aid = parse_uuid_or_raise(assessment_id, field="assessmentId")
     q = select(Assessment).where(Assessment.id == aid).limit(1)
     a = (await db.execute(q)).scalar_one_or_none()
     if a is None:
@@ -355,7 +348,7 @@ async def update_assessment(
             insert_rows = [
                 {
                     "assessment_id": aid,
-                    "scale_id": _parse_uuid(sid, "scaleId"),
+                    "scale_id": parse_uuid_or_raise(sid, field="scaleId"),
                     "sort_order": idx,
                 }
                 for idx, sid in enumerate(resolved_scale_ids)
@@ -389,7 +382,7 @@ async def delete_assessment(
     """软删除 (设 deleted_at). 镜像 assessment.routes.ts:96-103 + service:175-185."""
     _require_admin_or_counselor(org)
 
-    aid = _parse_uuid(assessment_id, "assessmentId")
+    aid = parse_uuid_or_raise(assessment_id, field="assessmentId")
     q = (
         select(Assessment)
         .where(and_(Assessment.id == aid, Assessment.deleted_at.is_(None)))
@@ -426,7 +419,7 @@ async def restore_assessment(
     """恢复 (清 deleted_at) (org_admin only). 镜像 assessment.routes.ts:106-113."""
     _require_org_admin(org)
 
-    aid = _parse_uuid(assessment_id, "assessmentId")
+    aid = parse_uuid_or_raise(assessment_id, field="assessmentId")
     q = select(Assessment).where(Assessment.id == aid).limit(1)
     a = (await db.execute(q)).scalar_one_or_none()
     if a is None:

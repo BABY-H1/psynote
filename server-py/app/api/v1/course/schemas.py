@@ -22,25 +22,14 @@ from datetime import date as date_type
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from pydantic.alias_generators import to_camel
+from pydantic import EmailStr, Field
 
-
-class _CamelModel(BaseModel):
-    """所有 course schema 的基类 — wire camelCase, Python snake_case。"""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        # 防 dump 时多写 alias key (e.g. 既 access_token 又 accessToken)
-        serialize_by_alias=True,
-    )
-
+from app.api.v1._schema_base import CamelModel
 
 # ─── 通用 ─────────────────────────────────────────────────────────
 
 
-class OkResponse(_CamelModel):
+class OkResponse(CamelModel):
     """统一 OK 信封."""
 
     ok: bool = True
@@ -49,7 +38,7 @@ class OkResponse(_CamelModel):
 # ─── Course CRUD ─────────────────────────────────────────────────
 
 
-class ChapterInput(_CamelModel):
+class ChapterInput(CamelModel):
     """``POST /courses`` body 内嵌的 chapter 定义 (镜像 course.routes.ts:58-68)."""
 
     title: str = Field(min_length=1)
@@ -64,7 +53,7 @@ class ChapterInput(_CamelModel):
     homework_suggestion: str | None = None
 
 
-class CourseCreateRequest(_CamelModel):
+class CourseCreateRequest(CamelModel):
     """``POST /api/orgs/{org_id}/courses`` body. 镜像 course.routes.ts:42-69."""
 
     title: str = Field(min_length=1)
@@ -85,7 +74,7 @@ class CourseCreateRequest(_CamelModel):
     chapters: list[ChapterInput] | None = None
 
 
-class CourseUpdateRequest(_CamelModel):
+class CourseUpdateRequest(CamelModel):
     """``PATCH /api/orgs/{org_id}/courses/{course_id}`` body (部分字段)."""
 
     title: str | None = None
@@ -105,7 +94,7 @@ class CourseUpdateRequest(_CamelModel):
     tags: list[str] | None = None
 
 
-class ChapterOutput(_CamelModel):
+class ChapterOutput(CamelModel):
     """章节输出 (course detail 嵌入)。"""
 
     id: str
@@ -122,7 +111,7 @@ class ChapterOutput(_CamelModel):
     homework_suggestion: str | None = None
 
 
-class CourseSummary(_CamelModel):
+class CourseSummary(CamelModel):
     """``GET /courses`` 列表项 (与 detail 同字段, 但不含 chapters)."""
 
     id: str
@@ -155,7 +144,7 @@ class CourseDetail(CourseSummary):
     chapters: list[ChapterOutput] = Field(default_factory=list)
 
 
-class BlueprintSession(_CamelModel):
+class BlueprintSession(CamelModel):
     """``POST /confirm-blueprint`` body 内嵌的 session shape."""
 
     title: str = Field(min_length=1)
@@ -165,13 +154,13 @@ class BlueprintSession(_CamelModel):
     homework_suggestion: str
 
 
-class ConfirmBlueprintRequest(_CamelModel):
+class ConfirmBlueprintRequest(CamelModel):
     """``POST /courses/{id}/confirm-blueprint`` body."""
 
     sessions: list[BlueprintSession] = Field(min_length=1)
 
 
-class LessonBlockInput(_CamelModel):
+class LessonBlockInput(CamelModel):
     """``PUT /courses/{id}/chapters/{chapterId}/blocks`` body 内 block."""
 
     id: str | None = None
@@ -182,13 +171,13 @@ class LessonBlockInput(_CamelModel):
     last_ai_instruction: str | None = None
 
 
-class LessonBlocksUpsertRequest(_CamelModel):
+class LessonBlocksUpsertRequest(CamelModel):
     """``PUT /courses/{id}/chapters/{chapterId}/blocks`` body."""
 
     blocks: list[LessonBlockInput] = Field(default_factory=list)
 
 
-class LessonBlockUpdateRequest(_CamelModel):
+class LessonBlockUpdateRequest(CamelModel):
     """``PATCH /courses/{id}/chapters/{chapterId}/blocks/{blockId}`` body."""
 
     content: str | None = None
@@ -196,7 +185,7 @@ class LessonBlockUpdateRequest(_CamelModel):
     last_ai_instruction: str | None = None
 
 
-class LessonBlockOutput(_CamelModel):
+class LessonBlockOutput(CamelModel):
     id: str
     chapter_id: str
     block_type: str
@@ -211,27 +200,27 @@ class LessonBlockOutput(_CamelModel):
 # ─── Enrollment (course.routes.ts:191-228) ────────────────────────
 
 
-class EnrollSelfRequest(_CamelModel):
+class EnrollSelfRequest(CamelModel):
     """``POST /courses/{id}/enroll`` body (可选 careEpisodeId)."""
 
     care_episode_id: str | None = None
 
 
-class AssignToClientRequest(_CamelModel):
+class AssignToClientRequest(CamelModel):
     """``POST /courses/{id}/assign`` body (counselor 指派课程给来访者)."""
 
     client_user_id: str = Field(min_length=1)
     care_episode_id: str | None = None
 
 
-class CourseProgressRequest(_CamelModel):
+class CourseProgressRequest(CamelModel):
     """``PATCH /courses/enrollments/{enrollmentId}/progress`` body."""
 
     chapter_id: str = Field(min_length=1)
     completed: bool
 
 
-class EnrollmentOutput(_CamelModel):
+class EnrollmentOutput(CamelModel):
     """单个 enrollment 输出 (course.service.ts 返回的 row + user info)."""
 
     id: str
@@ -254,14 +243,14 @@ class EnrollmentOutput(_CamelModel):
 # ─── Template Tags (course.routes.ts:230-251) ─────────────────────
 
 
-class TemplateTagCreateRequest(_CamelModel):
+class TemplateTagCreateRequest(CamelModel):
     """``POST /courses/template-tags`` body."""
 
     name: str = Field(min_length=1)
     color: str | None = None
 
 
-class TemplateTagOutput(_CamelModel):
+class TemplateTagOutput(CamelModel):
     id: str
     org_id: str
     name: str
@@ -272,7 +261,7 @@ class TemplateTagOutput(_CamelModel):
 # ─── Instances ────────────────────────────────────────────────────
 
 
-class InstanceCreateRequest(_CamelModel):
+class InstanceCreateRequest(CamelModel):
     """``POST /api/orgs/{org_id}/course-instances`` body. 镜像 instance.routes.ts:53-67."""
 
     course_id: str = Field(min_length=1)
@@ -289,7 +278,7 @@ class InstanceCreateRequest(_CamelModel):
     schedule: str | None = None
 
 
-class InstanceUpdateRequest(_CamelModel):
+class InstanceUpdateRequest(CamelModel):
     title: str | None = None
     description: str | None = None
     publish_mode: str | None = None
@@ -303,7 +292,7 @@ class InstanceUpdateRequest(_CamelModel):
     schedule: str | None = None
 
 
-class InstanceOutput(_CamelModel):
+class InstanceOutput(CamelModel):
     """单个 instance 输出 (列表 / 详情共用基础形状)."""
 
     id: str
@@ -334,14 +323,14 @@ class InstanceListItem(InstanceOutput):
     enrollment_count: int = 0
 
 
-class CourseEmbed(_CamelModel):
+class CourseEmbed(CamelModel):
     """instance detail 里嵌入的简略 course."""
 
     title: str | None = None
     category: str | None = None
 
 
-class EnrollmentStats(_CamelModel):
+class EnrollmentStats(CamelModel):
     total: int
     completed: int
 
@@ -358,21 +347,21 @@ class InstanceDetail(InstanceOutput):
 # ─── Enrollment Routes (course-enrollment.routes.ts) ──────────────
 
 
-class AssignUsersRequest(_CamelModel):
+class AssignUsersRequest(CamelModel):
     """``POST /course-instances/{id}/assign`` body."""
 
     user_ids: list[str] = Field(min_length=1)
     care_episode_id: str | None = None
 
 
-class BatchEnrollRequest(_CamelModel):
+class BatchEnrollRequest(CamelModel):
     """``POST /course-instances/{id}/batch-enroll`` body."""
 
     user_ids: list[str] = Field(min_length=1)
     group_label: str | None = None
 
 
-class AssignResultEntry(_CamelModel):
+class AssignResultEntry(CamelModel):
     """assign / batch-enroll 单条结果 (skipped 重复, 否则新建)."""
 
     user_id: str
@@ -380,16 +369,16 @@ class AssignResultEntry(_CamelModel):
     enrollment_id: str
 
 
-class AssignResponse(_CamelModel):
+class AssignResponse(CamelModel):
     results: list[AssignResultEntry]
 
 
-class BatchEnrollResponse(_CamelModel):
+class BatchEnrollResponse(CamelModel):
     results: list[AssignResultEntry]
     group_label: str | None = None
 
 
-class EnrollmentApprovalRequest(_CamelModel):
+class EnrollmentApprovalRequest(CamelModel):
     """``PATCH /course-instances/{id}/enrollments/{enrollmentId}`` body."""
 
     approval_status: str = Field(min_length=1)
@@ -398,7 +387,7 @@ class EnrollmentApprovalRequest(_CamelModel):
 # ─── Feedback Routes (feedback.routes.ts + service.ts) ────────────
 
 
-class FeedbackFormCreateRequest(_CamelModel):
+class FeedbackFormCreateRequest(CamelModel):
     """``POST /course-instances/{id}/feedback-forms`` body."""
 
     chapter_id: str | None = None
@@ -406,13 +395,13 @@ class FeedbackFormCreateRequest(_CamelModel):
     questions: Any = None  # JSON 透传 (questions array)
 
 
-class FeedbackFormUpdateRequest(_CamelModel):
+class FeedbackFormUpdateRequest(CamelModel):
     title: str | None = None
     questions: Any = None
     is_active: bool | None = None
 
 
-class FeedbackFormOutput(_CamelModel):
+class FeedbackFormOutput(CamelModel):
     id: str
     instance_id: str
     chapter_id: str | None = None
@@ -422,13 +411,13 @@ class FeedbackFormOutput(_CamelModel):
     created_at: datetime | None = None
 
 
-class FeedbackResponseSubmitRequest(_CamelModel):
+class FeedbackResponseSubmitRequest(CamelModel):
     """``POST /course-instances/{id}/feedback/{formId}/submit`` body."""
 
     answers: Any = None
 
 
-class FeedbackResponseOutput(_CamelModel):
+class FeedbackResponseOutput(CamelModel):
     id: str
     form_id: str
     enrollment_id: str
@@ -438,7 +427,7 @@ class FeedbackResponseOutput(_CamelModel):
     user_email: str | None = None
 
 
-class FeedbackStatsItem(_CamelModel):
+class FeedbackStatsItem(CamelModel):
     """``GET /feedback-stats`` 单条记录."""
 
     form_id: str | None = None
@@ -449,7 +438,7 @@ class FeedbackStatsItem(_CamelModel):
 # ─── Homework Routes (homework.routes.ts + service.ts) ────────────
 
 
-class HomeworkDefCreateRequest(_CamelModel):
+class HomeworkDefCreateRequest(CamelModel):
     """``POST /course-instances/{id}/homework-defs`` body."""
 
     chapter_id: str | None = None
@@ -461,7 +450,7 @@ class HomeworkDefCreateRequest(_CamelModel):
     sort_order: int | None = None
 
 
-class HomeworkDefUpdateRequest(_CamelModel):
+class HomeworkDefUpdateRequest(CamelModel):
     title: str | None = None
     description: str | None = None
     question_type: str | None = None
@@ -470,7 +459,7 @@ class HomeworkDefUpdateRequest(_CamelModel):
     sort_order: int | None = None
 
 
-class HomeworkDefOutput(_CamelModel):
+class HomeworkDefOutput(CamelModel):
     id: str
     instance_id: str
     chapter_id: str | None = None
@@ -483,14 +472,14 @@ class HomeworkDefOutput(_CamelModel):
     created_at: datetime | None = None
 
 
-class HomeworkSubmitRequest(_CamelModel):
+class HomeworkSubmitRequest(CamelModel):
     """``POST /course-instances/{id}/homework/{defId}/submit`` body."""
 
     content: str | None = None
     selected_options: Any = None
 
 
-class HomeworkSubmissionOutput(_CamelModel):
+class HomeworkSubmissionOutput(CamelModel):
     id: str
     homework_def_id: str
     enrollment_id: str
@@ -506,7 +495,7 @@ class HomeworkSubmissionOutput(_CamelModel):
     user_email: str | None = None
 
 
-class HomeworkReviewRequest(_CamelModel):
+class HomeworkReviewRequest(CamelModel):
     """``PATCH /course-instances/{id}/homework/submissions/{subId}/review`` body."""
 
     review_comment: str = Field(min_length=1)
@@ -515,7 +504,7 @@ class HomeworkReviewRequest(_CamelModel):
 # ─── Public Course Enroll (public-course-enroll.routes.ts) ────────
 
 
-class PublicCourseInfo(_CamelModel):
+class PublicCourseInfo(CamelModel):
     """``GET /api/public/courses/{instanceId}`` 公开课程信息 (无 auth)."""
 
     id: str
@@ -529,7 +518,7 @@ class PublicCourseInfo(_CamelModel):
     spots_left: int | None = None
 
 
-class PublicEnrollApplyRequest(_CamelModel):
+class PublicEnrollApplyRequest(CamelModel):
     """``POST /api/public/courses/{instanceId}/apply`` body. 镜像 routes.ts:78-82."""
 
     name: str = Field(min_length=1)
@@ -537,7 +526,7 @@ class PublicEnrollApplyRequest(_CamelModel):
     phone: str | None = None
 
 
-class PublicEnrollApplyResponse(_CamelModel):
+class PublicEnrollApplyResponse(CamelModel):
     """``POST /apply`` 201 返回."""
 
     success: bool = True

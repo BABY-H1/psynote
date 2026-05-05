@@ -20,31 +20,20 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from pydantic.alias_generators import to_camel
+from pydantic import EmailStr, Field
 
-
-class _CamelModel(BaseModel):
-    """所有 org schema 的基类 — wire camelCase, Python snake_case。"""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        # 防 dump 时多写 alias key (e.g. 既 access_token 又 accessToken)
-        serialize_by_alias=True,
-    )
-
+from app.api.v1._schema_base import CamelModel
 
 # ─── 通用 ─────────────────────────────────────────────────────────
 
 
-class OkResponse(_CamelModel):
+class OkResponse(CamelModel):
     """统一 OK 信封 (镜像 Node ``{ok: true}`` 或 ``{success: true}``)。"""
 
     ok: bool = True
 
 
-class SuccessResponse(_CamelModel):
+class SuccessResponse(CamelModel):
     """``{success: true}`` 信封 — Node 部分端点用 ``success`` 而非 ``ok``。"""
 
     success: bool = True
@@ -53,21 +42,21 @@ class SuccessResponse(_CamelModel):
 # ─── org core CRUD ───────────────────────────────────────────────
 
 
-class OrgCreateRequest(_CamelModel):
+class OrgCreateRequest(CamelModel):
     """``POST /api/orgs/`` (system admin only). 镜像 org.routes.ts:42-79。"""
 
     name: str = Field(min_length=1)
     slug: str = Field(min_length=1)
 
 
-class OrgUpdateRequest(_CamelModel):
+class OrgUpdateRequest(CamelModel):
     """``PATCH /api/orgs/{org_id}`` 部分字段更新 (org_admin only)."""
 
     name: str | None = None
     settings: dict[str, Any] | None = None
 
 
-class OrgSummary(_CamelModel):
+class OrgSummary(CamelModel):
     """``GET /api/orgs/`` 列表项 — org 全字段 + 当前用户在该 org 的角色/状态。
 
     镜像 org.routes.ts:34-38 的形状。
@@ -89,7 +78,7 @@ class OrgSummary(_CamelModel):
     my_status: str
 
 
-class OrgDetail(_CamelModel):
+class OrgDetail(CamelModel):
     """``GET /api/orgs/{org_id}`` / ``PATCH`` / ``POST`` 单个 org 详情。"""
 
     id: str
@@ -109,7 +98,7 @@ class OrgDetail(_CamelModel):
 # ─── members (CRUD + invite + transfer-cases) ─────────────────────
 
 
-class MemberInviteRequest(_CamelModel):
+class MemberInviteRequest(CamelModel):
     """``POST /api/orgs/{org_id}/members/invite`` body."""
 
     email: EmailStr
@@ -117,7 +106,7 @@ class MemberInviteRequest(_CamelModel):
     name: str | None = None
 
 
-class MemberInviteResponse(_CamelModel):
+class MemberInviteResponse(CamelModel):
     """``POST .../invite`` 201 返回, 镜像 org.routes.ts:203-210."""
 
     id: str
@@ -128,7 +117,7 @@ class MemberInviteResponse(_CamelModel):
     status: str
 
 
-class MemberSelfUpdateRequest(_CamelModel):
+class MemberSelfUpdateRequest(CamelModel):
     """``PATCH /api/orgs/{org_id}/members/me`` (Phase 14f) — 仅 bio/specialties/certifications."""
 
     bio: str | None = None
@@ -136,7 +125,7 @@ class MemberSelfUpdateRequest(_CamelModel):
     certifications: list[Any] | None = None
 
 
-class MemberAdminUpdateRequest(_CamelModel):
+class MemberAdminUpdateRequest(CamelModel):
     """``PATCH /api/orgs/{org_id}/members/{member_id}`` 全字段 (admin only)."""
 
     role: str | None = None
@@ -150,7 +139,7 @@ class MemberAdminUpdateRequest(_CamelModel):
     bio: str | None = None
 
 
-class MemberRow(_CamelModel):
+class MemberRow(CamelModel):
     """``GET .../members`` 列表项 — member + user join 后的扁平形状,
     镜像 org.routes.ts:129-146。"""
 
@@ -172,7 +161,7 @@ class MemberRow(_CamelModel):
     created_at: datetime | None = None
 
 
-class MemberUpdated(_CamelModel):
+class MemberUpdated(CamelModel):
     """``PATCH .../members/{id}`` 与 ``PATCH .../members/me`` 都返回 OrgMember 全字段。"""
 
     id: str
@@ -195,26 +184,26 @@ class MemberUpdated(_CamelModel):
     created_at: datetime | None = None
 
 
-class TransferEntry(_CamelModel):
+class TransferEntry(CamelModel):
     """单个 transfer 条目 (clientId 转给 toCounselorId)."""
 
     client_id: str
     to_counselor_id: str
 
 
-class TransferCasesRequest(_CamelModel):
+class TransferCasesRequest(CamelModel):
     """``POST .../members/{member_id}/transfer-cases`` body."""
 
     transfers: list[TransferEntry] = Field(min_length=1)
 
 
-class TransferResultEntry(_CamelModel):
+class TransferResultEntry(CamelModel):
     client_id: str
     to_counselor_id: str
     success: bool
 
 
-class TransferCasesResponse(_CamelModel):
+class TransferCasesResponse(CamelModel):
     """``POST .../transfer-cases`` 返回 — 单条转移结果数组 + 成功数。"""
 
     results: list[TransferResultEntry]
@@ -232,7 +221,7 @@ TriageConfig = dict[str, Any]
 # ─── public-services (orgType-agnostic intake) ───────────────────
 
 
-class PublicServicesResponse(_CamelModel):
+class PublicServicesResponse(CamelModel):
     """``GET /api/public/orgs/{org_slug}/services`` (no auth)."""
 
     org_id: str | None = None
@@ -240,7 +229,7 @@ class PublicServicesResponse(_CamelModel):
     services: list[dict[str, Any]] = Field(default_factory=list)
 
 
-class PublicIntakeRequest(_CamelModel):
+class PublicIntakeRequest(CamelModel):
     """``POST /api/public/orgs/{org_slug}/services/intake`` (no auth)."""
 
     service_id: str = Field(min_length=1)
@@ -251,7 +240,7 @@ class PublicIntakeRequest(_CamelModel):
     counselor_id: str | None = None  # 来自 ?counselorId= 链接
 
 
-class PublicIntakeResponse(_CamelModel):
+class PublicIntakeResponse(CamelModel):
     """``POST .../intake`` 201 返回."""
 
     intake_id: str
@@ -259,7 +248,7 @@ class PublicIntakeResponse(_CamelModel):
     assigned_counselor_id: str | None = None
 
 
-class IntakeRow(_CamelModel):
+class IntakeRow(CamelModel):
     """``GET /api/orgs/{org_id}/service-intakes`` 列表项 (admin)."""
 
     id: str
@@ -277,7 +266,7 @@ class IntakeRow(_CamelModel):
     client_email: str | None
 
 
-class IntakeAssignRequest(_CamelModel):
+class IntakeAssignRequest(CamelModel):
     """``POST /api/orgs/{org_id}/service-intakes/{intake_id}/assign`` body."""
 
     counselor_id: str = Field(min_length=1)
@@ -286,7 +275,7 @@ class IntakeAssignRequest(_CamelModel):
 # ─── dashboard ────────────────────────────────────────────────────
 
 
-class DashboardStats(_CamelModel):
+class DashboardStats(CamelModel):
     """``GET /api/orgs/{org_id}/dashboard/stats`` 镜像 dashboard.routes.ts:109-117."""
 
     counselor_count: int
@@ -298,14 +287,14 @@ class DashboardStats(_CamelModel):
     monthly_assessment_count: int
 
 
-class KpiDelta(_CamelModel):
+class KpiDelta(CamelModel):
     """单个 KPI 的 current + previous 数对 (kpi-delta 子结构)."""
 
     current: int
     previous: int
 
 
-class DashboardKpiDelta(_CamelModel):
+class DashboardKpiDelta(CamelModel):
     """``GET /api/orgs/{org_id}/dashboard/kpi-delta``  5 个 KPI 镜像 dashboard.routes.ts:238-244."""
 
     new_client: KpiDelta
@@ -318,7 +307,7 @@ class DashboardKpiDelta(_CamelModel):
 # ─── branding ─────────────────────────────────────────────────────
 
 
-class BrandingSettings(_CamelModel):
+class BrandingSettings(CamelModel):
     """``GET / PATCH /api/orgs/{org_id}/branding`` body 与响应同形状.
 
     镜像 branding.routes.ts:38-43。所有字段 optional, 只更新传入的部分。
@@ -333,7 +322,7 @@ class BrandingSettings(_CamelModel):
 # ─── subscription ─────────────────────────────────────────────────
 
 
-class LicenseInfoResponse(_CamelModel):
+class LicenseInfoResponse(CamelModel):
     """OrgContext.license + seatsUsed 透出形状 (subscription.routes.ts:28-34)."""
 
     status: str  # 'active' | 'expired' | 'invalid' | 'none'
@@ -342,7 +331,7 @@ class LicenseInfoResponse(_CamelModel):
     seats_used: int
 
 
-class SubscriptionInfo(_CamelModel):
+class SubscriptionInfo(CamelModel):
     """``GET /api/orgs/{org_id}/subscription`` 镜像 SubscriptionInfo interface."""
 
     tier: str  # OrgTier: 'starter' | 'growth' | 'flagship'
@@ -352,7 +341,7 @@ class SubscriptionInfo(_CamelModel):
     license: LicenseInfoResponse
 
 
-class AIUsageResponse(_CamelModel):
+class AIUsageResponse(CamelModel):
     """``GET /api/orgs/{org_id}/ai-usage`` 当月 AI token 用量."""
 
     month_start: str  # ISO8601
@@ -367,13 +356,13 @@ class AIUsageResponse(_CamelModel):
 # ─── license ──────────────────────────────────────────────────────
 
 
-class LicenseActivateRequest(_CamelModel):
+class LicenseActivateRequest(CamelModel):
     """``POST /api/orgs/{org_id}/license`` body — Phase 3 stub 也保形状."""
 
     license_key: str = Field(min_length=1)
 
 
-class LicenseActivateResponse(_CamelModel):
+class LicenseActivateResponse(CamelModel):
     """``POST .../license`` 200 返回 (license.routes.ts:62-69 镜像)."""
 
     success: bool = True

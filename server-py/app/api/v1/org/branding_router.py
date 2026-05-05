@@ -14,7 +14,6 @@ Phase 7b 仅 config 层, PDF 实际消费在后续 phase 接入.
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -25,18 +24,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.org.schemas import BrandingSettings
 from app.core.database import get_db
 from app.db.models.organizations import Organization
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import ForbiddenError, NotFoundError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.org_context import OrgContext, get_org_context
 from app.shared.tier import has_feature
 
 router = APIRouter()
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _reject_client(org: OrgContext | None) -> None:
@@ -77,7 +70,7 @@ async def get_branding(
     """
     _reject_client(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = select(Organization.settings).where(Organization.id == org_uuid).limit(1)
     row = (await db.execute(q)).first()
     if row is None:
@@ -103,7 +96,7 @@ async def update_branding(
         raise ForbiddenError("此功能不在当前订阅中")
     _require_org_admin(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = select(Organization).where(Organization.id == org_uuid).limit(1)
     organization = (await db.execute(q)).scalar_one_or_none()
     if organization is None:

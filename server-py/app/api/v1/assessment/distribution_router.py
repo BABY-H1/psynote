@@ -15,7 +15,6 @@ Distribution router — 镜像 ``server/src/modules/assessment/distribution.rout
 
 from __future__ import annotations
 
-import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
@@ -29,19 +28,13 @@ from app.api.v1.assessment.schemas import (
 )
 from app.core.database import get_db
 from app.db.models.distributions import Distribution
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import ForbiddenError, NotFoundError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
 
 router = APIRouter()
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _reject_client(org: OrgContext | None) -> None:
@@ -83,7 +76,7 @@ async def list_distributions(
 ) -> list[DistributionRow]:
     """列表 (按 assessment_id). 镜像 service:6-12."""
     _reject_client(org)
-    aid = _parse_uuid(assessment_id, "assessmentId")
+    aid = parse_uuid_or_raise(assessment_id, field="assessmentId")
 
     q = (
         select(Distribution)
@@ -107,9 +100,9 @@ async def create_distribution(
     """创建分发任务 (admin/counselor). 镜像 routes.ts:20-43 + service:25-45."""
     _require_admin_or_counselor(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
-    aid = _parse_uuid(assessment_id, "assessmentId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    aid = parse_uuid_or_raise(assessment_id, field="assessmentId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     try:
         d = Distribution(
@@ -155,7 +148,7 @@ async def update_distribution_status(
     """更新 status (admin/counselor). 镜像 routes.ts:46-57 + service:47-58."""
     _require_admin_or_counselor(org)
 
-    did = _parse_uuid(distribution_id, "distributionId")
+    did = parse_uuid_or_raise(distribution_id, field="distributionId")
     q = select(Distribution).where(Distribution.id == did).limit(1)
     d = (await db.execute(q)).scalar_one_or_none()
     if d is None:

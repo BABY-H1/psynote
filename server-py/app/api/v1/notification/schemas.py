@@ -9,24 +9,14 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
-from pydantic.alias_generators import to_camel
+from pydantic import Field
 
-
-class _CamelModel(BaseModel):
-    """所有 notification schema 的基类 — wire camelCase, Python snake_case。"""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        serialize_by_alias=True,
-    )
-
+from app.api.v1._schema_base import CamelModel
 
 # ─── Notification 主表 ──────────────────────────────────────────
 
 
-class NotificationResponse(_CamelModel):
+class NotificationResponse(CamelModel):
     """
     单条通知 — list / mark-as-read 都返这个 shape。
 
@@ -46,7 +36,7 @@ class NotificationResponse(_CamelModel):
     created_at: str | None = None
 
 
-class UnreadCountResponse(_CamelModel):
+class UnreadCountResponse(CamelModel):
     """``GET /unread-count`` 响应 — 仅一个 count 字段。"""
 
     count: int
@@ -55,7 +45,7 @@ class UnreadCountResponse(_CamelModel):
 # ─── Reminder settings (PUT 请求 + GET/PUT 响应) ───────────────
 
 
-class ReminderSettingsRequest(_CamelModel):
+class ReminderSettingsRequest(CamelModel):
     """
     PUT /reminder-settings 请求体 — 全字段可选, 服务端 upsert (有则 update, 无则 insert)。
 
@@ -71,7 +61,7 @@ class ReminderSettingsRequest(_CamelModel):
     message_template: dict[str, Any] | None = None
 
 
-class ReminderSettingsResponse(_CamelModel):
+class ReminderSettingsResponse(CamelModel):
     """
     GET / PUT 响应 — 当 GET 命中行时返该行; GET 未命中时 router 返默认 shape
     ``{enabled: True, channels: ['email'], remind_before: [1440, 60]}``

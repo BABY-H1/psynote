@@ -9,30 +9,19 @@ JSON wire 用 camelCase。
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
-from pydantic.alias_generators import to_camel
+from pydantic import EmailStr, Field
 
-
-class _CamelModel(BaseModel):
-    """所有 auth schema 的基类 — wire camelCase, Python snake_case。"""
-
-    model_config = ConfigDict(
-        alias_generator=to_camel,
-        populate_by_name=True,
-        # 防 dump 时多写 alias key (e.g. 既 access_token 又 accessToken)
-        serialize_by_alias=True,
-    )
-
+from app.api.v1._schema_base import CamelModel
 
 # ─── /login ──────────────────────────────────────────────────
 
 
-class LoginRequest(_CamelModel):
+class LoginRequest(CamelModel):
     email: EmailStr
     password: str = Field(min_length=1)
 
 
-class UserSummary(_CamelModel):
+class UserSummary(CamelModel):
     """登录响应里嵌套的 user 简表 (镜像 Node auth.routes.ts:99)。"""
 
     id: str
@@ -41,7 +30,7 @@ class UserSummary(_CamelModel):
     is_system_admin: bool
 
 
-class TokensResponse(_CamelModel):
+class TokensResponse(CamelModel):
     """``/refresh`` 响应 — 仅 tokens, 无 user。"""
 
     access_token: str
@@ -57,14 +46,14 @@ class LoginResponse(TokensResponse):
 # ─── /refresh ────────────────────────────────────────────────
 
 
-class RefreshRequest(_CamelModel):
+class RefreshRequest(CamelModel):
     refresh_token: str = Field(min_length=1)
 
 
 # ─── /change-password ────────────────────────────────────────
 
 
-class ChangePasswordRequest(_CamelModel):
+class ChangePasswordRequest(CamelModel):
     """legacy / OAuth 账号 (无 password_hash) 可省 current_password。"""
 
     current_password: str | None = None
@@ -74,14 +63,14 @@ class ChangePasswordRequest(_CamelModel):
 # ─── /forgot-password ────────────────────────────────────────
 
 
-class ForgotPasswordRequest(_CamelModel):
+class ForgotPasswordRequest(CamelModel):
     email: EmailStr
 
 
 # ─── /reset-password ─────────────────────────────────────────
 
 
-class ResetPasswordRequest(_CamelModel):
+class ResetPasswordRequest(CamelModel):
     """token: 64 字符 hex (32 字节 randomBytes 转 hex)。"""
 
     token: str = Field(min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
@@ -91,5 +80,5 @@ class ResetPasswordRequest(_CamelModel):
 # ─── 通用 OK 响应 ───────────────────────────────────────────
 
 
-class OkResponse(_CamelModel):
+class OkResponse(CamelModel):
     ok: bool = True

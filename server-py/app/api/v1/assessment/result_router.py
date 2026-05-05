@@ -65,6 +65,7 @@ from app.db.models.scale_dimensions import ScaleDimension
 from app.db.models.scale_items import ScaleItem
 from app.db.models.scales import Scale
 from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.data_scope import DataScope, get_data_scope
@@ -86,13 +87,6 @@ _RISK_PRIORITY = {
 
 
 # ─── 工具 ────────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _try_parse_uuid(value: str | None) -> uuid.UUID | None:
@@ -163,7 +157,7 @@ async def list_results(
     """
     if org is None:
         raise ForbiddenError("org_context_required")
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     conditions: list[Any] = [
         AssessmentResult.org_id == org_uuid,
@@ -175,7 +169,9 @@ async def list_results(
         if not data_scope.allowed_client_ids:
             conditions.append(AssessmentResult.user_id.is_(None))
         else:
-            allowed = [_parse_uuid(c, "clientId") for c in data_scope.allowed_client_ids]
+            allowed = [
+                parse_uuid_or_raise(c, field="clientId") for c in data_scope.allowed_client_ids
+            ]
             conditions.append(
                 or_(
                     AssessmentResult.user_id.in_(allowed),
@@ -185,16 +181,20 @@ async def list_results(
 
     if assessment_id:
         conditions.append(
-            AssessmentResult.assessment_id == _parse_uuid(assessment_id, "assessmentId")
+            AssessmentResult.assessment_id
+            == parse_uuid_or_raise(assessment_id, field="assessmentId")
         )
     if user_id:
-        conditions.append(AssessmentResult.user_id == _parse_uuid(user_id, "userId"))
+        conditions.append(AssessmentResult.user_id == parse_uuid_or_raise(user_id, field="userId"))
     if care_episode_id:
         conditions.append(
-            AssessmentResult.care_episode_id == _parse_uuid(care_episode_id, "careEpisodeId")
+            AssessmentResult.care_episode_id
+            == parse_uuid_or_raise(care_episode_id, field="careEpisodeId")
         )
     if batch_id:
-        conditions.append(AssessmentResult.batch_id == _parse_uuid(batch_id, "batchId"))
+        conditions.append(
+            AssessmentResult.batch_id == parse_uuid_or_raise(batch_id, field="batchId")
+        )
     if risk_level:
         conditions.append(AssessmentResult.risk_level == risk_level)
 
@@ -297,9 +297,9 @@ async def get_trajectory(
     if not scale_id:
         raise ValidationError("scaleId is required")
 
-    org_uuid = _parse_uuid(org_id, "orgId")
-    uid = _parse_uuid(user_id, "userId")
-    sid = _parse_uuid(scale_id, "scaleId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    uid = parse_uuid_or_raise(user_id, field="userId")
+    sid = parse_uuid_or_raise(scale_id, field="scaleId")
 
     # 找包含此 scale 的所有 assessment ids
     link_q = select(AssessmentScale.assessment_id).where(AssessmentScale.scale_id == sid)
@@ -347,7 +347,7 @@ async def get_result(
     if org is None:
         raise ForbiddenError("org_context_required")
 
-    rid = _parse_uuid(result_id, "resultId")
+    rid = parse_uuid_or_raise(result_id, field="resultId")
     q = select(AssessmentResult).where(AssessmentResult.id == rid).limit(1)
     r = (await db.execute(q)).scalar_one_or_none()
     if r is None:
@@ -385,11 +385,11 @@ async def submit_result(
     """提交结果 (任意已认证). 自动计分 + 触发 triage. 镜像 routes.ts:51-79 + service:256-424."""
     if org is None:
         raise ForbiddenError("org_context_required")
-    org_uuid = _parse_uuid(org_id, "orgId")
-    creator_uuid = _parse_uuid(user.id, "userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    creator_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     target_user_id: uuid.UUID | None = (
-        _parse_uuid(body.user_id, "userId") if body.user_id else creator_uuid
+        parse_uuid_or_raise(body.user_id, field="userId") if body.user_id else creator_uuid
     )
 
     result = await _score_and_save(
@@ -440,7 +440,7 @@ async def delete_result(
     """软删除 (org_admin only). 镜像 routes.ts:82-89."""
     _require_org_admin(org)
 
-    rid = _parse_uuid(result_id, "resultId")
+    rid = parse_uuid_or_raise(result_id, field="resultId")
     q = (
         select(AssessmentResult)
         .where(and_(AssessmentResult.id == rid, AssessmentResult.deleted_at.is_(None)))
@@ -478,7 +478,7 @@ async def set_client_visible(
     """Phase 9β — 切换 client_visible (admin/counselor). 镜像 routes.ts:111-122."""
     _require_admin_or_counselor(org)
 
-    rid = _parse_uuid(result_id, "resultId")
+    rid = parse_uuid_or_raise(result_id, field="resultId")
     q = select(AssessmentResult).where(AssessmentResult.id == rid).limit(1)
     r = (await db.execute(q)).scalar_one_or_none()
     if r is None:
@@ -513,7 +513,7 @@ async def set_recommendations(
     """Phase 9β — 写 AI recommendations (admin/counselor). 镜像 routes.ts:130-139."""
     _require_admin_or_counselor(org)
 
-    rid = _parse_uuid(result_id, "resultId")
+    rid = parse_uuid_or_raise(result_id, field="resultId")
     q = select(AssessmentResult).where(AssessmentResult.id == rid).limit(1)
     r = (await db.execute(q)).scalar_one_or_none()
     if r is None:
@@ -541,7 +541,7 @@ async def public_submit_result(
 
     org_id 从 assessment 推 (调用方不传).
     """
-    aid = _parse_uuid(assessment_id, "assessmentId")
+    aid = parse_uuid_or_raise(assessment_id, field="assessmentId")
     a_q = select(Assessment).where(Assessment.id == aid).limit(1)
     a = (await db.execute(a_q)).scalar_one_or_none()
     if a is None:
@@ -579,7 +579,7 @@ async def _score_and_save(
     created_by: uuid.UUID | None,
 ) -> AssessmentResult:
     """加载 assessment + scales + 维度 + 题目 + 规则, 计算 dimension_scores + risk_level."""
-    aid = _parse_uuid(body.assessment_id, "assessmentId")
+    aid = parse_uuid_or_raise(body.assessment_id, field="assessmentId")
 
     # 1. assessment
     a_q = select(Assessment).where(Assessment.id == aid).limit(1)

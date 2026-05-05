@@ -20,7 +20,6 @@ Phase 3 阶段实装注:
 
 from __future__ import annotations
 
-import uuid
 from datetime import UTC, datetime
 from typing import Annotated
 
@@ -36,6 +35,7 @@ from app.api.v1.org.schemas import (
 from app.core.database import get_db
 from app.db.models.organizations import Organization
 from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -50,13 +50,6 @@ _TIER_LABELS: dict[str, str] = {
     "growth": "团队版",
     "flagship": "旗舰版",
 }
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_org_admin(org: OrgContext | None) -> None:
@@ -90,7 +83,7 @@ async def activate_license(
     if not license_key:
         raise ValidationError("licenseKey is required")
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = select(Organization).where(Organization.id == org_uuid).limit(1)
     organization = (await db.execute(q)).scalar_one_or_none()
     if organization is None:
@@ -134,7 +127,7 @@ async def remove_license(
     """移除 license (org_admin only). 镜像 license.routes.ts:75-88."""
     _require_org_admin(org)
 
-    org_uuid = _parse_uuid(org_id, "orgId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     q = select(Organization).where(Organization.id == org_uuid).limit(1)
     organization = (await db.execute(q)).scalar_one_or_none()
     if organization is None:

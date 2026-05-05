@@ -45,8 +45,8 @@ from app.db.models.users import User
 from app.lib.errors import (
     ForbiddenError,
     NotFoundError,
-    ValidationError,
 )
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
 
@@ -54,13 +54,6 @@ router = APIRouter()
 
 
 # ─── 工具 ─────────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_admin_or_counselor(org: OrgContext | None) -> OrgContext:
@@ -133,10 +126,10 @@ async def list_homework_defs(
 ) -> list[HomeworkDefOutput]:
     """``GET /{instance_id}/homework-defs`` (镜像 service.ts:5-16)."""
     _reject_client(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     conditions = [CourseHomeworkDef.instance_id == instance_uuid]
     if chapter_id:
-        chapter_uuid = _parse_uuid(chapter_id, "chapterId")
+        chapter_uuid = parse_uuid_or_raise(chapter_id, field="chapterId")
         conditions.append(CourseHomeworkDef.chapter_id == chapter_uuid)
     q = (
         select(CourseHomeworkDef)
@@ -161,10 +154,10 @@ async def create_homework_def(
 ) -> HomeworkDefOutput:
     """``POST /{instance_id}/homework-defs`` (admin/counselor)."""
     _require_admin_or_counselor(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
     chapter_uuid: uuid.UUID | None = None
     if body.chapter_id:
-        chapter_uuid = _parse_uuid(body.chapter_id, "chapterId")
+        chapter_uuid = parse_uuid_or_raise(body.chapter_id, field="chapterId")
 
     hwd = CourseHomeworkDef(
         instance_id=instance_uuid,
@@ -199,7 +192,7 @@ async def update_homework_def(
 ) -> HomeworkDefOutput:
     """``PATCH /{instance_id}/homework-defs/{def_id}`` (admin/counselor)."""
     _require_admin_or_counselor(org)
-    def_uuid = _parse_uuid(def_id, "defId")
+    def_uuid = parse_uuid_or_raise(def_id, field="defId")
     q = select(CourseHomeworkDef).where(CourseHomeworkDef.id == def_uuid).limit(1)
     hwd = (await db.execute(q)).scalar_one_or_none()
     if hwd is None:
@@ -225,7 +218,7 @@ async def delete_homework_def(
 ) -> Response:
     """``DELETE /{instance_id}/homework-defs/{def_id}`` (admin/counselor)."""
     _require_admin_or_counselor(org)
-    def_uuid = _parse_uuid(def_id, "defId")
+    def_uuid = parse_uuid_or_raise(def_id, field="defId")
     q = select(CourseHomeworkDef).where(CourseHomeworkDef.id == def_uuid).limit(1)
     hwd = (await db.execute(q)).scalar_one_or_none()
     if hwd is None:
@@ -251,7 +244,7 @@ async def list_submissions(
 ) -> list[HomeworkSubmissionOutput]:
     """``GET .../submissions`` (admin/counselor). 镜像 service.ts:111-123."""
     _require_admin_or_counselor(org)
-    def_uuid = _parse_uuid(def_id, "defId")
+    def_uuid = parse_uuid_or_raise(def_id, field="defId")
     q = (
         select(CourseHomeworkSubmission, User.name, User.email)
         .join(CourseEnrollment, CourseEnrollment.id == CourseHomeworkSubmission.enrollment_id)
@@ -285,9 +278,9 @@ async def submit_homework(
     必须有 enrollment, upsert 形式.
     """
     _reject_client(org)
-    instance_uuid = _parse_uuid(instance_id, "instanceId")
-    def_uuid = _parse_uuid(def_id, "defId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    instance_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
+    def_uuid = parse_uuid_or_raise(def_id, field="defId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     enroll_q = (
         select(CourseEnrollment)
@@ -353,8 +346,8 @@ async def review_submission(
 ) -> HomeworkSubmissionOutput:
     """``PATCH .../review`` 老师批改 (admin/counselor). 镜像 routes.ts:115-122 + service.ts:125-143."""
     _require_admin_or_counselor(org)
-    sub_uuid = _parse_uuid(sub_id, "subId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    sub_uuid = parse_uuid_or_raise(sub_id, field="subId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
     q = select(CourseHomeworkSubmission).where(CourseHomeworkSubmission.id == sub_uuid).limit(1)
     submission = (await db.execute(q)).scalar_one_or_none()
     if submission is None:

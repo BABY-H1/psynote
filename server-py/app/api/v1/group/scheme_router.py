@@ -42,7 +42,8 @@ from app.api.v1.group.schemas import (
 from app.core.database import get_db
 from app.db.models.group_scheme_sessions import GroupSchemeSession
 from app.db.models.group_schemes import GroupScheme
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import ForbiddenError, NotFoundError
+from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -51,14 +52,6 @@ router = APIRouter()
 
 
 # ─── Utility ─────────────────────────────────────────────────────
-
-
-def _parse_uuid(value: str, field: str = "id") -> uuid.UUID:
-    """str → UUID, 失败抛 ValidationError (而非 500)."""
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError) as exc:
-        raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
 def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
@@ -199,8 +192,8 @@ async def list_schemes(
     可见性: public OR (orgId == 当前 org AND organization) OR (createdBy == 当前 user AND personal).
     """
     _reject_client(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     visibility_clauses: list[Any] = [
         GroupScheme.visibility == "public",
@@ -237,7 +230,7 @@ async def get_scheme(
 ) -> SchemeRow:
     """单条 scheme + sessions. 镜像 scheme.service.ts:42-58."""
     _reject_client(org)
-    s_uuid = _parse_uuid(scheme_id, "schemeId")
+    s_uuid = parse_uuid_or_raise(scheme_id, field="schemeId")
 
     q = select(GroupScheme).where(GroupScheme.id == s_uuid).limit(1)
     scheme = (await db.execute(q)).scalar_one_or_none()
@@ -262,8 +255,8 @@ async def create_scheme(
     Transactional: scheme + 子 sessions 一起 commit, 失败 rollback.
     """
     _require_org_admin(org, allow_roles=("counselor",))
-    org_uuid = _parse_uuid(org_id, "orgId")
-    user_uuid = _parse_uuid(user.id, "userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
     try:
         scheme = GroupScheme(
@@ -330,8 +323,8 @@ async def update_scheme(
     Transactional: scheme update + delete 旧 sessions + insert 新 sessions 一起 commit.
     """
     _require_org_admin(org, allow_roles=("counselor",))
-    org_uuid = _parse_uuid(org_id, "orgId")
-    s_uuid = _parse_uuid(scheme_id, "schemeId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    s_uuid = parse_uuid_or_raise(scheme_id, field="schemeId")
 
     scheme = await _assert_owned_by_org(db, s_uuid, org_uuid)
 
@@ -382,8 +375,8 @@ async def delete_scheme(
 ) -> None:
     """删除 scheme (org_admin only). 镜像 scheme.service.ts:187-195."""
     _require_org_admin(org)
-    org_uuid = _parse_uuid(org_id, "orgId")
-    s_uuid = _parse_uuid(scheme_id, "schemeId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    s_uuid = parse_uuid_or_raise(scheme_id, field="schemeId")
 
     await _assert_owned_by_org(db, s_uuid, org_uuid)
 

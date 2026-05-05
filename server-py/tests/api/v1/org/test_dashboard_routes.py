@@ -34,18 +34,12 @@ def test_stats_happy(
     admin_org_client: TestClient,
     setup_db_results: SetupDbResults,
 ) -> None:
-    """7 个独立 count 查询, 每个 .scalar() 返回数字."""
-    setup_db_results(
-        [
-            5,  # counselor_count
-            10,  # client_count
-            20,  # session_count
-            2,  # unassigned
-            3,  # group
-            4,  # course
-            7,  # assessment
-        ]
-    )
+    """优化后单 SQL 多 scalar subquery — 1 个 .first() 返回 7-tuple.
+
+    顺序: counselor, client, session, unassigned, group, course, assessment.
+    """
+    # 单 row, .first() 返 tuple-like (mock fixture 把 list 直接当 row 返)
+    setup_db_results([(5, 10, 20, 2, 3, 4, 7)])
     r = admin_org_client.get(f"/api/orgs/{_ORG_ID}/dashboard/stats")
     assert r.status_code == 200
     body = r.json()
@@ -62,10 +56,13 @@ def test_kpi_delta_default_month(
     admin_org_client: TestClient,
     setup_db_results: SetupDbResults,
 ) -> None:
-    """5 KPI × 2 windows = 10 个 count, FIFO 顺序: newClient.cur, newClient.prev,
-    session.cur, session.prev, group.cur, group.prev, course.cur, course.prev,
-    assessment.cur, assessment.prev (与 router._kpi_pair 调用顺序一致)."""
-    setup_db_results([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+    """5 KPI × 2 windows = 10 个 count. 优化后单 SQL → 1 row 10-tuple.
+
+    顺序: newClient.cur, newClient.prev, session.cur, session.prev,
+          groupActive.cur, groupActive.prev, courseActive.cur, courseActive.prev,
+          assessment.cur, assessment.prev (与 router._KPI_KINDS 顺序一致).
+    """
+    setup_db_results([(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)])
     r = admin_org_client.get(f"/api/orgs/{_ORG_ID}/dashboard/kpi-delta")
     assert r.status_code == 200
     body = r.json()
@@ -79,7 +76,7 @@ def test_kpi_delta_week_window(
     admin_org_client: TestClient,
     setup_db_results: SetupDbResults,
 ) -> None:
-    setup_db_results([0] * 10)
+    setup_db_results([(0,) * 10])
     r = admin_org_client.get(f"/api/orgs/{_ORG_ID}/dashboard/kpi-delta?window=week")
     assert r.status_code == 200
     body = r.json()
