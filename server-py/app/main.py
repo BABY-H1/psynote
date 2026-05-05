@@ -21,6 +21,21 @@ from typing import Any
 
 from fastapi import FastAPI
 
+# Phase 3 Tier 4 imports (admin / ai / ai_credentials + 9 后台模块)
+from app.api.v1.admin import dashboard_router as admin_dashboard_router
+from app.api.v1.admin import library_router as admin_library_router
+from app.api.v1.admin import license_router as admin_license_router
+from app.api.v1.admin import router as admin_router
+from app.api.v1.admin import tenant_router as admin_tenant_router
+from app.api.v1.ai import assessment_router as ai_assessment_router
+from app.api.v1.ai import course_authoring_router as ai_course_authoring_router
+from app.api.v1.ai import group_schemes_router as ai_group_schemes_router
+from app.api.v1.ai import router as ai_router
+from app.api.v1.ai import scales_material_router as ai_scales_material_router
+from app.api.v1.ai import templates_router as ai_templates_router
+from app.api.v1.ai import treatment_router as ai_treatment_router
+from app.api.v1.ai_credentials import org_router as ai_credentials_org_router
+from app.api.v1.ai_credentials import system_router as ai_credentials_system_router
 from app.api.v1.assessment import (
     batch_router as assessment_batch_router,
 )
@@ -44,6 +59,9 @@ from app.api.v1.auth import router as auth_router
 
 # Phase 3 Tier 3 imports (counseling / eap / school / client_portal / parent_binding)
 from app.api.v1.client_portal import router as client_portal_router
+from app.api.v1.collaboration import router as collaboration_router
+from app.api.v1.compliance import consent_router as compliance_consent_router
+from app.api.v1.compliance import review_router as compliance_review_router
 from app.api.v1.content_block import router as content_block_router
 from app.api.v1.counseling import (
     ai_conversation_router,
@@ -75,6 +93,9 @@ from app.api.v1.course import (
     public_enroll_router as course_public_enroll_router,
 )
 from app.api.v1.course import router as course_router
+from app.api.v1.crisis import router as crisis_router
+from app.api.v1.delivery import person_archive_router as delivery_person_archive_router
+from app.api.v1.delivery import router as delivery_router
 from app.api.v1.eap import analytics_router as eap_analytics_router
 from app.api.v1.eap import assignment_router as eap_assignment_router
 from app.api.v1.eap import partnership_router as eap_partnership_router
@@ -83,6 +104,7 @@ from app.api.v1.enrollment_response import (
     client_router as enrollment_response_client_router,
 )
 from app.api.v1.enrollment_response import router as enrollment_response_router
+from app.api.v1.follow_up import router as follow_up_router
 from app.api.v1.group import (
     enrollment_router as group_enrollment_router,
 )
@@ -115,11 +137,15 @@ from app.api.v1.org import router as org_router
 from app.api.v1.parent_binding import admin_router as parent_binding_admin_router
 from app.api.v1.parent_binding import portal_children_router
 from app.api.v1.parent_binding import public_router as parent_binding_public_router
+from app.api.v1.referral import public_router as referral_public_router
+from app.api.v1.referral import router as referral_router
 from app.api.v1.school import analytics_router as school_analytics_router
 from app.api.v1.school import class_router as school_class_router
 from app.api.v1.school import student_router as school_student_router
+from app.api.v1.triage import router as triage_router
 from app.api.v1.upload import router as upload_router
 from app.api.v1.user import router as user_router
+from app.api.v1.workflow import router as workflow_router
 from app.core.config import get_settings
 from app.middleware.error_handler import register_error_handlers
 
@@ -449,6 +475,92 @@ def create_app() -> FastAPI:
         parent_binding_public_router,
         prefix="/api/public/parent-bind",
         tags=["parent-binding-public"],
+    )
+
+    # ─── Phase 3 Tier 4: admin 后台 (5 sub-routers, system_admin) ───
+    # 镜像 Node app.ts:239-243
+    fastapi_app.include_router(admin_router, prefix="/api/admin", tags=["admin"])
+    fastapi_app.include_router(
+        admin_dashboard_router, prefix="/api/admin/dashboard", tags=["admin"]
+    )
+    fastapi_app.include_router(admin_library_router, prefix="/api/admin/library", tags=["admin"])
+    fastapi_app.include_router(admin_license_router, prefix="/api/admin/licenses", tags=["admin"])
+    fastapi_app.include_router(admin_tenant_router, prefix="/api/admin/tenants", tags=["admin"])
+
+    # ─── Phase 3 Tier 4: ai (BYOK 关键, 7 sub-routers + 2 ai_credentials) ───
+    # 镜像 Node app.ts:177 (单 aiRoutes, Python 拆 7 个 sub 同 prefix)
+    fastapi_app.include_router(ai_router, prefix="/api/orgs/{org_id}/ai", tags=["ai"])
+    fastapi_app.include_router(ai_assessment_router, prefix="/api/orgs/{org_id}/ai", tags=["ai"])
+    fastapi_app.include_router(ai_treatment_router, prefix="/api/orgs/{org_id}/ai", tags=["ai"])
+    fastapi_app.include_router(ai_templates_router, prefix="/api/orgs/{org_id}/ai", tags=["ai"])
+    fastapi_app.include_router(
+        ai_scales_material_router, prefix="/api/orgs/{org_id}/ai", tags=["ai"]
+    )
+    fastapi_app.include_router(
+        ai_course_authoring_router, prefix="/api/orgs/{org_id}/ai", tags=["ai"]
+    )
+    fastapi_app.include_router(ai_group_schemes_router, prefix="/api/orgs/{org_id}/ai", tags=["ai"])
+    # ai_credentials BYOK CRUD (system_admin + org_admin)
+    fastapi_app.include_router(
+        ai_credentials_system_router,
+        prefix="/api/ai-credentials",
+        tags=["ai-credentials"],
+    )
+    fastapi_app.include_router(
+        ai_credentials_org_router,
+        prefix="/api/orgs/{org_id}/ai-credentials",
+        tags=["ai-credentials"],
+    )
+
+    # ─── Phase 3 Tier 4: 后台业务模块 ───
+    # crisis (镜像 Node app.ts:260)
+    fastapi_app.include_router(crisis_router, prefix="/api/orgs/{org_id}/crisis", tags=["crisis"])
+    # workflow (镜像 Node app.ts:259)
+    fastapi_app.include_router(
+        workflow_router, prefix="/api/orgs/{org_id}/workflow", tags=["workflow"]
+    )
+    # triage (镜像 Node app.ts:261)
+    fastapi_app.include_router(triage_router, prefix="/api/orgs/{org_id}/triage", tags=["triage"])
+    # collaboration (镜像 Node app.ts:258)
+    fastapi_app.include_router(
+        collaboration_router,
+        prefix="/api/orgs/{org_id}/collaboration",
+        tags=["collaboration"],
+    )
+    # compliance (consent + review, 镜像 Node app.ts:217-218)
+    fastapi_app.include_router(
+        compliance_consent_router,
+        prefix="/api/orgs/{org_id}/compliance",
+        tags=["compliance"],
+    )
+    fastapi_app.include_router(
+        compliance_review_router,
+        prefix="/api/orgs/{org_id}/compliance",
+        tags=["compliance"],
+    )
+    # delivery + person-archive (镜像 Node app.ts:196 + :198, 都 root /api/orgs/{org_id})
+    fastapi_app.include_router(delivery_router, prefix="/api/orgs/{org_id}", tags=["delivery"])
+    fastapi_app.include_router(
+        delivery_person_archive_router,
+        prefix="/api/orgs/{org_id}",
+        tags=["delivery"],
+    )
+    # follow-up (镜像 Node app.ts:174)
+    fastapi_app.include_router(
+        follow_up_router,
+        prefix="/api/orgs/{org_id}/follow-up",
+        tags=["follow-up"],
+    )
+    # referral (镜像 Node app.ts:173 + :255 公开)
+    fastapi_app.include_router(
+        referral_router,
+        prefix="/api/orgs/{org_id}/referrals",
+        tags=["referral"],
+    )
+    fastapi_app.include_router(
+        referral_public_router,
+        prefix="/api/public/referrals",
+        tags=["referral-public"],
     )
 
     @fastapi_app.get("/health", tags=["meta"])

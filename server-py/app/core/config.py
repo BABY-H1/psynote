@@ -58,6 +58,14 @@ class Settings(BaseSettings):
     CLIENT_URL: str = "http://localhost:5173"
     PUBLIC_BASE_URL: str | None = None
 
+    # ─── BYOK (Bring-Your-Own-Key) AES-256-GCM 主密钥 ─────────────
+    # Phase 3 Tier 4 引入 — ai_credentials 表存储的 API key 用此密钥加密。
+    # 32 bytes base64 编码; production 必须改默认值 (运维生成):
+    #   python -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
+    # dev 默认值 (32 bytes "psynote-dev-master-key-not-for-prod" base64) 仅供本地开发 / unit test。
+    # production 启动期硬约束在 app/lib/crypto.py 的 _load_master_key (强制非默认 + 长度校验)。
+    KEY_ENCRYPTION_KEY: str = "cHN5bm90ZS1kZXYtbWFzdGVyLWtleS0zMi1ieXRlcyE="
+
     # ─── SMTP (production 启动硬约束在 lib/mailer.py, 这里只做声明) ──
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587

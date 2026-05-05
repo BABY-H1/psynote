@@ -77,3 +77,18 @@ class ConflictError(AppError):
 
     def __init__(self, message: str) -> None:
         super().__init__(status_code=409, message=message, code="CONFLICT")
+
+
+class PHIComplianceError(AppError):
+    """403 — PHI 合规拦截 (出境同意未声明 / 数据驻留校验失败)。
+
+    Phase 3 Tier 4 BYOK 引入: 当 ``ai_credentials.data_residency='global'`` 但 org
+    的 settings.consentsToPhiExport 不为 True 时, ``resolve_ai_credential`` 直接抛
+    此异常拒绝调用。这个 error 不该静默退到 platform 默认 (因为 platform 默认本身
+    可能也是 global), 必须由 org admin 显式声明出境同意。
+    """
+
+    def __init__(
+        self, message: str = "PHI cross-border export not consented by organization"
+    ) -> None:
+        super().__init__(status_code=403, message=message, code="PHI_COMPLIANCE_ERROR")
