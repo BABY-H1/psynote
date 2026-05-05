@@ -22,6 +22,23 @@ from typing import Any
 from fastapi import FastAPI
 
 from app.api.v1.auth import router as auth_router
+from app.api.v1.content_block import router as content_block_router
+from app.api.v1.notification import (
+    public_appointments_router,
+    reminder_settings_router,
+)
+from app.api.v1.notification import router as notification_router
+from app.api.v1.org import (
+    branding_router,
+    dashboard_router,
+    intake_router,
+    license_router,
+    public_services_router,
+    subscription_router,
+)
+from app.api.v1.org import router as org_router
+from app.api.v1.upload import router as upload_router
+from app.api.v1.user import router as user_router
 from app.core.config import get_settings
 from app.middleware.error_handler import register_error_handlers
 
@@ -65,6 +82,73 @@ def create_app() -> FastAPI:
     # ─── Phase 3 routers ─────────────────────────────────────
     # 路径前缀 /api/auth 与 Node 一致, Caddy /api/* → app-py 切流时 0 改动。
     fastapi_app.include_router(auth_router, prefix="/api/auth", tags=["auth"])
+    # /api/users — 自服务用户 (镜像 Node app.ts:149)
+    fastapi_app.include_router(user_router, prefix="/api/users", tags=["user"])
+    # /api/orgs/{org_id}/upload — org-scoped 文件上传 (镜像 Node app.ts:214)
+    fastapi_app.include_router(upload_router, prefix="/api/orgs/{org_id}/upload", tags=["upload"])
+    # /api/orgs/{org_id}/content-blocks — 内容块 CRUD (镜像 Node app.ts:250)
+    fastapi_app.include_router(
+        content_block_router,
+        prefix="/api/orgs/{org_id}/content-blocks",
+        tags=["content-block"],
+    )
+    # /api/orgs/{org_id}/notifications — 用户通知 (镜像 Node app.ts:221)
+    fastapi_app.include_router(
+        notification_router,
+        prefix="/api/orgs/{org_id}/notifications",
+        tags=["notification"],
+    )
+    # /api/orgs/{org_id}/reminder-settings — 机构级提醒配置 (镜像 Node app.ts:224)
+    fastapi_app.include_router(
+        reminder_settings_router,
+        prefix="/api/orgs/{org_id}/reminder-settings",
+        tags=["notification"],
+    )
+    # /api/public/appointments — 邮件链接 confirm/cancel (无 auth, 镜像 Node app.ts:227)
+    fastapi_app.include_router(
+        public_appointments_router,
+        prefix="/api/public/appointments",
+        tags=["notification"],
+    )
+    # ─── Org module (6 sub-routers, 与 Node app.ts:150 / 201 / 203 / 205 / 207 / 209 / 211 对齐) ─
+    # /api/orgs — org CRUD + members + triage (镜像 Node app.ts:150)
+    fastapi_app.include_router(org_router, prefix="/api/orgs", tags=["org"])
+    # /api/orgs/{org_id}/branding — 品牌 (镜像 Node app.ts:201)
+    fastapi_app.include_router(
+        branding_router,
+        prefix="/api/orgs/{org_id}/branding",
+        tags=["org-branding"],
+    )
+    # /api/orgs/{org_id}/subscription + /ai-usage (镜像 Node app.ts:203)
+    fastapi_app.include_router(
+        subscription_router,
+        prefix="/api/orgs/{org_id}",
+        tags=["org-subscription"],
+    )
+    # /api/orgs/{org_id}/license — 激活/移除 license (镜像 Node app.ts:205)
+    fastapi_app.include_router(
+        license_router,
+        prefix="/api/orgs/{org_id}/license",
+        tags=["org-license"],
+    )
+    # /api/orgs/{org_id}/dashboard/{stats,kpi-delta} (镜像 Node app.ts:207)
+    fastapi_app.include_router(
+        dashboard_router,
+        prefix="/api/orgs/{org_id}/dashboard",
+        tags=["org-dashboard"],
+    )
+    # /api/orgs/{org_id}/service-intakes — 已认证 intake 列表 + 分配 (镜像 Node app.ts:209)
+    fastapi_app.include_router(
+        intake_router,
+        prefix="/api/orgs/{org_id}/service-intakes",
+        tags=["org-intake"],
+    )
+    # /api/public — 公开 services + intake submit (无 auth, 镜像 Node app.ts:211)
+    fastapi_app.include_router(
+        public_services_router,
+        prefix="/api/public",
+        tags=["org-public"],
+    )
 
     @fastapi_app.get("/health", tags=["meta"])
     async def health() -> dict[str, Any]:
