@@ -41,7 +41,24 @@ from app.api.v1.assessment import (
     scale_router as assessment_scale_router,
 )
 from app.api.v1.auth import router as auth_router
+
+# Phase 3 Tier 3 imports (counseling / eap / school / client_portal / parent_binding)
+from app.api.v1.client_portal import router as client_portal_router
 from app.api.v1.content_block import router as content_block_router
+from app.api.v1.counseling import (
+    ai_conversation_router,
+    appointment_router,
+    availability_router,
+    client_access_grant_router,
+    client_assignment_router,
+    client_profile_router,
+    goal_library_router,
+    note_template_router,
+    session_note_router,
+    treatment_plan_router,
+)
+from app.api.v1.counseling import public_router as counseling_public_router
+from app.api.v1.counseling import router as counseling_episode_router
 from app.api.v1.course import (
     enrollment_router as course_enrollment_router,
 )
@@ -58,6 +75,10 @@ from app.api.v1.course import (
     public_enroll_router as course_public_enroll_router,
 )
 from app.api.v1.course import router as course_router
+from app.api.v1.eap import analytics_router as eap_analytics_router
+from app.api.v1.eap import assignment_router as eap_assignment_router
+from app.api.v1.eap import partnership_router as eap_partnership_router
+from app.api.v1.eap import public_router as eap_public_router
 from app.api.v1.enrollment_response import (
     client_router as enrollment_response_client_router,
 )
@@ -91,6 +112,12 @@ from app.api.v1.org import (
     subscription_router,
 )
 from app.api.v1.org import router as org_router
+from app.api.v1.parent_binding import admin_router as parent_binding_admin_router
+from app.api.v1.parent_binding import portal_children_router
+from app.api.v1.parent_binding import public_router as parent_binding_public_router
+from app.api.v1.school import analytics_router as school_analytics_router
+from app.api.v1.school import class_router as school_class_router
+from app.api.v1.school import student_router as school_student_router
 from app.api.v1.upload import router as upload_router
 from app.api.v1.user import router as user_router
 from app.core.config import get_settings
@@ -310,6 +337,118 @@ def create_app() -> FastAPI:
         enrollment_response_client_router,
         prefix="/api/orgs/{org_id}/client/enrollment-responses",
         tags=["enrollment-response"],
+    )
+
+    # ─── Phase 3 Tier 3: Counseling module (12 sub-routers) ───
+    # 镜像 Node app.ts:164-172 + :246-247 + :270 公开注册
+    fastapi_app.include_router(
+        counseling_episode_router,
+        prefix="/api/orgs/{org_id}/episodes",
+        tags=["counseling"],
+    )
+    fastapi_app.include_router(
+        appointment_router, prefix="/api/orgs/{org_id}/appointments", tags=["counseling"]
+    )
+    fastapi_app.include_router(
+        availability_router, prefix="/api/orgs/{org_id}/availability", tags=["counseling"]
+    )
+    fastapi_app.include_router(
+        session_note_router, prefix="/api/orgs/{org_id}/session-notes", tags=["counseling"]
+    )
+    fastapi_app.include_router(
+        note_template_router, prefix="/api/orgs/{org_id}/note-templates", tags=["counseling"]
+    )
+    fastapi_app.include_router(
+        goal_library_router, prefix="/api/orgs/{org_id}/goal-library", tags=["counseling"]
+    )
+    fastapi_app.include_router(
+        client_profile_router, prefix="/api/orgs/{org_id}/clients", tags=["counseling"]
+    )
+    fastapi_app.include_router(
+        treatment_plan_router, prefix="/api/orgs/{org_id}/treatment-plans", tags=["counseling"]
+    )
+    fastapi_app.include_router(
+        ai_conversation_router,
+        prefix="/api/orgs/{org_id}/ai-conversations",
+        tags=["counseling"],
+    )
+    fastapi_app.include_router(
+        client_assignment_router,
+        prefix="/api/orgs/{org_id}/client-assignments",
+        tags=["counseling"],
+    )
+    fastapi_app.include_router(
+        client_access_grant_router,
+        prefix="/api/orgs/{org_id}/client-access-grants",
+        tags=["counseling"],
+    )
+    fastapi_app.include_router(
+        counseling_public_router,
+        prefix="/api/public/counseling",
+        tags=["counseling-public"],
+    )
+
+    # ─── Phase 3 Tier 3: EAP module (4 routers) ───
+    # 镜像 Node app.ts:266-269
+    fastapi_app.include_router(
+        eap_partnership_router,
+        prefix="/api/orgs/{org_id}/eap/partnerships",
+        tags=["eap"],
+    )
+    fastapi_app.include_router(
+        eap_assignment_router,
+        prefix="/api/orgs/{org_id}/eap/assignments",
+        tags=["eap"],
+    )
+    fastapi_app.include_router(
+        eap_analytics_router,
+        prefix="/api/orgs/{org_id}/eap/analytics",
+        tags=["eap"],
+    )
+    fastapi_app.include_router(eap_public_router, prefix="/api/public/eap", tags=["eap-public"])
+
+    # ─── Phase 3 Tier 3: School module (3 routers) ───
+    # 镜像 Node app.ts:273-275
+    fastapi_app.include_router(
+        school_class_router,
+        prefix="/api/orgs/{org_id}/school/classes",
+        tags=["school"],
+    )
+    fastapi_app.include_router(
+        school_student_router,
+        prefix="/api/orgs/{org_id}/school/students",
+        tags=["school"],
+    )
+    fastapi_app.include_router(
+        school_analytics_router,
+        prefix="/api/orgs/{org_id}/school/analytics",
+        tags=["school"],
+    )
+
+    # ─── Phase 3 Tier 3: Client portal (1 主 router 含 9 sub-router 聚合) ───
+    # 镜像 Node app.ts:236
+    fastapi_app.include_router(
+        client_portal_router,
+        prefix="/api/orgs/{org_id}/client",
+        tags=["client-portal"],
+    )
+
+    # ─── Phase 3 Tier 3: Parent binding (3 routers) ───
+    # 镜像 Node app.ts:278-280
+    fastapi_app.include_router(
+        parent_binding_admin_router,
+        prefix="/api/orgs/{org_id}/school/classes/{class_id}/parent-invite-tokens",
+        tags=["parent-binding"],
+    )
+    fastapi_app.include_router(
+        portal_children_router,
+        prefix="/api/orgs/{org_id}/client/children",
+        tags=["parent-binding"],
+    )
+    fastapi_app.include_router(
+        parent_binding_public_router,
+        prefix="/api/public/parent-bind",
+        tags=["parent-binding-public"],
     )
 
     @fastapi_app.get("/health", tags=["meta"])
