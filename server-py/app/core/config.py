@@ -66,12 +66,34 @@ class Settings(BaseSettings):
     # production 启动期硬约束在 app/lib/crypto.py 的 _load_master_key (强制非默认 + 长度校验)。
     KEY_ENCRYPTION_KEY: str = "cHN5bm90ZS1kZXYtbWFzdGVyLWtleS0zMi1ieXRlcyE="
 
-    # ─── SMTP (production 启动硬约束在 lib/mailer.py, 这里只做声明) ──
+    # ─── SMTP (Phase 4 — aiosmtplib 真发邮件) ─────────────────────
+    # Node 端 nodemailer 用同一组 env (SMTP_HOST/PORT/USER/PASS/FROM), Python
+    # aiosmtplib 严格 1:1 兼容; SMTP_DEV_MODE=True 时仅 logger 不真连 SMTP
+    # (default 适用于 unit test / local dev, production docker-compose 显式
+    # SMTP_DEV_MODE=false + 提供 SMTP_HOST/USER/PASS)。
     SMTP_HOST: str | None = None
     SMTP_PORT: int = 587
     SMTP_USER: str | None = None
     SMTP_PASS: str | None = None
-    SMTP_FROM: str | None = None
+    SMTP_FROM: str = "noreply@psynote.com"
+    SMTP_USE_TLS: bool = True  # STARTTLS upgrade (587 standard); False = 25 plain
+    SMTP_DEV_MODE: bool = True  # True → logger.info only (skip real send)
+
+    # ─── Celery / job queues (Phase 4 — 替代 Node BullMQ) ─────────
+    # Worker / Beat 走独立 docker-compose service, FastAPI app 不启动 Celery
+    # worker (避免 import-time Redis socket); 此处仅声明 broker/backend URL,
+    # CELERY_BROKER_URL 留空时 fall back to REDIS_URL (与 Node 行为一致)。
+    CELERY_BROKER_URL: str | None = None
+    CELERY_RESULT_BACKEND: str | None = None
+
+    @property
+    def effective_celery_broker(self) -> str:
+        """优先 CELERY_BROKER_URL, 否则 REDIS_URL — 与 Node app.ts 行为一致。"""
+        return self.CELERY_BROKER_URL or self.REDIS_URL
+
+    @property
+    def effective_celery_backend(self) -> str:
+        return self.CELERY_RESULT_BACKEND or self.effective_celery_broker
 
 
 @lru_cache

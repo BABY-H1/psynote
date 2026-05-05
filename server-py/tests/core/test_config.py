@@ -153,7 +153,14 @@ def test_optional_fields_default_none(base_env: pytest.MonkeyPatch) -> None:
     assert settings.SMTP_HOST is None
     assert settings.SMTP_USER is None
     assert settings.SMTP_PASS is None
-    assert settings.SMTP_FROM is None
+    # Phase 4: SMTP_FROM 有非空默认值 (noreply@psynote.com), 用于 dev 模式
+    # logger 输出 "From: ..." 时仍可读. 可选字段语义保留: 不强制要 env。
+    assert settings.SMTP_FROM == "noreply@psynote.com"
+    # Phase 4 新加字段默认值
+    assert settings.SMTP_USE_TLS is True
+    assert settings.SMTP_DEV_MODE is True
+    assert settings.CELERY_BROKER_URL is None
+    assert settings.CELERY_RESULT_BACKEND is None
 
 
 def test_optional_fields_set_when_provided(base_env: pytest.MonkeyPatch) -> None:
@@ -166,6 +173,41 @@ def test_optional_fields_set_when_provided(base_env: pytest.MonkeyPatch) -> None
     assert settings.AI_API_KEY == "sk-test-123"
     assert settings.SMTP_HOST == "smtp.example.com"
     assert settings.SMTP_USER == "noreply@example.com"
+
+
+# ─── Phase 4: Celery effective broker fallback ──────────────────
+
+
+def test_celery_broker_falls_back_to_redis_url(base_env: pytest.MonkeyPatch) -> None:
+    """CELERY_BROKER_URL 不设 时 effective_celery_broker == REDIS_URL (与 Node BullMQ 行为一致)。"""
+    base_env.setenv("REDIS_URL", "redis://r:6379/3")
+    from app.core.config import Settings
+
+    settings = Settings(_env_file=None)
+    assert settings.CELERY_BROKER_URL is None
+    assert settings.effective_celery_broker == "redis://r:6379/3"
+    assert settings.effective_celery_backend == "redis://r:6379/3"
+
+
+def test_celery_broker_overrides_redis_url(base_env: pytest.MonkeyPatch) -> None:
+    """显式 CELERY_BROKER_URL 覆盖 REDIS_URL。"""
+    base_env.setenv("REDIS_URL", "redis://r:6379/0")
+    base_env.setenv("CELERY_BROKER_URL", "redis://celery-r:6379/2")
+    from app.core.config import Settings
+
+    settings = Settings(_env_file=None)
+    assert settings.effective_celery_broker == "redis://celery-r:6379/2"
+
+
+def test_celery_result_backend_independent(base_env: pytest.MonkeyPatch) -> None:
+    """CELERY_RESULT_BACKEND 可独立于 broker 设置。"""
+    base_env.setenv("CELERY_BROKER_URL", "redis://b:6379/1")
+    base_env.setenv("CELERY_RESULT_BACKEND", "redis://back:6379/9")
+    from app.core.config import Settings
+
+    settings = Settings(_env_file=None)
+    assert settings.effective_celery_broker == "redis://b:6379/1"
+    assert settings.effective_celery_backend == "redis://back:6379/9"
 
 
 # ─── get_settings() 缓存 ─────────────────────────────────────────

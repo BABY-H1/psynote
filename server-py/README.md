@@ -9,7 +9,7 @@
 - ⬜ Phase 1 — Auth + middleware 地基 (JWT/bcrypt 与 Node 互通)
 - ⬜ Phase 2 — DB schema (75 表 SQLAlchemy)
 - ⬜ Phase 3 — 26 模块批量翻译
-- ⬜ Phase 4 — Jobs + 集成 (Celery / WeasyPrint / aiosmtplib)
+- ✅ Phase 4 — Jobs + 集成 (Celery 3 队列 / WeasyPrint / aiosmtplib)
 - ⬜ Phase 5 — 安全审计重做
 - ⬜ Phase 6 — 生产对等 + 切流
 
@@ -49,6 +49,33 @@ uv run mypy app              # 类型检查 (strict)
 docker compose up app-py     # 起 Python 服务 (port 8001)
 docker compose logs -f app-py
 ```
+
+## Celery (Phase 4 — 任务队列)
+
+3 个 queue: `compliance` (合规巡检) / `reminders` (预约提醒) / `follow-up` (随访推送)。
+
+```bash
+# Worker — 一进程消费 3 个 queue (production 可拆 3 个进程独立 scale)
+uv run celery -A app.jobs.celery_app worker \
+    --loglevel=info \
+    --queues=compliance,reminders,follow-up
+
+# Beat — 定时调度 (每天 03:00 / 整点 / 每天 09:00)
+uv run celery -A app.jobs.celery_app beat --loglevel=info
+
+# 单元测试 — 用 CELERY_TASK_ALWAYS_EAGER=True 同步执行 (无 Redis 依赖)
+uv run pytest tests/jobs/
+```
+
+## 邮件 (aiosmtplib)
+
+`SMTP_DEV_MODE=true` (默认) 时仅 logger 输出, 不真发邮件 — 适合 dev/CI/单测。
+production 部署设 `SMTP_DEV_MODE=false` + 配 `SMTP_HOST/USER/PASS/FROM`。
+
+## PDF (WeasyPrint)
+
+Linux Docker 容器内含完整 GTK + cairo + fontconfig, 真实生成中文 PDF 无问题。
+Windows 本地开发若缺 GTK runtime, 单元测试用 mock 不依赖系统库。
 
 ## 技术栈映射 (vs Fastify Node 版)
 

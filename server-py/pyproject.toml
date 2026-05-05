@@ -128,6 +128,12 @@ warn_return_any = false
 module = ["weasyprint", "celery.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+# Celery 任务装饰器返回 Any (typeshed 不完整), 这层不强制 typed-decorator —
+# 任务体内部仍走 strict typing.
+module = ["app.jobs.*"]
+disable_error_code = ["untyped-decorator"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"

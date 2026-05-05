@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<h1>{{ title }}</h1>
+
+<div class="meta-grid">
+  <div class="meta-row">
+    <div class="meta-label">报告类型</div>
+    <div class="meta-value">{{ report_type_label }}</div>
+  </div>
+  <div class="meta-row">
+    <div class="meta-label">生成时间</div>
+    <div class="meta-value">{{ created_at|default("—", true) }}</div>
+  </div>
+  {% if participant_count is not none %}
+  <div class="meta-row">
+    <div class="meta-label">参与人数</div>
+    <div class="meta-value">{{ participant_count }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if dimension_stats %}
+<h2>维度统计</h2>
+<table class="scores">
+  <thead>
+    <tr><th>维度</th><th>均值</th><th>中位数</th><th>标准差</th><th>最小</th><th>最大</th></tr>
+  </thead>
+  <tbody>
+    {% for name, stats in dimension_stats.items() %}
+    <tr>
+      <td>{{ name }}</td>
+      <td>{{ stats.mean }}</td>
+      <td>{{ stats.median }}</td>
+      <td>{{ stats.stdDev }}</td>
+      <td>{{ stats.min }}</td>
+      <td>{{ stats.max }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if risk_distribution %}
+<h2>风险分布</h2>
+<table class="scores">
+  <thead><tr><th>等级</th><th>人数</th></tr></thead>
+  <tbody>
+    {% for level, count in risk_distribution.items() %}
+    <tr><td>{{ level }}</td><td>{{ count }}</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if interpretations %}
+<h2>个体解读</h2>
+<table class="scores">
+  <thead>
+    <tr><th>维度</th><th>得分</th><th>评级</th><th>建议</th></tr>
+  </thead>
+  <tbody>
+    {% for dim in interpretations %}
+    <tr>
+      <td>{{ dim.dimension }}</td>
+      <td>{{ dim.score }}</td>
+      <td>{{ dim.label|default('—', true) }}</td>
+      <td>{{ dim.advice|default('—', true) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if ai_narrative %}
+<h2>AI 报告综述</h2>
+<div class="narrative">{{ ai_narrative }}</div>
+{% endif %}
+
+{% if assessment_comparisons %}
+<h2>纵向对比</h2>
+{% for comp in assessment_comparisons %}
+<h3>{{ comp.assessmentId|default('Assessment', true) }}</h3>
+<table class="scores">
+  <thead>
+    <tr><th>参与人数</th><th>前测均值</th><th>后测均值</th><th>变化</th><th>Cohen's d</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>{{ comp.participantCount }}</td>
+      <td>{{ comp.preMean }}</td>
+      <td>{{ comp.postMean }}</td>
+      <td>{{ comp.meanChange }}</td>
+      <td>{{ comp.cohensD|default('—', true) }}</td>
+    </tr>
+  </tbody>
+</table>
+{% endfor %}
+{% endif %}
+{% endblock %}

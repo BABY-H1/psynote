@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block title %}测评结果 — {{ result_id }}{% endblock %}
+{% block content %}
+<h1>{{ assessment_title|default("测评结果", true) }}</h1>
+
+<div class="meta-grid">
+  <div class="meta-row">
+    <div class="meta-label">受测者</div>
+    <div class="meta-value">{{ user_name|default("(匿名)", true) }}</div>
+  </div>
+  <div class="meta-row">
+    <div class="meta-label">测评 ID</div>
+    <div class="meta-value">{{ result_id }}</div>
+  </div>
+  <div class="meta-row">
+    <div class="meta-label">完成时间</div>
+    <div class="meta-value">{{ created_at|default("—", true) }}</div>
+  </div>
+  {% if total_score is not none %}
+  <div class="meta-row">
+    <div class="meta-label">总分</div>
+    <div class="meta-value">{{ total_score }}</div>
+  </div>
+  {% endif %}
+  {% if risk_level %}
+  <div class="meta-row">
+    <div class="meta-label">风险等级</div>
+    <div class="meta-value risk-{{ risk_class }}">{{ risk_level }}</div>
+  </div>
+  {% endif %}
+</div>
+
+{% if interpretations %}
+<h2>维度解读</h2>
+<table class="scores">
+  <thead>
+    <tr><th>维度</th><th>得分</th><th>评级</th><th>建议</th></tr>
+  </thead>
+  <tbody>
+    {% for dim in interpretations %}
+    <tr>
+      <td>{{ dim.dimension }}</td>
+      <td>{{ dim.score }}</td>
+      <td class="risk-{{ dim.risk_class|default('medium', true) }}">{{ dim.label|default('—', true) }}</td>
+      <td>{{ dim.advice|default('—', true) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+{% if ai_interpretation %}
+<h2>AI 解读</h2>
+<div class="narrative">{{ ai_interpretation }}</div>
+{% endif %}
+{% endblock %}

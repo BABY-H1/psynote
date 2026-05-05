@@ -46,6 +46,32 @@ def _assessment_test_env(base_env: pytest.MonkeyPatch) -> None:
     base_env.setenv("NODE_ENV", "test")
 
 
+# Phase 4: WeasyPrint 在 Windows dev 机器缺 GTK runtime 时 ``write_pdf`` 抛 OSError.
+# 单元测试一律 mock _html_to_pdf_bytes — 让 report_router PDF 路径走 happy path 而不
+# 触真 WeasyPrint. production Linux docker 容器有完整 GTK + cairo + fontconfig,
+# 真实生成无问题. 测试此函数本身的真生成在 tests/api/v1/assessment/test_pdf_service.py
+# 用 explicit fixture 覆盖.
+_FAKE_PDF_BYTES = b"%PDF-1.4\n%mock-pdf\n%%EOF\n"
+
+
+@pytest.fixture(autouse=True)
+def _mock_pdf_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
+    """所有 assessment 测试默认走 mock PDF (避开 WeasyPrint GTK 依赖).
+
+    需要测真生成 (验证 HTML 渲染) 的测试在 test_pdf_service.py 自己再 monkeypatch
+    回真函数, 或显式 patch 让 _html_to_pdf_bytes 直接返回 fake bytes.
+    """
+    import importlib
+
+    pdf_mod = importlib.import_module("app.api.v1.assessment.pdf_service")
+
+    def _fake_pdf(html: str) -> bytes:
+        # 简单返一个合法 PDF magic 开头的 bytes — 让 router 测试 ``startswith(b"%PDF-")`` 等通过.
+        return _FAKE_PDF_BYTES
+
+    monkeypatch.setattr(pdf_mod, "_html_to_pdf_bytes", _fake_pdf)
+
+
 def _make_query_result(row: Any) -> MagicMock:
     """构造 mock SQLAlchemy Result, 兼容多种消费形式."""
     result = MagicMock()

@@ -81,10 +81,10 @@ async def test_w2_9_valid_token_nullifies_before_resolve(make_referral: Any) -> 
     )
 
     # 即使后续 resolve 抛, 也不影响 nullify 已经发生的核心断言
-    try:
+    import contextlib
+
+    with contextlib.suppress(Exception):
         await get_by_download_token(db, "tok-abc")
-    except Exception:
-        pass
 
     # 关键: download_token 已被 nullify
     assert referral.download_token is None
@@ -161,10 +161,10 @@ async def test_w2_9_two_consecutive_downloads_second_fails(make_referral: Any) -
 
     # 第一次 download (4 次 SELECT — token / resolve referral / episode / user)
     db1 = _mock_db_with_results([referral, referral, None, None])
-    try:
+    import contextlib
+
+    with contextlib.suppress(Exception):
         await get_by_download_token(db1, "tok-shared")
-    except Exception:
-        pass
     assert referral.download_token is None  # 已失效
 
     # 第二次 download — token 不再匹配任何行

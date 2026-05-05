@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}Psynote 报告{% endblock %}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 18mm 16mm;
+      @bottom-center {
+        content: counter(page) " / " counter(pages);
+        font-size: 9pt;
+        color: #6b7280;
+      }
+    }
+    body {
+      font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans CJK SC", "Helvetica Neue", Arial, sans-serif;
+      font-size: 11pt;
+      color: #1f2937;
+      line-height: 1.55;
+      margin: 0;
+    }
+    h1 { font-size: 18pt; color: #111827; margin: 0 0 4mm 0; }
+    h2 { font-size: 13pt; color: #1f2937; margin: 8mm 0 2mm 0; border-bottom: 1px solid #e5e7eb; padding-bottom: 2mm; }
+    h3 { font-size: 11pt; color: #374151; margin: 4mm 0 2mm 0; }
+    .meta-grid {
+      display: table;
+      width: 100%;
+      margin: 4mm 0;
+      font-size: 10pt;
+      color: #4b5563;
+    }
+    .meta-row { display: table-row; }
+    .meta-label { display: table-cell; width: 30%; padding: 1.5mm 0; color: #6b7280; }
+    .meta-value { display: table-cell; padding: 1.5mm 0; color: #111827; }
+    table.scores {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 3mm 0 6mm 0;
+      font-size: 10pt;
+    }
+    table.scores th, table.scores td {
+      border: 1px solid #e5e7eb;
+      padding: 2mm 3mm;
+      text-align: left;
+    }
+    table.scores th { background: #f3f4f6; font-weight: 600; }
+    .risk-low    { color: #059669; }
+    .risk-medium { color: #d97706; }
+    .risk-high   { color: #dc2626; font-weight: 600; }
+    .narrative {
+      background: #f9fafb;
+      border-left: 3px solid #4f46e5;
+      padding: 4mm 5mm;
+      margin: 4mm 0;
+      font-size: 10.5pt;
+      white-space: pre-wrap;
+    }
+    .footer-note {
+      margin-top: 10mm;
+      font-size: 9pt;
+      color: #9ca3af;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+  {% block content %}{% endblock %}
+  <div class="footer-note">本报告由 Psynote 心理服务管理平台生成 · 仅供专业人员使用</div>
+</body>
+</html>
