@@ -21,8 +21,62 @@ from typing import Any
 
 from fastapi import FastAPI
 
+from app.api.v1.assessment import (
+    batch_router as assessment_batch_router,
+)
+from app.api.v1.assessment import (
+    distribution_router as assessment_distribution_router,
+)
+from app.api.v1.assessment import (
+    public_result_router,
+)
+from app.api.v1.assessment import (
+    report_router as assessment_report_router,
+)
+from app.api.v1.assessment import (
+    result_router as assessment_result_router,
+)
+from app.api.v1.assessment import router as assessment_router
+from app.api.v1.assessment import (
+    scale_router as assessment_scale_router,
+)
 from app.api.v1.auth import router as auth_router
 from app.api.v1.content_block import router as content_block_router
+from app.api.v1.course import (
+    enrollment_router as course_enrollment_router,
+)
+from app.api.v1.course import (
+    feedback_router as course_feedback_router,
+)
+from app.api.v1.course import (
+    homework_router as course_homework_router,
+)
+from app.api.v1.course import (
+    instance_router as course_instance_router,
+)
+from app.api.v1.course import (
+    public_enroll_router as course_public_enroll_router,
+)
+from app.api.v1.course import router as course_router
+from app.api.v1.enrollment_response import (
+    client_router as enrollment_response_client_router,
+)
+from app.api.v1.enrollment_response import router as enrollment_response_router
+from app.api.v1.group import (
+    enrollment_router as group_enrollment_router,
+)
+from app.api.v1.group import (
+    instance_router as group_instance_router,
+)
+from app.api.v1.group import (
+    public_enroll_router as group_public_enroll_router,
+)
+from app.api.v1.group import (
+    scheme_router as group_scheme_router,
+)
+from app.api.v1.group import (
+    session_router as group_session_router,
+)
 from app.api.v1.notification import (
     public_appointments_router,
     reminder_settings_router,
@@ -148,6 +202,114 @@ def create_app() -> FastAPI:
         public_services_router,
         prefix="/api/public",
         tags=["org-public"],
+    )
+
+    # ─── Phase 3 Tier 2: Course module (6 sub-routers) ───────
+    # 镜像 Node app.ts:189-193 + :233 公开报名
+    fastapi_app.include_router(course_router, prefix="/api/orgs/{org_id}/courses", tags=["course"])
+    fastapi_app.include_router(
+        course_instance_router,
+        prefix="/api/orgs/{org_id}/course-instances",
+        tags=["course"],
+    )
+    fastapi_app.include_router(
+        course_enrollment_router,
+        prefix="/api/orgs/{org_id}/course-instances",
+        tags=["course"],
+    )
+    fastapi_app.include_router(
+        course_feedback_router,
+        prefix="/api/orgs/{org_id}/course-instances",
+        tags=["course"],
+    )
+    fastapi_app.include_router(
+        course_homework_router,
+        prefix="/api/orgs/{org_id}/course-instances",
+        tags=["course"],
+    )
+    fastapi_app.include_router(
+        course_public_enroll_router,
+        prefix="/api/public/courses",
+        tags=["course-public"],
+    )
+
+    # ─── Phase 3 Tier 2: Group module (5 sub-routers) ────────
+    # 镜像 Node app.ts:183-186 + :230 公开报名
+    fastapi_app.include_router(
+        group_scheme_router,
+        prefix="/api/orgs/{org_id}/group-schemes",
+        tags=["group"],
+    )
+    fastapi_app.include_router(
+        group_instance_router,
+        prefix="/api/orgs/{org_id}/group-instances",
+        tags=["group"],
+    )
+    fastapi_app.include_router(
+        group_enrollment_router,
+        prefix="/api/orgs/{org_id}/group-instances",
+        tags=["group"],
+    )
+    fastapi_app.include_router(
+        group_session_router,
+        prefix="/api/orgs/{org_id}/group-instances",
+        tags=["group"],
+    )
+    fastapi_app.include_router(
+        group_public_enroll_router,
+        prefix="/api/public/groups",
+        tags=["group-public"],
+    )
+
+    # ─── Phase 3 Tier 2: Assessment module (7 sub-routers) ───
+    # 镜像 Node app.ts:153-158 + :161 公开匿名提交
+    fastapi_app.include_router(
+        assessment_router,
+        prefix="/api/orgs/{org_id}/assessments",
+        tags=["assessment"],
+    )
+    fastapi_app.include_router(
+        assessment_scale_router,
+        prefix="/api/orgs/{org_id}/scales",
+        tags=["assessment"],
+    )
+    fastapi_app.include_router(
+        assessment_result_router,
+        prefix="/api/orgs/{org_id}/results",
+        tags=["assessment"],
+    )
+    fastapi_app.include_router(
+        assessment_batch_router,
+        prefix="/api/orgs/{org_id}/assessment-batches",
+        tags=["assessment"],
+    )
+    fastapi_app.include_router(
+        assessment_report_router,
+        prefix="/api/orgs/{org_id}/reports",
+        tags=["assessment"],
+    )
+    fastapi_app.include_router(
+        assessment_distribution_router,
+        prefix="/api/orgs/{org_id}/assessments/{assessment_id}/distributions",
+        tags=["assessment"],
+    )
+    fastapi_app.include_router(
+        public_result_router,
+        prefix="/api/public/assessments",
+        tags=["assessment-public"],
+    )
+
+    # ─── Phase 3 Tier 2: Enrollment-response module (2 routers) ───
+    # 镜像 Node app.ts:251-252
+    fastapi_app.include_router(
+        enrollment_response_router,
+        prefix="/api/orgs/{org_id}/enrollment-responses",
+        tags=["enrollment-response"],
+    )
+    fastapi_app.include_router(
+        enrollment_response_client_router,
+        prefix="/api/orgs/{org_id}/client/enrollment-responses",
+        tags=["enrollment-response"],
     )
 
     @fastapi_app.get("/health", tags=["meta"])
