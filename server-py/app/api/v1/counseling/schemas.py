@@ -31,6 +31,7 @@ from typing import Any
 from pydantic import EmailStr, Field
 
 from app.api.v1._schema_base import CamelModel
+from app.lib.phone_utils import CN_PHONE_REGEX
 
 # ─── 通用 ─────────────────────────────────────────────────────────
 
@@ -626,12 +627,16 @@ class CounselingPublicOrgInfo(CamelModel):
 
 
 class CounselingPublicRegisterRequest(CamelModel):
-    """``POST /{org_slug}/register`` body — 来访者自助注册。"""
+    """``POST /{org_slug}/register`` body — 来访者自助注册。
+
+    Phase 5 (2026-05-04): 国内市场切手机号, phone 必填 (中国大陆 11 位),
+    email 可选 (留作通知 / legacy 兼容)。
+    """
 
     name: str = Field(min_length=1)
-    email: EmailStr
+    phone: str = Field(pattern=CN_PHONE_REGEX)
+    email: EmailStr | None = None
     password: str = Field(min_length=1)
-    phone: str | None = None
 
 
 class CounselingPublicRegisterResponse(CamelModel):

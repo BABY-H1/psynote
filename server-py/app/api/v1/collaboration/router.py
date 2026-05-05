@@ -47,6 +47,11 @@ from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import (
+    reject_client,
+    require_admin,
+    require_admin_or_counselor,
+)
 
 router = APIRouter()
 
@@ -61,20 +66,18 @@ def _require_org(org: OrgContext | None) -> OrgContext:
 
 
 def _reject_client(org: OrgContext) -> None:
-    if org.role == "client":
-        raise ForbiddenError("client_role_not_allowed")
+    reject_client(org, client_message="client_role_not_allowed")
 
 
 def _require_org_admin(org: OrgContext) -> None:
-    if org.role != "org_admin":
-        raise ForbiddenError("This action requires the role: org_admin")
+    require_admin(org, insufficient_message="This action requires the role: org_admin")
 
 
 def _require_admin_or_counselor(org: OrgContext) -> None:
-    if org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError(
-            "This action requires one of the following roles: org_admin, counselor"
-        )
+    require_admin_or_counselor(
+        org,
+        insufficient_message="This action requires one of the following roles: org_admin, counselor",
+    )
 
 
 def _iso(value: Any) -> str | None:

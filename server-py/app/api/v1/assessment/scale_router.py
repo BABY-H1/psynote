@@ -52,25 +52,14 @@ from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import (
+    reject_client as _reject_client,
+)
+from app.middleware.role_guards import (
+    require_admin_or_counselor as _require_admin_or_counselor,
+)
 
 router = APIRouter()
-
-
-# ─── 工具 ────────────────────────────────────────────────────────
-
-
-def _reject_client(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("Client role not permitted on this endpoint")
-
-
-def _require_admin_or_counselor(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError("insufficient_role")
 
 
 async def _assert_scale_owned_by_org(
@@ -109,35 +98,49 @@ async def list_scales(
         )
         .order_by(asc(Scale.title))
     )
-    rows = (await db.execute(q)).scalars().all()
+    rows = list((await db.execute(q)).scalars().all())
 
-    out: list[ScaleListRow] = []
-    for s in rows:
-        # 各 scale 单独 count (镜像 Node 的 Promise.all map)
-        d_count_q = (
-            select(func.count()).select_from(ScaleDimension).where(ScaleDimension.scale_id == s.id)
+    # Phase 5 N+1 修: 之前每个 scale 各 2 查询 (count dimensions + count items) → 2N+1。
+    # 改成 2 个 GROUP BY 单查询, 一次拿全部 counts. 总查询数 = 3 (scales + dim_counts + item_counts).
+    if rows:
+        scale_ids = [s.id for s in rows]
+        dim_count_q = (
+            select(ScaleDimension.scale_id, func.count().label("c"))
+            .where(ScaleDimension.scale_id.in_(scale_ids))
+            .group_by(ScaleDimension.scale_id)
         )
-        i_count_q = select(func.count()).select_from(ScaleItem).where(ScaleItem.scale_id == s.id)
-        d_count = (await db.execute(d_count_q)).scalar() or 0
-        i_count = (await db.execute(i_count_q)).scalar() or 0
+        item_count_q = (
+            select(ScaleItem.scale_id, func.count().label("c"))
+            .where(ScaleItem.scale_id.in_(scale_ids))
+            .group_by(ScaleItem.scale_id)
+        )
+        dim_counts: dict[uuid.UUID, int] = {
+            sid: int(c) for sid, c in (await db.execute(dim_count_q)).all()
+        }
+        item_counts: dict[uuid.UUID, int] = {
+            sid: int(c) for sid, c in (await db.execute(item_count_q)).all()
+        }
+    else:
+        dim_counts = {}
+        item_counts = {}
 
-        out.append(
-            ScaleListRow(
-                id=str(s.id),
-                org_id=str(s.org_id) if s.org_id else None,
-                title=s.title,
-                description=s.description,
-                instructions=s.instructions,
-                scoring_mode=s.scoring_mode or "sum",
-                is_public=bool(s.is_public),
-                created_by=str(s.created_by) if s.created_by else None,
-                created_at=getattr(s, "created_at", None),
-                updated_at=getattr(s, "updated_at", None),
-                dimension_count=int(d_count),
-                item_count=int(i_count),
-            )
+    return [
+        ScaleListRow(
+            id=str(s.id),
+            org_id=str(s.org_id) if s.org_id else None,
+            title=s.title,
+            description=s.description,
+            instructions=s.instructions,
+            scoring_mode=s.scoring_mode or "sum",
+            is_public=bool(s.is_public),
+            created_by=str(s.created_by) if s.created_by else None,
+            created_at=getattr(s, "created_at", None),
+            updated_at=getattr(s, "updated_at", None),
+            dimension_count=dim_counts.get(s.id, 0),
+            item_count=item_counts.get(s.id, 0),
         )
-    return out
+        for s in rows
+    ]
 
 
 @router.get("/{scale_id}", response_model=ScaleDetail)

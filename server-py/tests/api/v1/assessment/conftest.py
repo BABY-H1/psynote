@@ -26,19 +26,21 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
-from typing import Any, Protocol
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from tests.api.v1._conftest_helpers import (
+    SetupDbResults,
+    make_mock_db,
+    setup_db_results_factory,
+)
+
 _FAKE_USER_ID = "00000000-0000-0000-0000-000000000001"
 _FAKE_ORG_ID = "00000000-0000-0000-0000-000000000099"
-
-
-class SetupDbResults(Protocol):
-    def __call__(self, rows: list[Any]) -> None: ...
 
 
 @pytest.fixture(autouse=True)
@@ -72,55 +74,15 @@ def _mock_pdf_bytes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pdf_mod, "_html_to_pdf_bytes", _fake_pdf)
 
 
-def _make_query_result(row: Any) -> MagicMock:
-    """构造 mock SQLAlchemy Result, 兼容多种消费形式."""
-    result = MagicMock()
-    result.scalar_one_or_none = MagicMock(return_value=row)
-    result.scalar = MagicMock(return_value=row)
-    result.first = MagicMock(return_value=row)
-    if isinstance(row, list):
-        result.all = MagicMock(return_value=row)
-        scalars = MagicMock()
-        scalars.all = MagicMock(return_value=row)
-        result.scalars = MagicMock(return_value=scalars)
-    else:
-        result.all = MagicMock(return_value=[row] if row is not None else [])
-        scalars = MagicMock()
-        scalars.all = MagicMock(return_value=[row] if row is not None else [])
-        result.scalars = MagicMock(return_value=scalars)
-    return result
-
-
 @pytest.fixture
 def mock_db() -> AsyncMock:
-    db = AsyncMock()
-
-    # mock add: 给新插入的 ORM 对象自动分配 UUID id (模拟 server_default=gen_random_uuid).
-    # 真实 SQLAlchemy 会在 flush() 时由 DB 回填; mock 模式下我们在 add() 时立刻给一个,
-    # 让 router 后续的 ``str(obj.id)`` / ``await get_assessment(..., str(a.id), ...)`` 能跑.
-    import contextlib
-
-    def _add_with_id(obj: Any) -> None:
-        if hasattr(obj, "id") and (obj.id is None or not isinstance(obj.id, uuid.UUID)):
-            # 一些 ORM 对象的 id 列不可写, 用 suppress 忽略 setter 异常
-            with contextlib.suppress(Exception):
-                obj.id = uuid.uuid4()
-
-    db.add = MagicMock(side_effect=_add_with_id)
-    db.commit = AsyncMock()
-    db.rollback = AsyncMock()
-    db.flush = AsyncMock()
-    db.execute = AsyncMock()
-    return db
+    """带 auto-UUID add (模拟 server_default=gen_random_uuid). 让 router 立刻 str(obj.id) 能跑."""
+    return make_mock_db(auto_uuid_on_add=True)
 
 
 @pytest.fixture
 def setup_db_results(mock_db: AsyncMock) -> SetupDbResults:
-    def _setup(rows: list[Any]) -> None:
-        results = [_make_query_result(r) for r in rows]
-        mock_db.execute = AsyncMock(side_effect=results)
-
-    return _setup
+    return setup_db_results_factory(mock_db)
 
 
 # ─── 本地 FastAPI app (assessment routers + error handler) ──────

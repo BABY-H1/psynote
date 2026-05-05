@@ -30,6 +30,7 @@ from app.lib.errors import ForbiddenError, ValidationError
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client, require_admin_or_counselor
 
 router = APIRouter()
 
@@ -46,16 +47,15 @@ def _require_org(org: OrgContext | None) -> OrgContext:
 
 def _reject_client(org: OrgContext) -> None:
     """``rejectClient`` 等价 — client 角色禁止访问机构端 delivery 路由。"""
-    if org.role == "client":
-        raise ForbiddenError("client_role_not_allowed")
+    reject_client(org, client_message="client_role_not_allowed")
 
 
 def _require_admin_or_counselor(org: OrgContext) -> None:
     """``requireRole('org_admin', 'counselor')`` 等价 — POST /launch 守门。"""
-    if org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError(
-            "This action requires one of the following roles: org_admin, counselor"
-        )
+    require_admin_or_counselor(
+        org,
+        insufficient_message="This action requires one of the following roles: org_admin, counselor",
+    )
 
 
 def _split_csv(v: str | None) -> list[str] | None:

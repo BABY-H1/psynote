@@ -16,16 +16,18 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
-from typing import Any, Protocol
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-
-class SetupDbResults(Protocol):
-    def __call__(self, rows: list[Any]) -> None: ...
+from tests.api.v1._conftest_helpers import (
+    SetupDbResults,
+    make_mock_db,
+    setup_db_results_factory,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -37,48 +39,14 @@ _FAKE_USER_ID = "00000000-0000-0000-0000-000000000001"
 _FAKE_ORG_ID = "00000000-0000-0000-0000-000000000099"
 
 
-def _make_query_result(row: Any) -> MagicMock:
-    """支持 scalars/scalar_one_or_none/first/all/scalar/mappings.all。"""
-    result = MagicMock()
-    result.scalar_one_or_none = MagicMock(return_value=row)
-    result.scalar = MagicMock(return_value=row)
-    if isinstance(row, list):
-        rows_list = row
-    elif row is None:
-        rows_list = []
-    else:
-        rows_list = [row]
-    result.all = MagicMock(return_value=rows_list)
-    result.first = MagicMock(return_value=rows_list[0] if rows_list else None)
-    scalars_obj = MagicMock()
-    scalars_obj.all = MagicMock(return_value=rows_list)
-    result.scalars = MagicMock(return_value=scalars_obj)
-    mappings_obj = MagicMock()
-    mappings_obj.all = MagicMock(return_value=rows_list)
-    result.mappings = MagicMock(return_value=mappings_obj)
-    return result
-
-
 @pytest.fixture
 def mock_db() -> AsyncMock:
-    db = AsyncMock()
-    db.add = MagicMock()
-    db.commit = AsyncMock()
-    db.rollback = AsyncMock()
-    db.flush = AsyncMock()
-    db.execute = AsyncMock()
-    db.refresh = AsyncMock()
-    db.delete = AsyncMock()
-    return db
+    return make_mock_db()
 
 
 @pytest.fixture
 def setup_db_results(mock_db: AsyncMock) -> SetupDbResults:
-    def _setup(rows: list[Any]) -> None:
-        results = [_make_query_result(r) for r in rows]
-        mock_db.execute = AsyncMock(side_effect=results)
-
-    return _setup
+    return setup_db_results_factory(mock_db)
 
 
 def _build_test_app() -> FastAPI:

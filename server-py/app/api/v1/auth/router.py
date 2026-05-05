@@ -23,10 +23,10 @@ import hashlib
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, BackgroundTasks, Depends, status
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.auth.schemas import (
@@ -106,16 +106,31 @@ async def login(
     body: LoginRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LoginResponse:
-    """email/password 登录。安全 fail-closed + 防枚举: 任何失败都同 ``"邮箱或密码错误"`` message。"""
-    user_q = select(User).where(User.email == body.email).limit(1)
+    """Phase 5 (2026-05-04): 手机号 OR 邮箱 + 密码登录。
+
+    Schema 已校验 phone/email 至少 1 个 + phone 格式 (中国手机号正则)。
+    业务: 按提供的字段精确查 user, 同时提供则按 OR 匹配 (任一命中即可)。
+
+    安全 (fail-closed + 防枚举):
+      - password_hash IS NULL / "" → 同样错; 防 silent any-password bypass (W0.x)
+      - 任何失败 (查不到 / 密码错 / hash 空) 同 message"账号或密码错误"
+    """
+    # Schema 已保证至少有一个; 这里按提供字段构造 OR 查询
+    where_clauses: list[Any] = []
+    if body.phone:
+        where_clauses.append(User.phone == body.phone)
+    if body.email:
+        where_clauses.append(User.email == body.email)
+
+    user_q = select(User).where(or_(*where_clauses)).limit(1)
     user = (await db.execute(user_q)).scalar_one_or_none()
 
     # password_hash IS NULL / "" → fail-closed (W0.x)
     if user is None or not user.password_hash:
-        raise ValidationError("邮箱或密码错误")
+        raise ValidationError("账号或密码错误")
 
     if not verify_password(body.password, user.password_hash):
-        raise ValidationError("邮箱或密码错误")
+        raise ValidationError("账号或密码错误")
 
     # last_login_at 同 transaction commit (Node 端是 fire-and-forget, Python 走 await
     # 但 SQLAlchemy session 已经 open, 一起 commit 不增 round-trip)

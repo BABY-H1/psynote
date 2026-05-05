@@ -44,7 +44,10 @@ router = APIRouter()
 
 # Node parent-binding.service.ts:79 — randomBytes(24).toString('base64url')
 _TOKEN_BYTES = 24
-_DEFAULT_EXPIRES_DAYS = 30
+# Phase 5 (2026-05-04) 决策: 学校班级 token 默认 30 → 365 天 (= 1 学年).
+# 学校场景 token 是公开二维码贴墙 / 印通讯录, 30 天太短家长还没看到就过期;
+# 365 天覆盖一学年, 班主任仍可在 [1, 365] 范围内调整。
+_DEFAULT_EXPIRES_DAYS = 365
 
 
 def _require_counselor_or_admin(org: OrgContext | None) -> None:

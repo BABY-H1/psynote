@@ -41,6 +41,7 @@ from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.data_scope import DataScope, get_data_scope
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import require_admin_or_counselor
 
 router = APIRouter()
 
@@ -53,10 +54,10 @@ def _require_org(org: OrgContext | None) -> OrgContext:
 
 def _require_admin_or_counselor(org: OrgContext) -> None:
     """``requireRole('org_admin', 'counselor')`` (POST/PATCH 写入守门)."""
-    if org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError(
-            "This action requires one of the following roles: org_admin, counselor"
-        )
+    require_admin_or_counselor(
+        org,
+        insufficient_message="This action requires one of the following roles: org_admin, counselor",
+    )
 
 
 # ─── Plans ──────────────────────────────────────────────────────

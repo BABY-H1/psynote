@@ -45,11 +45,12 @@ from app.db.models.org_members import OrgMember
 from app.db.models.organizations import Organization
 from app.db.models.service_intakes import ServiceIntake
 from app.db.models.users import User
-from app.lib.errors import ForbiddenError, NotFoundError
+from app.lib.errors import NotFoundError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import require_admin
 
 # 两个 router (路径 prefix 不同, app/main.py 分别 include)
 public_router = APIRouter()
@@ -57,10 +58,7 @@ intake_router = APIRouter()
 
 
 def _require_org_admin(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role != "org_admin":
-        raise ForbiddenError("insufficient_role")
+    require_admin(org)
 
 
 # ─── Public routes (no auth) ─────────────────────────────────────
@@ -120,11 +118,14 @@ async def submit_public_intake(
         raise NotFoundError("Organization", org_slug)
 
     try:
-        # Find or create user
-        u_q = select(User).where(User.email == body.email).limit(1)
+        # Find or create user — Phase 5: 按手机号查 (主登录字段)
+        phone_norm = body.phone.strip()
+        email_norm: str | None = str(body.email).strip().lower() if body.email else None
+        u_q = select(User).where(User.phone == phone_norm).limit(1)
         u = (await db.execute(u_q)).scalar_one_or_none()
         if u is None:
-            u = User(email=body.email, name=body.name)
+            # 新手机号 → 建 user (phone 必填, email 可选)
+            u = User(phone=phone_norm, email=email_norm, name=body.name)
             db.add(u)
             await db.flush()
 

@@ -49,6 +49,62 @@ def test_create_token_happy(
     mock_db.commit.assert_awaited()
 
 
+def test_create_token_default_365_days(
+    counselor_org_client: TestClient,
+    setup_db_results: SetupDbResults,
+) -> None:
+    """Phase 5 (2026-05-04): 不传 expiresInDays → 默认 365 天 (= 1 学年).
+
+    旧默认 30 天对学校场景太短 (二维码贴墙没多久就失效); 365 天覆盖一整学年.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    cls_id = uuid.UUID(_CLASS)
+    setup_db_results([cls_id])
+
+    before = datetime.now(UTC)
+    r = counselor_org_client.post(
+        f"/api/orgs/{_ORG}/school/classes/{_CLASS}/parent-invite-tokens/",
+        json={},  # 不传 expiresInDays
+    )
+    after = datetime.now(UTC)
+
+    assert r.status_code == 201
+    body = r.json()
+    expires_at = datetime.fromisoformat(body["expiresAt"])
+
+    # 应该在 [now+365days, after+365days] 区间, 且明显 > now+30days
+    expected_low = before + timedelta(days=365) - timedelta(seconds=1)
+    expected_high = after + timedelta(days=365) + timedelta(seconds=1)
+    assert expected_low <= expires_at <= expected_high, (
+        f"expiresAt={expires_at} 应该 ≈ now+365天, 不是旧默认 30 天"
+    )
+    # 防回归: 不能 ≤ now+30 天 (旧默认)
+    assert expires_at > before + timedelta(days=30)
+
+
+def test_create_token_explicit_30_days_still_works(
+    counselor_org_client: TestClient,
+    setup_db_results: SetupDbResults,
+) -> None:
+    """班主任仍可显式指定 30 天 (= 1 个月) 等更短的期限."""
+    from datetime import UTC, datetime, timedelta
+
+    cls_id = uuid.UUID(_CLASS)
+    setup_db_results([cls_id])
+
+    before = datetime.now(UTC)
+    r = counselor_org_client.post(
+        f"/api/orgs/{_ORG}/school/classes/{_CLASS}/parent-invite-tokens/",
+        json={"expiresInDays": 30},
+    )
+    assert r.status_code == 201
+    expires_at = datetime.fromisoformat(r.json()["expiresAt"])
+    # 30 天 ± 几秒
+    expected = before + timedelta(days=30)
+    assert abs((expires_at - expected).total_seconds()) < 60
+
+
 def test_create_token_404_when_class_not_in_org(
     counselor_org_client: TestClient,
     setup_db_results: SetupDbResults,

@@ -35,21 +35,21 @@ from app.lib.errors import ForbiddenError, ValidationError
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import require_admin
 
 router = APIRouter()
 
 
 def _require_org_admin(user: AuthUser, org: OrgContext | None) -> OrgContext:
-    """PUT 走 ``requireRole('org_admin')`` (Node)。sysadm 跳, 其他人 403。"""
-    if user.is_system_admin:
-        if org is None:
-            raise ForbiddenError("org_context_required")
-        return org
+    """PUT 走 ``requireRole('org_admin')`` (Node)。sysadm 跳 (仍需 org), 其他人 403。"""
     if org is None:
         raise ForbiddenError("org_context_required")
-    if org.role != "org_admin":
-        raise ForbiddenError("This action requires one of the following roles: org_admin")
-    return org
+    if user.is_system_admin:
+        return org
+    return require_admin(
+        org,
+        insufficient_message="This action requires one of the following roles: org_admin",
+    )
 
 
 def _row_to_response(row: ReminderSettings) -> ReminderSettingsResponse:

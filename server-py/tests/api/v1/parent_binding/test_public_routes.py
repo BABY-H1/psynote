@@ -107,6 +107,7 @@ def test_bind_400_when_password_too_short(
             "relation": "father",
             "myName": "张父",
             "password": "abc",  # 太短
+            "phone": "13800001234",
         },
     )
     assert r.status_code == 400
@@ -124,6 +125,7 @@ def test_bind_400_when_phone_last4_not_4_digits(
             "relation": "father",
             "myName": "张父",
             "password": "abcdef",
+            "phone": "13800001234",
         },
     )
     assert r.status_code == 400
@@ -141,9 +143,67 @@ def test_bind_400_when_relation_invalid(
             "relation": "uncle",  # 不在白名单
             "myName": "张父",
             "password": "abcdef",
+            "phone": "13800001234",
         },
     )
     assert r.status_code == 400
+
+
+def test_bind_400_when_phone_missing(
+    client: TestClient,
+) -> None:
+    """Phase 5: phone 必填 (家长真实手机号), 缺则 400."""
+    r = client.post(
+        f"/api/public/parent-bind/{_TOKEN}",
+        json={
+            "studentName": "张三",
+            "studentNumber": "S001",
+            "phoneLast4": "1234",
+            "relation": "father",
+            "myName": "张父",
+            "password": "abcdef",
+            # 故意不传 phone
+        },
+    )
+    assert r.status_code == 400
+
+
+def test_bind_400_when_phone_invalid_format(
+    client: TestClient,
+) -> None:
+    """Phase 5: phone 不是中国大陆手机号 → 400/422."""
+    r = client.post(
+        f"/api/public/parent-bind/{_TOKEN}",
+        json={
+            "studentName": "张三",
+            "studentNumber": "S001",
+            "phoneLast4": "1234",
+            "relation": "father",
+            "myName": "张父",
+            "password": "abcdef",
+            "phone": "12345",  # 不合法
+        },
+    )
+    assert r.status_code in (400, 422)
+
+
+def test_bind_400_when_phone_last4_inconsistent_with_phone(
+    client: TestClient,
+) -> None:
+    """Phase 5: phone 末 4 位与 phoneLast4 必须一致 (schema validator 拦, 防家长填错)."""
+    r = client.post(
+        f"/api/public/parent-bind/{_TOKEN}",
+        json={
+            "studentName": "张三",
+            "studentNumber": "S001",
+            "phoneLast4": "1234",
+            "relation": "father",
+            "myName": "张父",
+            "password": "abcdef",
+            "phone": "13800009999",  # 末 4 位 9999, 与 phoneLast4=1234 不符
+        },
+    )
+    assert r.status_code in (400, 422)
 
 
 def test_bind_400_when_no_student_match(
@@ -165,46 +225,55 @@ def test_bind_400_when_no_student_match(
             "relation": "father",
             "myName": "张父",
             "password": "abcdef",
+            "phone": "13800001234",
         },
     )
     assert r.status_code == 400
     assert "信息核对失败" in r.json()["message"]
 
 
-def test_bind_400_when_phone_last4_mismatch(
+def test_bind_400_when_phone_last4_mismatch_recorded(
     client: TestClient,
     setup_db_results: SetupDbResults,
     make_token_row: object,
 ) -> None:
-    """name + studentId 匹配但 phoneLast4 不对 → 400."""
+    """name + studentId 匹配, body phone/phoneLast4 自洽, 但与老师录入的不一致 → 400.
+
+    body.phone_last4=1234, body.phone=...1234, 都自洽; 但老师库里录的是 ...9999.
+    """
     token_row = make_token_row(token=_TOKEN)  # type: ignore[operator]
     student_user_id = uuid.UUID("00000000-0000-0000-0000-000000000003")
-    matches = [(student_user_id, "张三", "S001", "13800009999")]  # 后4位是 9999
+    matches = [(student_user_id, "张三", "S001", "13800009999")]  # 老师录的末4位是 9999
     setup_db_results([(token_row, "1班", "高一", "测试学校"), matches])
     r = client.post(
         f"/api/public/parent-bind/{_TOKEN}",
         json={
             "studentName": "张三",
             "studentNumber": "S001",
-            "phoneLast4": "1234",  # 与 9999 不一致
+            "phoneLast4": "1234",
             "relation": "father",
             "myName": "张父",
             "password": "abcdef",
+            "phone": "13800001234",  # body 自洽 (末4位 1234)
         },
     )
     assert r.status_code == 400
 
 
-def test_bind_happy_creates_guardian_with_password(
+def test_bind_happy_creates_guardian_with_real_phone(
     client: TestClient,
     setup_db_results: SetupDbResults,
     mock_db: AsyncMock,
     make_token_row: object,
 ) -> None:
-    """成功路径: guardian + relationship transactional commit + password_hash 非空 (W0.4)."""
+    """Phase 5 重点: guardian user.phone = 真手机号 (不是合成 email).
+
+    成功路径: guardian + relationship transactional commit + password_hash 非空 (W0.4) +
+    phone 字段是 11 位真手机号, email 是 None.
+    """
     token_row = make_token_row(token=_TOKEN)  # type: ignore[operator]
     student_user_id = uuid.UUID("00000000-0000-0000-0000-000000000003")
-    matches = [(student_user_id, "张三", "S001", "13800001234")]  # 后4位 1234 ✓
+    matches = [(student_user_id, "张三", "S001", "13800001234")]  # 老师录的末4位 1234 ✓
     # token preview + matches + (existing relationship 检查 None — 新建)
     setup_db_results(
         [
@@ -222,6 +291,7 @@ def test_bind_happy_creates_guardian_with_password(
             "relation": "father",
             "myName": "张父",
             "password": "abcdef",
+            "phone": "13800001234",
         },
     )
     assert r.status_code == 201
@@ -233,6 +303,7 @@ def test_bind_happy_creates_guardian_with_password(
     mock_db.commit.assert_awaited()
 
     # W0.4 invariant: db.add 接收的 User 必须有非空 password_hash
+    # Phase 5 invariant: phone 是真手机号, email 不应是合成 g_xxx@guardian.internal
     from app.db.models.users import User
 
     user_added: User | None = None
@@ -244,6 +315,13 @@ def test_bind_happy_creates_guardian_with_password(
     assert user_added is not None, "guardian User must be db.add()-ed"
     assert user_added.password_hash, "W0.4 — guardian password_hash must NOT be NULL/empty"
     assert user_added.is_guardian_account is True
+
+    # ⭐ Phase 5 关键 invariant: phone 是真手机号, email 不是合成的
+    assert user_added.phone == "13800001234", "guardian.phone 必须是家长填的真手机号"
+    assert user_added.email is None, "Phase 5: 不再用合成 email, 应为 None"
+    # 防回归: email 不应包含历史的 'guardian.internal' 合成域
+    if user_added.email is not None:
+        assert "guardian.internal" not in user_added.email
 
     # silence unused
     _ = _make_org()

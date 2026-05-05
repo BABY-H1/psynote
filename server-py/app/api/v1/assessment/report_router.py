@@ -51,33 +51,22 @@ from app.db.models.group_enrollments import GroupEnrollment
 from app.db.models.group_instances import GroupInstance
 from app.db.models.scale_dimensions import ScaleDimension
 from app.db.models.users import User
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import NotFoundError, ValidationError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import (
+    reject_client as _reject_client,
+)
+from app.middleware.role_guards import (
+    require_admin_or_counselor as _require_admin_or_counselor,
+)
 
 router = APIRouter()
 
 
 _UUID_REGEX_LEN = 36  # 8-4-4-4-12 hex
-
-
-# ─── 工具 ────────────────────────────────────────────────────────
-
-
-def _reject_client(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("Client role not permitted on this endpoint")
-
-
-def _require_admin_or_counselor(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError("insufficient_role")
 
 
 def _orm_to_row(r: AssessmentReport) -> ReportRow:

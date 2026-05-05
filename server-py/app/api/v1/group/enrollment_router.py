@@ -48,6 +48,7 @@ from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import require_role
 
 router = APIRouter()
 
@@ -56,13 +57,7 @@ router = APIRouter()
 
 
 def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "org_admin":
-        return
-    if org.role in allow_roles:
-        return
-    raise ForbiddenError("insufficient_role")
+    require_role(org, roles=("org_admin", *allow_roles))
 
 
 def _enrollment_to_row(e: GroupEnrollment) -> EnrollmentRow:
@@ -122,6 +117,10 @@ async def _do_enroll(
     user_id: uuid.UUID,
     care_episode_id: uuid.UUID | None = None,
     screening_result_id: uuid.UUID | None = None,
+    # Phase 5 N+1 修: batch caller (e.g. enroll_batch) 可以预 fetch 这两个,
+    # 避免每个 member 都各自查 instance / approved_count.
+    cached_instance: GroupInstance | None = None,
+    cached_approved_count: int | None = None,
 ) -> GroupEnrollment:
     """``enroll`` — 镜像 enrollment.service.ts:62-137.
 
@@ -141,18 +140,25 @@ async def _do_enroll(
     if (await db.execute(dup_q)).scalar_one_or_none() is not None:
         raise ConflictError("User is already enrolled in this group")
 
-    inst_q = select(GroupInstance).where(GroupInstance.id == instance_id).limit(1)
-    inst = (await db.execute(inst_q)).scalar_one_or_none()
+    inst: GroupInstance | None
+    if cached_instance is not None:
+        inst = cached_instance
+    else:
+        inst_q = select(GroupInstance).where(GroupInstance.id == instance_id).limit(1)
+        inst = (await db.execute(inst_q)).scalar_one_or_none()
 
     initial_status = "pending"
     if inst is not None and inst.capacity:
-        cnt_q = select(func.count()).where(
-            and_(
-                GroupEnrollment.instance_id == instance_id,
-                GroupEnrollment.status == "approved",
+        if cached_approved_count is not None:
+            approved_count = cached_approved_count
+        else:
+            cnt_q = select(func.count()).where(
+                and_(
+                    GroupEnrollment.instance_id == instance_id,
+                    GroupEnrollment.status == "approved",
+                )
             )
-        )
-        approved_count = (await db.execute(cnt_q)).scalar() or 0
+            approved_count = (await db.execute(cnt_q)).scalar() or 0
         if int(approved_count) >= inst.capacity:
             initial_status = "waitlisted"
 
@@ -263,6 +269,13 @@ async def enroll_batch(
     if not body.members:
         raise ValidationError("members array is required")
 
+    # Phase 5 N+1 修: 之前每个 member 都独自查 instance + 算 approved_count (3 queries × N).
+    # 改成 loop 之前一次拿 instance + 一次算 approved_count, 整个 batch 共享.
+    # 用 sentinel 实现 lazy-fetch: 第一个有效 member 才触发 (空 batch / 全错的 batch 不会 hit DB).
+    cached_inst: GroupInstance | None = None
+    cached_approved: int = 0
+    cached_loaded: bool = False
+
     enrolled_count = 0
     errors: list[EnrollBatchErrorEntry] = []
 
@@ -280,9 +293,29 @@ async def enroll_batch(
                 errors.append(EnrollBatchErrorEntry(index=idx, message="需要提供 userId 或 email"))
                 continue
 
-            await _do_enroll(db, instance_id=inst_uuid, user_id=user_uuid)
+            if not cached_loaded:
+                cached_inst_q = select(GroupInstance).where(GroupInstance.id == inst_uuid).limit(1)
+                cached_inst = (await db.execute(cached_inst_q)).scalar_one_or_none()
+                if cached_inst is not None and cached_inst.capacity:
+                    cnt_q = select(func.count()).where(
+                        and_(
+                            GroupEnrollment.instance_id == inst_uuid,
+                            GroupEnrollment.status == "approved",
+                        )
+                    )
+                    cached_approved = int((await db.execute(cnt_q)).scalar() or 0)
+                cached_loaded = True
+
+            await _do_enroll(
+                db,
+                instance_id=inst_uuid,
+                user_id=user_uuid,
+                cached_instance=cached_inst,
+                cached_approved_count=cached_approved,
+            )
             await db.commit()
             enrolled_count += 1
+            cached_approved += 1  # 已 enroll 一个, 下一个的 capacity 检查用最新数
         except Exception as exc:
             await db.rollback()
             msg = str(exc) or "报名失败"

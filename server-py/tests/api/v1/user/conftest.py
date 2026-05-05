@@ -12,17 +12,16 @@ User API 测试共享 fixture。
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any, Protocol
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-
-class SetupDbResults(Protocol):
-    """``setup_db_results`` fixture 形状: 接受 row 列表, 配 ``mock_db.execute`` FIFO。"""
-
-    def __call__(self, rows: list[Any]) -> None: ...
+from tests.api.v1._conftest_helpers import (
+    SetupDbResults,
+    make_mock_db,
+    setup_db_results_factory,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -31,38 +30,16 @@ def _user_test_env(base_env: pytest.MonkeyPatch) -> None:
     base_env.setenv("NODE_ENV", "test")
 
 
-def _make_query_result(row: Any) -> MagicMock:
-    """构造 mock SQLAlchemy ``Result`` — ``.scalar_one_or_none()`` / ``.first()`` 都返 row。
-
-    GET /me 同时用了 scalar_one_or_none (取 user) + first (取 member row + org_name);
-    一个 mock 同时支持两形态, 测试 setup 不需要分情形。
-    """
-    result = MagicMock()
-    result.scalar_one_or_none = MagicMock(return_value=row)
-    result.first = MagicMock(return_value=row)
-    return result
-
-
 @pytest.fixture
 def mock_db() -> AsyncMock:
     """模拟 ``AsyncSession`` (与 auth conftest 同 pattern)。"""
-    db = AsyncMock()
-    db.add = MagicMock()
-    db.commit = AsyncMock()
-    db.rollback = AsyncMock()
-    db.execute = AsyncMock()
-    return db
+    return make_mock_db()
 
 
 @pytest.fixture
 def setup_db_results(mock_db: AsyncMock) -> SetupDbResults:
     """``setup_db_results([row1, row2])`` → mock_db.execute FIFO side_effect。"""
-
-    def _setup(rows: list[Any]) -> None:
-        results = [_make_query_result(r) for r in rows]
-        mock_db.execute = AsyncMock(side_effect=results)
-
-    return _setup
+    return setup_db_results_factory(mock_db)
 
 
 @pytest.fixture

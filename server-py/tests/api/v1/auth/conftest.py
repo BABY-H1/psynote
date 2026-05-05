@@ -20,18 +20,16 @@ Auth API 测试共享 fixture。
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any, Protocol
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-
-class SetupDbResults(Protocol):
-    """``setup_db_results`` fixture 的形状: 接受 row 列表, 配 ``mock_db.execute``
-    的 FIFO side_effect。返回 None。"""
-
-    def __call__(self, rows: list[Any]) -> None: ...
+from tests.api.v1._conftest_helpers import (
+    SetupDbResults,
+    make_mock_db,
+    setup_db_results_factory,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -46,17 +44,6 @@ def _auth_test_env(base_env: pytest.MonkeyPatch) -> None:
     base_env.setenv("NODE_ENV", "test")
 
 
-def _make_query_result(row: Any) -> MagicMock:
-    """构造一个 mock SQLAlchemy ``Result``, ``.scalar_one_or_none()`` 返回 row。
-
-    router 里所有读路径都是 ``(await db.execute(query)).scalar_one_or_none()``,
-    所以一个 row (或 None) 即可表达"DB 返回这条 / 没有"。
-    """
-    result = MagicMock()
-    result.scalar_one_or_none = MagicMock(return_value=row)
-    return result
-
-
 @pytest.fixture
 def mock_db() -> AsyncMock:
     """
@@ -68,12 +55,7 @@ def mock_db() -> AsyncMock:
 
     单测里直接 ``mock_db.execute.assert_called_*`` 检查 SQL 调用次数。
     """
-    db = AsyncMock()
-    db.add = MagicMock()
-    db.commit = AsyncMock()
-    db.rollback = AsyncMock()
-    db.execute = AsyncMock()
-    return db
+    return make_mock_db()
 
 
 @pytest.fixture
@@ -84,12 +66,7 @@ def setup_db_results(mock_db: AsyncMock) -> SetupDbResults:
     每次 ``await db.execute(...)`` 拿下一个 row, 自动包成 mock Result。Row 可以是
     任意 ORM 对象 / None。镜像 Node 端 ``dbResults.push([...])`` 的 FIFO 行为。
     """
-
-    def _setup(rows: list[Any]) -> None:
-        results = [_make_query_result(r) for r in rows]
-        mock_db.execute = AsyncMock(side_effect=results)
-
-    return _setup
+    return setup_db_results_factory(mock_db)
 
 
 @pytest.fixture

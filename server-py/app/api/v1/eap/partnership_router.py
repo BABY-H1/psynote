@@ -43,22 +43,14 @@ from app.db.models.eap_counselor_assignments import EAPCounselorAssignment
 from app.db.models.eap_partnerships import EAPPartnership
 from app.db.models.organizations import Organization
 from app.db.models.users import User
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import NotFoundError, ValidationError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import require_admin as _require_org_admin
 
 router = APIRouter()
-
-
-def _require_org_admin(org: OrgContext | None) -> OrgContext:
-    """``requireRole('org_admin')`` 等价 — partnership 操作必须 org_admin."""
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role != "org_admin":
-        raise ForbiddenError("insufficient_role")
-    return org
 
 
 def _parse_iso_date(value: str | None) -> datetime | None:

@@ -89,25 +89,52 @@ def test_info_non_enterprise_org_404(
 # ─── POST /:org_slug/register ───────────────────────────────────
 
 
-def test_register_new_email_creates_user_member_profile(
+def test_register_new_phone_creates_user_member_profile(
     client: TestClient,
     setup_db_results: SetupDbResults,
     mock_db: AsyncMock,
     make_org: object,
 ) -> None:
-    """新邮箱 → 建 user + member(client) + employee_profile, password_hash=真 bcrypt hash."""
+    """Phase 5: 新手机号 → 建 user (phone 字段) + member(client) + employee_profile."""
     org = make_org()  # type: ignore[operator]
-    # 1) org lookup; 2) user lookup (None — 新邮箱); 3) member lookup (None)
+    # 1) org lookup; 2) user lookup (None — 新手机号); 3) member lookup (None)
     setup_db_results([org, None, None])
     r = client.post(
         f"/api/public/eap/{_SLUG}/register",
-        json={"email": "emp@acme.com", "password": "secret123", "name": "员工"},
+        json={"phone": "13800001111", "password": "secret123", "name": "员工"},
     )
     assert r.status_code == 201
     body = r.json()
     assert body["status"] == "registered"
     assert body["isNewUser"] is True
     mock_db.commit.assert_awaited()
+
+    # 关键: db.add 接收的 User 必须有 phone 字段
+    from app.db.models.users import User
+
+    user_added: User | None = None
+    for call in mock_db.add.call_args_list:
+        obj = call.args[0]
+        if isinstance(obj, User):
+            user_added = obj
+            break
+    assert user_added is not None
+    assert user_added.phone == "13800001111"
+
+
+def test_register_new_phone_email_optional(
+    client: TestClient,
+    setup_db_results: SetupDbResults,
+    make_org: object,
+) -> None:
+    """Phase 5: email 可选 — 只传 phone 也成 (国内场景)."""
+    org = make_org()  # type: ignore[operator]
+    setup_db_results([org, None, None])
+    r = client.post(
+        f"/api/public/eap/{_SLUG}/register",
+        json={"phone": "13900002222", "password": "secret123", "name": "员工 2"},
+    )
+    assert r.status_code == 201
 
 
 def test_register_existing_user_correct_password_201(
@@ -128,7 +155,7 @@ def test_register_existing_user_correct_password_201(
     setup_db_results([org, existing, None])
     r = client.post(
         f"/api/public/eap/{_SLUG}/register",
-        json={"email": "e@a.com", "password": "secret123", "name": "员工"},
+        json={"phone": "13800001111", "password": "secret123", "name": "员工"},
     )
     assert r.status_code == 201
     body = r.json()
@@ -155,7 +182,7 @@ def test_register_existing_user_wrong_password_401(
     setup_db_results([org, existing])
     r = client.post(
         f"/api/public/eap/{_SLUG}/register",
-        json={"email": "e@a.com", "password": "wrong-password", "name": "员工"},
+        json={"phone": "13800001111", "password": "wrong-password", "name": "员工"},
     )
     assert r.status_code == 401
     # rollback 调用 — 不能 commit
@@ -179,7 +206,7 @@ def test_register_existing_user_no_hash_claim_flow_201(
     setup_db_results([org, existing, None])
     r = client.post(
         f"/api/public/eap/{_SLUG}/register",
-        json={"email": "c@a.com", "password": "newpass1", "name": "员工"},
+        json={"phone": "13800001111", "password": "newpass1", "name": "员工"},
     )
     assert r.status_code == 201
     # password_hash 已被设置 (存在 user 上)
@@ -205,7 +232,7 @@ def test_register_existing_member_correct_password_201_unified_response(
     setup_db_results([org, existing, uuid.uuid4()])
     r = client.post(
         f"/api/public/eap/{_SLUG}/register",
-        json={"email": "e@a.com", "password": "ok-password", "name": "员工"},
+        json={"phone": "13800001111", "password": "ok-password", "name": "员工"},
     )
     # 与新加入分支响应完全一致
     assert r.status_code == 201
@@ -232,7 +259,7 @@ def test_register_existing_member_wrong_password_401(
     setup_db_results([org, existing])
     r = client.post(
         f"/api/public/eap/{_SLUG}/register",
-        json={"email": "e@a.com", "password": "wrong-pw", "name": "员工"},
+        json={"phone": "13800001111", "password": "wrong-pw", "name": "员工"},
     )
     assert r.status_code == 401
 
@@ -247,9 +274,27 @@ def test_register_short_password_400(
     setup_db_results([org])
     r = client.post(
         f"/api/public/eap/{_SLUG}/register",
-        json={"email": "x@y.com", "password": "abc", "name": "短"},
+        json={"phone": "13800001111", "password": "abc", "name": "短"},
     )
     assert r.status_code == 400
+
+
+def test_register_missing_phone_400(client: TestClient) -> None:
+    """Phase 5: phone 必填, 缺 phone → 422."""
+    r = client.post(
+        f"/api/public/eap/{_SLUG}/register",
+        json={"email": "x@y.com", "password": "secret123", "name": "x"},
+    )
+    assert r.status_code in (400, 422)
+
+
+def test_register_invalid_phone_400(client: TestClient) -> None:
+    """Phase 5: phone 不合法 (10 位 / 第二位不是 3-9 等) → 422."""
+    r = client.post(
+        f"/api/public/eap/{_SLUG}/register",
+        json={"phone": "12345", "password": "secret123", "name": "x"},
+    )
+    assert r.status_code in (400, 422)
 
 
 def test_register_org_not_found_404(
@@ -259,6 +304,6 @@ def test_register_org_not_found_404(
     setup_db_results([None])
     r = client.post(
         f"/api/public/eap/{_SLUG}/register",
-        json={"email": "x@y.com", "password": "secret123", "name": "x"},
+        json={"phone": "13800001111", "password": "secret123", "name": "x"},
     )
     assert r.status_code == 404

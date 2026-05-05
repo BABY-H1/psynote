@@ -33,8 +33,9 @@ def test_enroll_batch_with_user_id_succeeds(
 ) -> None:
     """传 userId: 跳过 findOrCreate, 直接 enroll."""
     inst = make_instance(capacity=None)  # type: ignore[operator]
-    # 流: dup_q (None) + instance_q (inst) — capacity NULL 跳计数
-    setup_db_results([None, inst])
+    # Phase 5 N+1 修后: 1) 顶层 cached_inst_q (inst), 2) per-member dup_q (None).
+    # capacity NULL → 跳 cached approved count + _do_enroll 内 capacity loop.
+    setup_db_results([inst, None])
     r = admin_org_client.post(
         f"/api/orgs/{_ORG_ID}/group/instances/{_INSTANCE_ID}/enroll-batch",
         json={"members": [{"userId": _USER_ID}]},

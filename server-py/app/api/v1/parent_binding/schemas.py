@@ -8,19 +8,24 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
 from app.api.v1._schema_base import CamelModel
+from app.lib.phone_utils import CN_PHONE_REGEX
 
 # ─── admin: POST /parent-invite-tokens body ─────────────────────
 
 
 class CreateClassTokenBody(CamelModel):
-    """``POST .../parent-invite-tokens`` body. 默认 30 天 (服务侧).
+    """``POST .../parent-invite-tokens`` body. Phase 5: 默认 365 天 (1 学年).
 
-    镜像 parent-binding.routes.ts:31-37.
+    镜像 parent-binding.routes.ts:31-37。
+
+    Phase 5 (2026-05-04) 决策: 学校班级 token 默认有效期 30 → 365 天 (= 1 学年),
+    班主任仍可在 1~365 范围内调整。学校场景中, token 是公开二维码贴墙 / 印通讯
+    录, 30 天太短家长还没看到就过期; 365 天覆盖一学年, 更新一次即可。
     """
 
     expires_in_days: int | None = Field(default=None, ge=1, le=365)
@@ -38,6 +43,11 @@ class ParentBindBody(CamelModel):
 
     所有字段在 service 层做严格校验 (空字串 / phoneLast4 4 位数字 / 关系白名单 /
     密码 ≥6 位); 这里只做最弱 schema, 让校验集中在 service 错误信息精确控制.
+
+    Phase 5 (2026-05-04): 加 ``phone`` (家长真实手机号), 废之前的合成 email.
+    保留 ``phone_last4`` 是因为它语义不同 — 老师录入时只填末 4 位用于核身,
+    而家长此处填的是完整手机号用于登录. 加 model_validator 强制末 4 位一致,
+    防家长填错手机号自相矛盾.
     """
 
     student_name: str = ""
@@ -46,6 +56,15 @@ class ParentBindBody(CamelModel):
     relation: ParentRelation | None = None
     my_name: str = ""
     password: str = ""
+    # Phase 5: 家长真实手机号 (登录用), 中国大陆 11 位
+    phone: str = Field(default="", pattern=rf"({CN_PHONE_REGEX})|^$")
+
+    @model_validator(mode="after")
+    def phone_last4_must_match_phone(self) -> Self:
+        """业务一致性: 若 phone 给齐 11 位, 末 4 位必须 == phone_last4 (防家长填错)."""
+        if self.phone and self.phone_last4 and self.phone[-4:] != self.phone_last4:
+            raise ValueError("phone 末 4 位与 phoneLast4 不一致")
+        return self
 
 
 # ─── public: response (login-shape payload) ─────────────────────

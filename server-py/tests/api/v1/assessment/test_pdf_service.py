@@ -171,7 +171,7 @@ async def test_generate_batch_pdf_zip_skips_missing_reports(
     import io
 
     from app.api.v1.assessment.pdf_service import generate_batch_pdf_zip
-    from tests.api.v1.assessment.conftest import _make_query_result
+    from tests.api.v1._conftest_helpers import make_query_result as _make_query_result
 
     rep = make_report()
     # FIFO: [rep, None] — 第一个 PDF 成功, 第二个 missing
@@ -214,7 +214,7 @@ async def test_generate_result_pdf_with_assessment_and_user(
 ) -> None:
     """完整路径: result + assessment.title + user.name 三步查询都返结果, PDF 生成。"""
     from app.api.v1.assessment.pdf_service import generate_result_pdf
-    from tests.api.v1.assessment.conftest import _make_query_result
+    from tests.api.v1._conftest_helpers import make_query_result as _make_query_result
 
     result = make_result(user_id=uuid.uuid4(), risk_level="level_3")
     # FIFO: [result, assessment_title, user_name]

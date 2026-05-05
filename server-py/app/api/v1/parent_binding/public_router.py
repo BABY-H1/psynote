@@ -28,7 +28,6 @@ Transactional:
 from __future__ import annotations
 
 import re
-import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
@@ -56,6 +55,7 @@ from app.db.models.school_classes import SchoolClass
 from app.db.models.school_student_profiles import SchoolStudentProfile
 from app.db.models.users import User
 from app.lib.errors import NotFoundError, ValidationError
+from app.lib.phone_utils import is_valid_cn_phone
 from app.lib.uuid_utils import parse_uuid_or_raise
 
 router = APIRouter()
@@ -133,6 +133,8 @@ async def bind_parent(
     relation: ParentRelation | None = body.relation
     my_name = (body.my_name or "").strip()
     password = body.password or ""
+    # Phase 5: 家长真实手机号 (登录用)
+    parent_phone_full = (body.phone or "").strip()
 
     if not student_name:
         raise ValidationError("请填写孩子姓名")
@@ -146,6 +148,12 @@ async def bind_parent(
         raise ValidationError("请填写您的姓名")
     if len(password) < 6:
         raise ValidationError("登录密码至少 6 位")
+    # Phase 5: phone 必填 + 中国大陆格式
+    if not is_valid_cn_phone(parent_phone_full):
+        raise ValidationError("请填写正确的手机号(中国大陆 11 位)")
+    # 业务一致性: 末 4 位必须 == phone_last4 (schema validator 也会拦, 这里二次保护)
+    if parent_phone_full[-4:] != phone_last4:
+        raise ValidationError("手机号末 4 位与上方填写不一致")
 
     token_row, _class_name, _grade, _org_name = await _load_valid_token(db, token)
     org_id = token_row.org_id
@@ -197,10 +205,13 @@ async def bind_parent(
     guardian_user: User
     relationship_row: ClientRelationship
     try:
-        # guardian user (合成 email — internal domain, 防与现有用户碰撞)
-        guardian_email = f"g_{secrets.token_hex(6)}@guardian.internal"
+        # Phase 5 (2026-05-04): 废合成 email, 用真手机号建 guardian user.
+        # 之前 ``g_{token_hex(6)}@guardian.internal`` 让家长无法用邮箱登录, 也违反
+        # phone-first 原则. 现在: phone=家长填的真手机号, email=None (Phase 7+ 短信
+        # 验证后, phone_verified=true).
         guardian_user = User(
-            email=guardian_email,
+            phone=parent_phone_full,
+            email=None,
             name=my_name,
             password_hash=hash_password(password),
             is_guardian_account=True,

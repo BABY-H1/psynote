@@ -23,9 +23,10 @@ from app.core.database import get_db
 from app.db.models.ai_call_logs import AICallLog
 from app.db.models.org_members import OrgMember
 from app.db.models.organizations import Organization
-from app.lib.errors import ForbiddenError, NotFoundError
+from app.lib.errors import NotFoundError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client
 from app.shared.tier import TIER_FEATURES
 
 router = APIRouter()
@@ -40,10 +41,7 @@ _TIER_LABELS: dict[str, str] = {
 
 
 def _reject_client(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("Client role not permitted on this endpoint")
+    reject_client(org)
 
 
 @router.get("/subscription", response_model=SubscriptionInfo)

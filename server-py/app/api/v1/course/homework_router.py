@@ -49,6 +49,7 @@ from app.lib.errors import (
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client, require_admin_or_counselor
 
 router = APIRouter()
 
@@ -57,19 +58,11 @@ router = APIRouter()
 
 
 def _require_admin_or_counselor(org: OrgContext | None) -> OrgContext:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError("insufficient_role")
-    return org
+    return require_admin_or_counselor(org)
 
 
 def _reject_client(org: OrgContext | None) -> OrgContext:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("来访者请通过客户端门户访问")
-    return org
+    return reject_client(org, client_message="来访者请通过客户端门户访问")
 
 
 def _def_to_output(d: CourseHomeworkDef) -> HomeworkDefOutput:

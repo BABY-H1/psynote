@@ -113,11 +113,13 @@ def test_organization_org_level_default_leaf() -> None:
 # ─── users 字段 ────────────────────────────────────────────────
 
 
-def test_user_columns_match_drizzle() -> None:
+def test_user_columns_match_drizzle_plus_phase5_phone() -> None:
+    """Phase 5 (2026-05-04): users 加 phone + phone_verified (国内手机号登录)."""
     from app.db.models.users import User
 
     cols = {c.name for c in User.__table__.columns}
     expected = {
+        # Drizzle baseline:
         "id",
         "email",
         "name",
@@ -127,6 +129,9 @@ def test_user_columns_match_drizzle() -> None:
         "is_guardian_account",
         "last_login_at",
         "created_at",
+        # Phase 5 新增 (国内手机号登录):
+        "phone",
+        "phone_verified",
     }
     assert expected <= cols
 
@@ -168,6 +173,43 @@ def test_user_is_guardian_account_default_false() -> None:
     is_ga = User.__table__.c.is_guardian_account
     assert is_ga.nullable is False
     assert "false" in str(is_ga.server_default.arg).lower()
+
+
+# ─── Phase 5: phone + phone_verified 字段 ───────────────────────
+
+
+def test_user_phone_nullable() -> None:
+    """Phase 5: phone 可空 (legacy / 邀请未注册账号没手机号)"""
+    from app.db.models.users import User
+
+    assert User.__table__.c.phone.nullable is True
+
+
+def test_user_phone_verified_default_false() -> None:
+    """Phase 5: phone_verified 默认 false (短信验证 Phase 7+ 才能置 true)"""
+    from app.db.models.users import User
+
+    pv = User.__table__.c.phone_verified
+    assert pv.nullable is False
+    assert "false" in str(pv.server_default.arg).lower()
+
+
+def test_user_phone_partial_unique_index() -> None:
+    """Phase 5: phone 用 partial unique index (phone IS NOT NULL), 不是列级 unique.
+
+    PG 列级 UNIQUE 让 NULL 也"参与"约束 — 多 NULL 不冲突, 但反射时 ORM 会标 unique=True
+    误导业务. partial unique 更明确: "若有手机号, 必须唯一; 没填的不参与比较".
+    """
+    from app.db.models.users import User
+
+    indexes = {idx.name: idx for idx in User.__table__.indexes}
+    assert "uq_users_phone" in indexes, "Phase 5 partial unique index 缺"
+    idx = indexes["uq_users_phone"]
+    assert idx.unique is True
+    cols = [c.name for c in idx.columns]
+    assert cols == ["phone"]
+    # 列级 unique 不应被设 (避免 NULL 参与唯一比较)
+    assert User.__table__.c.phone.unique is not True
 
 
 # ─── password_reset_tokens 字段 + 索引 ─────────────────────────

@@ -24,15 +24,17 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Iterator
-from typing import Any, Protocol
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-
-class SetupDbResults(Protocol):
-    def __call__(self, rows: list[Any]) -> None: ...
+from tests.api.v1._conftest_helpers import (
+    SetupDbResults,
+    make_mock_db,
+    setup_db_results_factory,
+)
 
 
 @pytest.fixture(autouse=True)
@@ -40,51 +42,14 @@ def _org_test_env(base_env: pytest.MonkeyPatch) -> None:
     base_env.setenv("NODE_ENV", "test")
 
 
-def _make_query_result(row: Any) -> MagicMock:
-    """构造 mock SQLAlchemy Result.
-
-    支持:
-      - ``scalar_one_or_none()`` 返回 row (None / single ORM object)
-      - ``scalar()`` 返回 row (count(*) 用)
-      - ``first()`` 返回 row 直接 (selecting 元组的场景)
-      - ``all()`` 返回 list (row 是 list 时直接, 否则 [row] 包一下)
-      - ``scalars().all()`` 返回 list
-    """
-    result = MagicMock()
-    result.scalar_one_or_none = MagicMock(return_value=row)
-    result.scalar = MagicMock(return_value=row)
-    result.first = MagicMock(return_value=row)
-    if isinstance(row, list):
-        result.all = MagicMock(return_value=row)
-        scalars = MagicMock()
-        scalars.all = MagicMock(return_value=row)
-        result.scalars = MagicMock(return_value=scalars)
-    else:
-        result.all = MagicMock(return_value=[row] if row is not None else [])
-        scalars = MagicMock()
-        scalars.all = MagicMock(return_value=[row] if row is not None else [])
-        result.scalars = MagicMock(return_value=scalars)
-    return result
-
-
 @pytest.fixture
 def mock_db() -> AsyncMock:
-    db = AsyncMock()
-    db.add = MagicMock()
-    db.commit = AsyncMock()
-    db.rollback = AsyncMock()
-    db.flush = AsyncMock()
-    db.execute = AsyncMock()
-    return db
+    return make_mock_db()
 
 
 @pytest.fixture
 def setup_db_results(mock_db: AsyncMock) -> SetupDbResults:
-    def _setup(rows: list[Any]) -> None:
-        results = [_make_query_result(r) for r in rows]
-        mock_db.execute = AsyncMock(side_effect=results)
-
-    return _setup
+    return setup_db_results_factory(mock_db)
 
 
 @pytest.fixture

@@ -6,16 +6,17 @@ pattern, 包括 _reject_client / _require_org_admin 等 role guard)。
 from __future__ import annotations
 
 from collections.abc import Iterator
-from typing import Any, Protocol
-from unittest.mock import AsyncMock, MagicMock
+from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi.testclient import TestClient
 
-
-class SetupDbResults(Protocol):
-    def __call__(self, rows: list[Any]) -> None: ...
-
+from tests.api.v1._conftest_helpers import (
+    SetupDbResults,
+    make_mock_db,
+    setup_db_results_factory,
+)
 
 FAKE_ORG_ID = "00000000-0000-0000-0000-000000000099"
 FAKE_USER_ID = "00000000-0000-0000-0000-000000000001"
@@ -27,38 +28,14 @@ def _notification_test_env(base_env: pytest.MonkeyPatch) -> None:
     base_env.setenv("NODE_ENV", "test")
 
 
-def _make_query_result(row: Any) -> MagicMock:
-    """Mock SQLAlchemy ``Result``: 同时支持 scalar_one_or_none / scalars().all() / scalar_one。"""
-    result = MagicMock()
-    result.scalar_one_or_none = MagicMock(return_value=row)
-    rows: list[Any] = list(row) if isinstance(row, list) else [row] if row is not None else []
-    scalars_obj = MagicMock()
-    scalars_obj.all = MagicMock(return_value=rows)
-    result.scalars = MagicMock(return_value=scalars_obj)
-    result.first = MagicMock(return_value=row)
-    result.scalar_one = MagicMock(return_value=row if isinstance(row, int) else 0)
-    return result
-
-
 @pytest.fixture
 def mock_db() -> AsyncMock:
-    db = AsyncMock()
-    db.add = MagicMock()
-    db.commit = AsyncMock()
-    db.rollback = AsyncMock()
-    db.execute = AsyncMock()
-    db.refresh = AsyncMock()
-    db.delete = AsyncMock()
-    return db
+    return make_mock_db()
 
 
 @pytest.fixture
 def setup_db_results(mock_db: AsyncMock) -> SetupDbResults:
-    def _setup(rows: list[Any]) -> None:
-        results = [_make_query_result(r) for r in rows]
-        mock_db.execute = AsyncMock(side_effect=results)
-
-    return _setup
+    return setup_db_results_factory(mock_db)
 
 
 def _override_db_dep(app: Any, mock_db: AsyncMock) -> None:

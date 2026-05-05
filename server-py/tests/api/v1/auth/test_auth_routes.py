@@ -87,7 +87,7 @@ def test_login_rejects_null_password_hash_fail_closed(
     assert response.status_code == 400
     body = response.json()
     # 防枚举: message 必须与"密码错误"一致, 不能暗示账号有特殊状态
-    assert "邮箱或密码错误" in body["message"]
+    assert "账号或密码错误" in body["message"]
 
 
 def test_login_rejects_empty_password_hash(
@@ -165,7 +165,7 @@ def test_login_rejects_wrong_password(
         json={"email": "real2@example.com", "password": "wrong"},
     )
     assert response.status_code == 400
-    assert "邮箱或密码错误" in response.json()["message"]
+    assert "账号或密码错误" in response.json()["message"]
 
 
 def test_login_rejects_unknown_email_with_same_shape(
@@ -183,7 +183,7 @@ def test_login_rejects_unknown_email_with_same_shape(
         json={"email": "ghost@example.com", "password": "x"},
     )
     assert response.status_code == 400
-    assert "邮箱或密码错误" in response.json()["message"]
+    assert "账号或密码错误" in response.json()["message"]
 
 
 # ─── POST /refresh ───────────────────────────────────────────────
@@ -368,6 +368,96 @@ def test_login_response_uses_camel_case_keys(
     assert "access_token" not in body
     assert "refresh_token" not in body
     assert "is_system_admin" not in body["user"]
+
+
+# ─── Phase 5: 手机号登录 ───────────────────────────────────────
+
+
+def test_login_with_phone_succeeds(
+    client: TestClient,
+    setup_db_results: SetupDbResults,
+    mock_db: AsyncMock,
+) -> None:
+    """Phase 5: 手机号 + 密码 → 200 + tokens (不再依赖 email)."""
+    plain_password = "phone-pass-123"
+    real_hash = bcrypt.hashpw(plain_password.encode(), bcrypt.gensalt(10)).decode()
+    user_uuid = uuid.UUID("00000000-0000-0000-0000-00000000aaaa")
+    phone_user = _make_user(
+        email=None,  # 关键: 用户没邮箱, 只有手机号
+        name="手机用户",
+        password_hash=real_hash,
+        is_system_admin=False,
+        user_id=user_uuid,
+    )
+    phone_user.phone = "13800001234"
+    setup_db_results([phone_user])
+
+    response = client.post(
+        "/api/auth/login",
+        json={"phone": "13800001234", "password": plain_password},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert body["accessToken"]
+    assert body["refreshToken"]
+    assert body["user"]["id"] == str(user_uuid)
+    mock_db.commit.assert_awaited()
+
+
+def test_login_phone_invalid_format_400(client: TestClient) -> None:
+    """Phase 5: 手机号格式不符合中国大陆规则 → Pydantic 拦, 400/422."""
+    # 第一位不是 1
+    r = client.post("/api/auth/login", json={"phone": "23800001234", "password": "x"})
+    assert r.status_code in (400, 422)
+
+
+def test_login_phone_too_short_400(client: TestClient) -> None:
+    """10 位 → 不合法."""
+    r = client.post("/api/auth/login", json={"phone": "1380000123", "password": "x"})
+    assert r.status_code in (400, 422)
+
+
+def test_login_neither_phone_nor_email_400(client: TestClient) -> None:
+    """Phase 5: phone 和 email 都不传 → 422 (Pydantic model_validator 抛)."""
+    r = client.post("/api/auth/login", json={"password": "x"})
+    # FastAPI Pydantic ValidationError 默认 422
+    assert r.status_code in (400, 422)
+
+
+def test_login_with_phone_wrong_password_same_message(
+    client: TestClient,
+    setup_db_results: SetupDbResults,
+) -> None:
+    """Phase 5: 手机号存在但密码错 → 与未知账号同 message (防枚举)."""
+    real_hash = bcrypt.hashpw(b"correct", bcrypt.gensalt(10)).decode()
+    phone_user = _make_user(password_hash=real_hash)
+    phone_user.phone = "13900009999"
+    setup_db_results([phone_user])
+
+    r = client.post(
+        "/api/auth/login",
+        json={"phone": "13900009999", "password": "wrong"},
+    )
+    assert r.status_code == 400
+    assert "账号或密码错误" in r.json()["message"]
+
+
+def test_login_email_still_works_legacy_path(
+    client: TestClient,
+    setup_db_results: SetupDbResults,
+) -> None:
+    """Phase 5: 老用户用邮箱登录仍可用 (向后兼容)."""
+    plain = "legacy-pwd"
+    real_hash = bcrypt.hashpw(plain.encode(), bcrypt.gensalt(10)).decode()
+    legacy = _make_user(email="legacy@x.com", password_hash=real_hash)
+    setup_db_results([legacy])
+
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "legacy@x.com", "password": plain},
+    )
+    assert r.status_code == 200
+    assert r.json()["accessToken"]
 
 
 # ─── 类型注解兼容: setup_db_results / mock_db 用 Any (避免 mypy 跨文件推导抖) ───

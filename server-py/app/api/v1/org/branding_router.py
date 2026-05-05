@@ -27,23 +27,18 @@ from app.db.models.organizations import Organization
 from app.lib.errors import ForbiddenError, NotFoundError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client, require_admin
 from app.shared.tier import has_feature
 
 router = APIRouter()
 
 
 def _reject_client(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("Client role not permitted on this endpoint")
+    reject_client(org)
 
 
 def _require_org_admin(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role != "org_admin":
-        raise ForbiddenError("insufficient_role")
+    require_admin(org)
 
 
 def _branding_from_settings(settings: dict[str, Any] | None) -> BrandingSettings:

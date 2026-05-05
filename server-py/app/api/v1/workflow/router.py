@@ -70,6 +70,7 @@ from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import require_admin, require_admin_or_counselor
 
 logger = logging.getLogger(__name__)
 
@@ -86,19 +87,11 @@ def _require_org(org: OrgContext | None) -> OrgContext:
 
 
 def _require_org_admin(org: OrgContext | None) -> OrgContext:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role != "org_admin":
-        raise ForbiddenError("insufficient_role")
-    return org
+    return require_admin(org)
 
 
 def _require_admin_or_counselor(org: OrgContext | None) -> OrgContext:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError("insufficient_role")
-    return org
+    return require_admin_or_counselor(org)
 
 
 def _rule_to_row(r: WorkflowRule) -> WorkflowRuleRow:

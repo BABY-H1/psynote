@@ -86,13 +86,13 @@ def test_public_intake_creates_user_and_intake(
     """Transactional 端点: org found → user 不存在 (建) → 没 member (建) →
     counselor 列表 [] → no auto-assign → 通知 admin 列表 [] → commit.
 
-    重点: 单次 commit 体现 transactional, intake 创建成功 status='pending'.
+    Phase 5: 重点 — phone 必填且写入 user.phone.
     """
     org = make_org()  # type: ignore[operator]
     setup_db_results(
         [
             org,  # org by slug
-            None,  # user lookup
+            None,  # user lookup (by phone)
             None,  # member dup check
             [],  # counselors list (empty → no auto-assign)
             [],  # admin list (empty)
@@ -103,8 +103,8 @@ def test_public_intake_creates_user_and_intake(
         json={
             "serviceId": "svc-1",
             "name": "李同学",
-            "email": "li@example.com",
             "phone": "13800000000",
+            "email": "li@example.com",  # 可选
             "chiefComplaint": "近期失眠",
         },
     )
@@ -114,6 +114,65 @@ def test_public_intake_creates_user_and_intake(
     assert body["assignedCounselorId"] is None
     mock_db.commit.assert_awaited_once()
 
+    # Phase 5: 写到 user.phone, 而非合成
+    from app.db.models.users import User
+
+    user_added: User | None = None
+    for call in mock_db.add.call_args_list:
+        obj = call.args[0]
+        if isinstance(obj, User):
+            user_added = obj
+            break
+    assert user_added is not None
+    assert user_added.phone == "13800000000"
+
+
+def test_public_intake_phone_required_no_email(
+    client: TestClient,
+    setup_db_results: SetupDbResults,
+    make_org: object,
+) -> None:
+    """Phase 5: email 可选, 只传 phone 也成."""
+    org = make_org()  # type: ignore[operator]
+    setup_db_results([org, None, None, [], []])
+    r = client.post(
+        "/api/public/orgs/test-org/services/intake",
+        json={
+            "serviceId": "svc-1",
+            "name": "李同学",
+            "phone": "13900001111",
+        },
+    )
+    assert r.status_code == 201
+
+
+def test_public_intake_missing_phone_400(
+    client: TestClient,
+) -> None:
+    """Phase 5: phone 必填, 缺则 422."""
+    r = client.post(
+        "/api/public/orgs/test-org/services/intake",
+        json={
+            "serviceId": "svc-1",
+            "name": "李同学",
+            "email": "li@example.com",
+        },
+    )
+    assert r.status_code in (400, 422)
+
+
+def test_public_intake_invalid_phone_400(client: TestClient) -> None:
+    """Phase 5: phone 不合法 (10 位 / 字母 / 12x 起头) → 422."""
+    r = client.post(
+        "/api/public/orgs/test-org/services/intake",
+        json={
+            "serviceId": "svc-1",
+            "name": "李同学",
+            "phone": "12345",
+        },
+    )
+    assert r.status_code in (400, 422)
+
 
 def test_public_intake_404_unknown_slug(
     client: TestClient,
@@ -122,7 +181,7 @@ def test_public_intake_404_unknown_slug(
     setup_db_results([None])
     r = client.post(
         "/api/public/orgs/ghost/services/intake",
-        json={"serviceId": "x", "name": "x", "email": "x@y.com"},
+        json={"serviceId": "x", "name": "x", "phone": "13800000000"},
     )
     assert r.status_code == 404
 

@@ -32,8 +32,9 @@ def test_list_scales_happy(
     make_scale: object,
 ) -> None:
     s = make_scale(title="PHQ-9")  # type: ignore[operator]
-    # 1) list query, 2) dim count for s, 3) item count for s
-    setup_db_results([[s], 3, 9])
+    # Phase 5 N+1 修后, 改成 3 个查询: scales / GROUP BY dim_count / GROUP BY item_count.
+    # 后两个 .all() 返 [(scale_id, count)] 形态.
+    setup_db_results([[s], [(s.id, 3)], [(s.id, 9)]])
     r = staff_client.get(f"/api/orgs/{_ORG_ID}/scales/")
     assert r.status_code == 200
     body = r.json()

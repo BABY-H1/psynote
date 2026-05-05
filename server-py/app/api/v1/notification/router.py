@@ -27,9 +27,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.notification.schemas import NotificationResponse, UnreadCountResponse
 from app.core.database import get_db
 from app.db.models.notifications import Notification
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import NotFoundError, ValidationError
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client
 
 router = APIRouter()
 
@@ -38,18 +39,9 @@ def _reject_client(org: OrgContext | None, user: AuthUser) -> OrgContext:
     """
     与 Node ``rejectClient`` middleware 一致: client role 不允许调用本模块 (走门户)。
 
-    sysadm 跳过. 非 sysadm 必须有 org context 且 role != 'client'.
+    sysadm 跳过 (但仍需 org context). 非 sysadm 必须有 org context 且 role != 'client'.
     """
-    if user.is_system_admin:
-        # sysadm 仍需 org context (路径里有 /orgs/{org_id}, 应解析出 org); 没解析到就 403.
-        if org is None:
-            raise ForbiddenError("org_context_required")
-        return org
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("来访者请通过客户端门户访问")
-    return org
+    return reject_client(org, user=user, client_message="来访者请通过客户端门户访问")
 
 
 def _notification_to_response(n: Notification) -> NotificationResponse:

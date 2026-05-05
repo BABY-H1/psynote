@@ -39,20 +39,16 @@ from app.db.models.course_instances import CourseInstance
 from app.db.models.group_instances import GroupInstance
 from app.db.models.org_members import OrgMember
 from app.db.models.session_notes import SessionNote
-from app.lib.errors import ForbiddenError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client, require_admin
 
 router = APIRouter()
 
 
 def _require_org_admin(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("Client role not permitted on this endpoint")
-    if org.role != "org_admin":
-        raise ForbiddenError("insufficient_role")
+    reject_client(org)
+    require_admin(org)
 
 
 # ─── /stats ──────────────────────────────────────────────────────

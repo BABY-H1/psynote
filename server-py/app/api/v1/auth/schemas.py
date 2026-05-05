@@ -9,16 +9,32 @@ JSON wire 用 camelCase。
 
 from __future__ import annotations
 
-from pydantic import EmailStr, Field
+from typing import Self
+
+from pydantic import EmailStr, Field, model_validator
 
 from app.api.v1._schema_base import CamelModel
+from app.lib.phone_utils import CN_PHONE_REGEX
 
 # ─── /login ──────────────────────────────────────────────────
 
 
 class LoginRequest(CamelModel):
-    email: EmailStr
+    """Phase 5 (2026-05-04): 手机号 OR 邮箱 + 密码登录。
+
+    Founder 决策: 国内市场切手机号, 邮箱保留向后兼容 (legacy 用户邮箱登录仍能用)。
+    至少提供 phone / email 之一, 否则 422 (model_validator 抛 ValueError)。
+    """
+
+    phone: str | None = Field(default=None, pattern=CN_PHONE_REGEX)
+    email: EmailStr | None = None
     password: str = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def require_phone_or_email(self) -> Self:
+        if not self.phone and not self.email:
+            raise ValueError("phone 或 email 必填")
+        return self
 
 
 class UserSummary(CamelModel):

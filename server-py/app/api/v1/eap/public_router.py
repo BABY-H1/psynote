@@ -139,10 +139,11 @@ async def register_employee(
     if not has_feature(tier, "eap", org_type=(org.settings or {}).get("orgType")):
         raise NotFoundError("Organization", org_slug)
 
-    email = body.email.strip().lower()
+    phone = body.phone.strip()
+    email = body.email.strip().lower() if body.email else None
 
-    # 2. 找已有 user
-    uq = select(User).where(User.email == email).limit(1)
+    # 2. 找已有 user — Phase 5: 按手机号查 (主登录字段)
+    uq = select(User).where(User.phone == phone).limit(1)
     existing_user = (await db.execute(uq)).scalar_one_or_none()
 
     is_new_user = False
@@ -153,15 +154,17 @@ async def register_employee(
             if existing_user.password_hash:
                 if not verify_password(body.password, existing_user.password_hash):
                     # 错密码 → 401, 不附加 member / profile
-                    raise UnauthorizedError("邮箱或密码错误")
+                    raise UnauthorizedError("账号或密码错误")
             else:
                 # 无 hash → claim, 设密码 + 名字
                 existing_user.password_hash = hash_password(body.password)
                 existing_user.name = body.name.strip()
             user_id = existing_user.id
         else:
-            # 2b. 新邮箱 → 创建 user (含真实 password_hash, 与 W0.4 一致)
+            # 2b. 新手机号 → 创建 user (含真实 password_hash, 与 W0.4 一致)
+            # Phase 5: phone 必填, email 可选
             new_user = User(
+                phone=phone,
                 email=email,
                 name=body.name.strip(),
                 password_hash=hash_password(body.password),

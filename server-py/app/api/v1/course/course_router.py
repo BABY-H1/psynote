@@ -77,6 +77,7 @@ from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client, require_admin_or_counselor
 
 router = APIRouter()
 
@@ -85,21 +86,11 @@ router = APIRouter()
 
 
 def _require_admin_or_counselor(org: OrgContext | None) -> OrgContext:
-    """``requireRole('org_admin', 'counselor')`` 等价 (legacy role)."""
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError("insufficient_role")
-    return org
+    return require_admin_or_counselor(org)
 
 
 def _reject_client(org: OrgContext | None) -> OrgContext:
-    """``rejectClient`` hook 等价 — client legacy role 不可访问 staff 端点。"""
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("来访者请通过客户端门户访问")
-    return org
+    return reject_client(org, client_message="来访者请通过客户端门户访问")
 
 
 async def _assert_course_owned_by_org(db: AsyncSession, course_id: uuid.UUID, org_id: str) -> None:
@@ -676,6 +667,19 @@ async def clone_course(
         db.add(new_course)
         await db.flush()
 
+        # Phase 5 N+1 修: 一次拿所有 source chapters 的 lesson_blocks (IN(...) + group),
+        # 之前是每章节 1 query (N+1).
+        blocks_by_chapter: dict[Any, list[CourseLessonBlock]] = {}
+        if source_chapters:
+            source_chapter_ids = [ch.id for ch in source_chapters]
+            lbq = (
+                select(CourseLessonBlock)
+                .where(CourseLessonBlock.chapter_id.in_(source_chapter_ids))
+                .order_by(asc(CourseLessonBlock.sort_order))
+            )
+            for b in (await db.execute(lbq)).scalars().all():
+                blocks_by_chapter.setdefault(b.chapter_id, []).append(b)
+
         new_chapters: list[CourseChapter] = []
         for ch in source_chapters:
             new_chapter = CourseChapter(
@@ -695,14 +699,7 @@ async def clone_course(
             await db.flush()  # 取 new_chapter.id 给 lesson_blocks 引用
             new_chapters.append(new_chapter)
 
-            # 复制 lesson_blocks
-            lbq = (
-                select(CourseLessonBlock)
-                .where(CourseLessonBlock.chapter_id == ch.id)
-                .order_by(asc(CourseLessonBlock.sort_order))
-            )
-            blocks = list((await db.execute(lbq)).scalars().all())
-            for b in blocks:
+            for b in blocks_by_chapter.get(ch.id, []):
                 db.add(
                     CourseLessonBlock(
                         chapter_id=new_chapter.id,

@@ -39,39 +39,22 @@ from app.db.models.assessment_scales import AssessmentScale
 from app.db.models.assessments import Assessment
 from app.db.models.scale_dimensions import ScaleDimension
 from app.db.models.scales import Scale
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import NotFoundError, ValidationError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import (
+    reject_client as _reject_client,
+)
+from app.middleware.role_guards import (
+    require_admin as _require_org_admin,
+)
+from app.middleware.role_guards import (
+    require_admin_or_counselor as _require_admin_or_counselor,
+)
 
 router = APIRouter()
-
-
-# ─── 工具 ────────────────────────────────────────────────────────
-
-
-def _reject_client(org: OrgContext | None) -> None:
-    """``rejectClient`` 等价: legacy role='client' 被拒."""
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("Client role not permitted on this endpoint")
-
-
-def _require_admin_or_counselor(org: OrgContext | None) -> None:
-    """``requireRole('org_admin', 'counselor')`` 等价。"""
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError("insufficient_role")
-
-
-def _require_org_admin(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role != "org_admin":
-        raise ForbiddenError("insufficient_role")
 
 
 def _generate_share_token() -> str:

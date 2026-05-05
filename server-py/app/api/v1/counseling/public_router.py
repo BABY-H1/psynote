@@ -134,8 +134,8 @@ async def register_client(
     # 1. 校验 password 长度 (Node 端: <6 → 400)
     if len(body.password) < 6:
         raise ValidationError("密码至少 6 位")
-    if not body.name.strip() or not str(body.email).strip():
-        raise ValidationError("姓名、邮箱和密码不能为空")
+    if not body.name.strip() or not body.phone.strip():
+        raise ValidationError("姓名、手机号和密码不能为空")
 
     # 2. org 校验
     oq = (
@@ -146,12 +146,13 @@ async def register_client(
         raise NotFoundError("Organization not found")
     org_id_uuid = org_row[0]
 
-    email_norm = str(body.email).strip().lower()
+    phone_norm = body.phone.strip()
+    email_norm = str(body.email).strip().lower() if body.email else None
 
-    # 3. existing user lookup
+    # 3. existing user lookup — Phase 5: 按手机号查 (主登录字段)
     uq = (
         select(User.id, User.email, User.is_system_admin, User.password_hash)
-        .where(User.email == email_norm)
+        .where(User.phone == phone_norm)
         .limit(1)
     )
     existing_user = (await db.execute(uq)).first()
@@ -173,7 +174,7 @@ async def register_client(
             if existing_hash:
                 # 必须 bcrypt.compare (W0.4 防接管)
                 if not verify_password(body.password, existing_hash):
-                    raise UnauthorizedError("邮箱或密码错误")
+                    raise UnauthorizedError("账号或密码错误")
             else:
                 # claim flow: 设新密码
                 new_hash = hash_password(body.password)
@@ -185,9 +186,11 @@ async def register_client(
         else:
             # new user — Python 端预生成 UUID, 不依赖 db.flush() 拿 server_default 的回填
             # (与 mock test 一致: db.flush() mock 不会触发 PG gen_random_uuid())
+            # Phase 5: phone 必填, email 可选
             user_uuid = uuid.uuid4()
             new_user = User(
                 id=user_uuid,
+                phone=phone_norm,
                 email=email_norm,
                 name=body.name.strip(),
                 password_hash=hash_password(body.password),

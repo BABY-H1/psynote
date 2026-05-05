@@ -42,11 +42,12 @@ from app.api.v1.group.schemas import (
 from app.core.database import get_db
 from app.db.models.group_scheme_sessions import GroupSchemeSession
 from app.db.models.group_schemes import GroupScheme
-from app.lib.errors import ForbiddenError, NotFoundError
+from app.lib.errors import NotFoundError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client, require_role
 
 router = APIRouter()
 
@@ -56,21 +57,12 @@ router = APIRouter()
 
 def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
     """``requireRole('org_admin')`` 等价 (与 org/router.py 同 helper)."""
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "org_admin":
-        return
-    if org.role in allow_roles:
-        return
-    raise ForbiddenError("insufficient_role")
+    require_role(org, roles=("org_admin", *allow_roles))
 
 
 def _reject_client(org: OrgContext | None) -> None:
     """``rejectClient``: legacy role 'client' 拒绝."""
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("Client role not permitted on this endpoint")
+    reject_client(org)
 
 
 def _scheme_session_to_row(s: GroupSchemeSession) -> SchemeSessionRow:

@@ -34,11 +34,12 @@ from app.api.v1.org.schemas import (
 )
 from app.core.database import get_db
 from app.db.models.organizations import Organization
-from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
+from app.lib.errors import NotFoundError, ValidationError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import require_admin
 from app.shared.tier import TIER_FEATURES
 
 router = APIRouter()
@@ -53,10 +54,7 @@ _TIER_LABELS: dict[str, str] = {
 
 
 def _require_org_admin(org: OrgContext | None) -> None:
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role != "org_admin":
-        raise ForbiddenError("insufficient_role")
+    require_admin(org)
 
 
 @router.post("/", response_model=LicenseActivateResponse)

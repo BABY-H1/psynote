@@ -27,6 +27,7 @@ from app.core.database import get_db
 from app.lib.errors import ForbiddenError
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client
 
 router = APIRouter()
 
@@ -38,8 +39,7 @@ def _require_org(org: OrgContext | None) -> OrgContext:
 
 
 def _reject_client(org: OrgContext) -> None:
-    if org.role == "client":
-        raise ForbiddenError("client_role_not_allowed")
+    reject_client(org, client_message="client_role_not_allowed")
 
 
 @router.get("/", response_model=ListPeopleResponse)

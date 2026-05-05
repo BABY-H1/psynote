@@ -37,7 +37,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, status
-from sqlalchemy import and_, delete, select
+from sqlalchemy import and_, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.org.schemas import (
@@ -68,6 +68,11 @@ from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import (
+    reject_client,
+    require_role,
+    require_system_admin,
+)
 from app.shared.tier import has_feature
 
 router = APIRouter()
@@ -121,8 +126,7 @@ DEFAULT_TRIAGE_CONFIG: dict[str, Any] = {
 
 def _require_system_admin(user: AuthUser) -> None:
     """``requireSystemAdmin`` 等价 — 镜像 Node ``server/src/middleware/system-admin.ts``."""
-    if not user.is_system_admin:
-        raise ForbiddenError("system admin only")
+    require_system_admin(user)
 
 
 def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
@@ -133,21 +137,12 @@ def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] =
     与 Node org.routes.ts ``requireRole('org_admin')`` 行为完全一致 — 检查 legacy
     ``role`` 字段 (org_admin / counselor / client). 与 RoleV2 体系平行.
     """
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "org_admin":
-        return
-    if org.role in allow_roles:
-        return
-    raise ForbiddenError("insufficient_role")
+    require_role(org, roles=("org_admin", *allow_roles))
 
 
 def _reject_client(org: OrgContext | None) -> None:
     """``rejectClient`` 等价 — client legacy role 不可访问 staff 端点."""
-    if org is None:
-        raise ForbiddenError("org_context_required")
-    if org.role == "client":
-        raise ForbiddenError("Client role not permitted on this endpoint")
+    reject_client(org)
 
 
 def _check_seat_limit(org: OrgContext, current_active_count: int) -> None:
@@ -420,11 +415,15 @@ async def invite_member(
     assert org is not None  # _require_org_admin 已校验
 
     # seat-limit (mirror requireSeat)
+    # Phase 5 N+1 修: 之前 SELECT 全部 active member rows 然后 Python ``len()``;
+    # 大组织几千行很贵, 改用 SELECT count() — 单整数返回.
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
-    seat_q = select(OrgMember).where(
-        and_(OrgMember.org_id == org_uuid, OrgMember.status == "active")
+    seat_q = (
+        select(func.count())
+        .select_from(OrgMember)
+        .where(and_(OrgMember.org_id == org_uuid, OrgMember.status == "active"))
     )
-    seat_count = len((await db.execute(seat_q)).all())
+    seat_count = int((await db.execute(seat_q)).scalar() or 0)
     _check_seat_limit(org, seat_count)
 
     try:
