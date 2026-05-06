@@ -170,8 +170,12 @@ async def apply_public_enroll(
             return JSONResponse(status_code=400, content={"error": "报名已满, 暂无空位"})
 
     try:
-        # 找 / 建 user — Phase 5 P0 fix (Fix 5): 公开报名查询优先级 phone > email,
-        # 防止 email squat 攻击.
+        # 找 / 建 user — phone-first 设计 (Phase 5b 手机号注册起):
+        #   - 查找优先级 phone > email (phone 是真实身份 anchor)
+        #   - 创建匿名 user 时 email=None, 不占 users.email UNIQUE
+        #   - 真注册走 phone 时 claim 同一行
+        # 副作用是闭掉 email-squat 攻击面 (攻击者用受害者 email 反复报名也不会
+        # 拦真主注册)。
         user_id: uuid.UUID
         existing_user = None
         if body.phone:
@@ -184,9 +188,7 @@ async def apply_public_enroll(
         if existing_user is not None:
             user_id = existing_user.id
         else:
-            # Phase 5 P0 fix (Fix 5): 公开报名建 User 时**不占 email UNIQUE**
-            # → email=None (匿名 user). 受害者后续走 counseling-public / eap-public
-            # 真注册时按 phone 查到这个匿名 user 并 claim.
+            # 匿名 user: email=None (phone-first 设计), password_hash 默认 NULL
             new_user = User(name=body.name, email=None, phone=body.phone)
             db.add(new_user)
             await db.flush()

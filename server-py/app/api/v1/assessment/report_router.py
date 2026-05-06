@@ -119,7 +119,12 @@ async def get_report(
     """单个详情. 镜像 service:18-27."""
     _reject_client(org)
     rid = parse_uuid_or_raise(report_id, field="reportId")
-    q = select(AssessmentReport).where(AssessmentReport.id == rid).limit(1)
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    q = (
+        select(AssessmentReport)
+        .where(and_(AssessmentReport.id == rid, AssessmentReport.org_id == org_uuid))
+        .limit(1)
+    )
     r = (await db.execute(q)).scalar_one_or_none()
     if r is None:
         raise NotFoundError("AssessmentReport", report_id)
@@ -240,7 +245,7 @@ async def get_report_pdf(
 ) -> Response:
     """单 report PDF. Phase 3 stub. 镜像 routes.ts:113-119."""
     _reject_client(org)
-    pdf_bytes = await generate_report_pdf(db, report_id)
+    pdf_bytes = await generate_report_pdf(db, org_id=org_id, report_id=report_id)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -257,7 +262,7 @@ async def post_batch_pdf(
 ) -> Response:
     """批量 PDF ZIP. Phase 3 stub. 镜像 routes.ts:122-134."""
     _require_admin_or_counselor(org)
-    zip_bytes = await generate_batch_pdf_zip(db, body.report_ids)
+    zip_bytes = await generate_batch_pdf_zip(db, org_id=org_id, report_ids=body.report_ids)
     return Response(
         content=zip_bytes,
         media_type="application/zip",

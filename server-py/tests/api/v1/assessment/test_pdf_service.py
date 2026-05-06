@@ -105,7 +105,7 @@ async def test_generate_report_pdf_returns_pdf_bytes(
 
     rep = make_report()
     setup_db_results([rep])
-    pdf = await generate_report_pdf(mock_db, str(rep.id))
+    pdf = await generate_report_pdf(mock_db, org_id=str(rep.org_id), report_id=str(rep.id))
     assert pdf.startswith(b"%PDF-")
     assert len(pdf) > 0
 
@@ -117,7 +117,9 @@ async def test_generate_report_pdf_invalid_uuid_raises_not_found(
     from app.lib.errors import NotFoundError
 
     with pytest.raises(NotFoundError):
-        await generate_report_pdf(mock_db, "not-a-uuid")
+        await generate_report_pdf(
+            mock_db, org_id="00000000-0000-0000-0000-000000000099", report_id="not-a-uuid"
+        )
 
 
 async def test_generate_report_pdf_missing_raises_not_found(
@@ -129,7 +131,11 @@ async def test_generate_report_pdf_missing_raises_not_found(
 
     setup_db_results([None])  # DB 查无此 report
     with pytest.raises(NotFoundError):
-        await generate_report_pdf(mock_db, str(uuid.uuid4()))
+        await generate_report_pdf(
+            mock_db,
+            org_id=str(uuid.uuid4()),
+            report_id=str(uuid.uuid4()),
+        )
 
 
 # ─── generate_batch_pdf_zip ────────────────────────────────────
@@ -149,7 +155,9 @@ async def test_generate_batch_pdf_zip_yields_valid_zip(
     rep_id = str(rep.id)
     # 每个 generate_report_pdf 内部查一次 DB → 2 个 report 需 2 次 setup
     setup_db_results([rep, rep])
-    zip_bytes = await generate_batch_pdf_zip(mock_db, [rep_id, rep_id])
+    zip_bytes = await generate_batch_pdf_zip(
+        mock_db, org_id=str(rep.org_id), report_ids=[rep_id, rep_id]
+    )
     assert len(zip_bytes) > 0
 
     # 真解压验证内容
@@ -176,7 +184,9 @@ async def test_generate_batch_pdf_zip_skips_missing_reports(
     rep = make_report()
     # FIFO: [rep, None] — 第一个 PDF 成功, 第二个 missing
     mock_db.execute = AsyncMock(side_effect=[_make_query_result(rep), _make_query_result(None)])
-    zip_bytes = await generate_batch_pdf_zip(mock_db, [str(rep.id), str(uuid.uuid4())])
+    zip_bytes = await generate_batch_pdf_zip(
+        mock_db, org_id=str(rep.org_id), report_ids=[str(rep.id), str(uuid.uuid4())]
+    )
 
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as z:
         # 只 1 个 entry (第二个 missing 跳过)
@@ -193,7 +203,9 @@ async def test_generate_result_pdf_invalid_uuid_raises_not_found(
     from app.lib.errors import NotFoundError
 
     with pytest.raises(NotFoundError):
-        await generate_result_pdf(mock_db, "not-a-uuid")
+        await generate_result_pdf(
+            mock_db, org_id="00000000-0000-0000-0000-000000000099", result_id="not-a-uuid"
+        )
 
 
 async def test_generate_result_pdf_missing_raises_not_found(
@@ -205,7 +217,11 @@ async def test_generate_result_pdf_missing_raises_not_found(
 
     setup_db_results([None])
     with pytest.raises(NotFoundError):
-        await generate_result_pdf(mock_db, str(uuid.uuid4()))
+        await generate_result_pdf(
+            mock_db,
+            org_id=str(uuid.uuid4()),
+            result_id=str(uuid.uuid4()),
+        )
 
 
 async def test_generate_result_pdf_with_assessment_and_user(
@@ -225,7 +241,7 @@ async def test_generate_result_pdf_with_assessment_and_user(
             _make_query_result("张三"),
         ]
     )
-    pdf = await generate_result_pdf(mock_db, str(result.id))
+    pdf = await generate_result_pdf(mock_db, org_id=str(result.org_id), result_id=str(result.id))
     assert pdf.startswith(b"%PDF-")
 
 

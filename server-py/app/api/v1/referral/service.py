@@ -344,18 +344,36 @@ async def resolve_data_package(db: AsyncSession, referral_id: uuid.UUID) -> dict
     """按 spec 装临床记录数据包 (镜像 service.ts:293-343).
 
     返回 dict (而非 typed model), 因为字段动态由 ``data_package_spec`` 决定。
+
+    **安全 (Phase 5 P0 Fix 2 加固, 2026-05-06)**:
+      ``data_package_spec`` 里的 PHI ID 来自创建 referral 时 sender 提供 — 攻击路径:
+      org A 的 counselor 偷拿 org B 的 session_note_id 塞进 spec, resolve 时若不
+      校验 org_id, B 的 PHI 直接被 A 提取。这里对所有 PHI 表强制 ``org_id == sender_org``
+      过滤, 即使 spec 含跨 org ID 也只会得到空结果, 不发生数据泄露。
     """
     q = select(Referral).where(Referral.id == referral_id).limit(1)
     referral = (await db.execute(q)).scalar_one_or_none()
     if referral is None:
         raise NotFoundError("Referral", str(referral_id))
 
+    # 发起方 org_id — 所有 PHI 必须归属此 org (defense-in-depth)
+    sender_org_id = referral.org_id
+
     spec_raw: dict[str, Any] = referral.data_package_spec or {}
     spec = DataPackageSpec(**spec_raw)
     result: dict[str, Any] = {"referral": referral_to_output(referral).model_dump(by_alias=True)}
 
     # episode + client 基础信息
-    epq = select(CareEpisode).where(CareEpisode.id == referral.care_episode_id).limit(1)
+    epq = (
+        select(CareEpisode)
+        .where(
+            and_(
+                CareEpisode.id == referral.care_episode_id,
+                CareEpisode.org_id == sender_org_id,
+            )
+        )
+        .limit(1)
+    )
     episode = (await db.execute(epq)).scalar_one_or_none()
     result["episode"] = episode
 
@@ -365,17 +383,23 @@ async def resolve_data_package(db: AsyncSession, referral_id: uuid.UUID) -> dict
 
     if spec.session_note_ids:
         ids = [uuid.UUID(s) for s in spec.session_note_ids]
-        nq = select(SessionNote).where(SessionNote.id.in_(ids))
+        nq = select(SessionNote).where(
+            and_(SessionNote.id.in_(ids), SessionNote.org_id == sender_org_id)
+        )
         result["sessionNotes"] = list((await db.execute(nq)).scalars().all())
 
     if spec.assessment_result_ids:
         ids = [uuid.UUID(s) for s in spec.assessment_result_ids]
-        aq = select(AssessmentResult).where(AssessmentResult.id.in_(ids))
+        aq = select(AssessmentResult).where(
+            and_(AssessmentResult.id.in_(ids), AssessmentResult.org_id == sender_org_id)
+        )
         result["assessmentResults"] = list((await db.execute(aq)).scalars().all())
 
     if spec.treatment_plan_ids:
         ids = [uuid.UUID(s) for s in spec.treatment_plan_ids]
-        tq = select(TreatmentPlan).where(TreatmentPlan.id.in_(ids))
+        tq = select(TreatmentPlan).where(
+            and_(TreatmentPlan.id.in_(ids), TreatmentPlan.org_id == sender_org_id)
+        )
         result["treatmentPlans"] = list((await db.execute(tq)).scalars().all())
 
     return result

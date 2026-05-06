@@ -165,8 +165,16 @@ async def apply_public_enrollment(
         raise ForbiddenError("该课程不接受公开报名")
 
     try:
-        # 找/建 user — Phase 5 P0 fix (Fix 5): 公开报名查询优先级 phone > email,
-        # 防止攻击者用受害者 email 占 unique 让真主无法注册 (email squat).
+        # 找/建 user — Phase 5b 起注册改 phone-first (手机号验证码登录 / 真注册都
+        # 走 phone), email 在 users 表是可空字段。公开报名遵循同一原则:
+        #   - 查找优先级: phone > email (phone 是真实身份 anchor)
+        #   - 创建匿名 user: email=None (即使 form 收到 email 也不占 UNIQUE)
+        #
+        # 这样的好处:
+        #   1. 真注册时 phone 一致 → claim 同一行 (设 password + 加 org)
+        #   2. 即使攻击者反复用受害者 email 报名, 也不会占 users.email UNIQUE,
+        #      受害者真注册时 (phone-based) 不被拦
+        #   3. email 作为辅助通信渠道留给 user 自己后续完善
         user = None
         if body.phone:
             phone_q = select(User).where(User.phone == body.phone).limit(1)
@@ -176,16 +184,14 @@ async def apply_public_enrollment(
             user = (await db.execute(email_q)).scalar_one_or_none()
 
         if user is None:
-            # Phase 5 P0 fix (Fix 5): 公开报名建 User 时**不占 email UNIQUE**
-            # → email=None (匿名 user). 受害者后续走 counseling-public / eap-public
-            # 真注册时按 phone 查到这个匿名 user 并 claim (设 password + 加 org).
+            # 公开报名建匿名 User: ``email=None`` 防 squat, ``password_hash=None`` 防接管。
             #
-            # ⚠ W0.4 安全审计 (2026-05-03): password_hash 仍必须 NULL.
-            # 历史 bug 写的是 randomUUID() (UUID v4 格式), 不能回去 — 攻击者占了
-            # account 即使无法登录, 真主也无路可走.
+            # ⚠ W0.4 安全审计 (2026-05-03): password_hash 必须 NULL, 历史 bug 写
+            # randomUUID() (UUID v4 格式) 让攻击者占了 account 即使无法登录, 真主
+            # 走 claim 流时被拦 — 不能回去。
             user = User(
                 name=body.name,
-                email=None,  # ⚠ 不占 email UNIQUE
+                email=None,  # 不占 email UNIQUE (phone-first 设计)
                 phone=body.phone,
                 password_hash=None,
             )

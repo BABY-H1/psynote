@@ -140,13 +140,27 @@ def test_list_reviews_happy(
     setup_db_results: SetupDbResults,
     make_review: Any,
 ) -> None:
+    """Phase 5 P0 Fix 2: service 内先查 episode (org-scope 校验), 再查 reviews —
+    mock 需 setup 2 步."""
     rv = make_review()
-    setup_db_results([[rv]])
+    # 1st: episode.id (校验 episode 属本 org); 2nd: list of reviews
+    setup_db_results([_EPISODE_ID, [rv]])
     r = admin_org_client.get(f"/api/orgs/{_ORG_ID}/follow-up/reviews?careEpisodeId={_EPISODE_ID}")
     assert r.status_code == 200
     body = r.json()
     assert len(body) == 1
     assert body[0]["decision"] == "continue"
+
+
+def test_list_reviews_404_when_episode_belongs_to_other_org(
+    admin_org_client: TestClient,
+    setup_db_results: SetupDbResults,
+) -> None:
+    """**安全核心 (Phase 5 P0 Fix 2)** — 攻击者传别 org 的 episode_id, episode org-scope
+    查无 → 404, 不暴露 reviews。"""
+    setup_db_results([None])  # episode.org_id 不匹配 → 查无
+    r = admin_org_client.get(f"/api/orgs/{_ORG_ID}/follow-up/reviews?careEpisodeId={_EPISODE_ID}")
+    assert r.status_code == 404
 
 
 # ─── POST /reviews (复合事务) ───────────────────────────────────

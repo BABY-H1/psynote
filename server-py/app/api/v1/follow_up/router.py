@@ -158,8 +158,8 @@ async def list_reviews(
     _require_org(org)
     if not care_episode_id:
         raise ValidationError("careEpisodeId query param is required")
-    _ = org_id  # 路由层不再二次过滤 (review 已挂 episode 上, episode 已挂 org)
-    return await list_follow_up_reviews(db, care_episode_id)
+    # service 内部强制 episode.org_id == org_id 校验, 防跨 org episode_id 读 reviews
+    return await list_follow_up_reviews(db, org_id=org_id, care_episode_id=care_episode_id)
 
 
 @router.post("/reviews", response_model=FollowUpReviewRow, status_code=status.HTTP_201_CREATED)
@@ -181,7 +181,7 @@ async def create_review(
         raise ValidationError("careEpisodeId is required")
 
     try:
-        review = await create_follow_up_review(db, counselor_id=user.id, body=body)
+        review = await create_follow_up_review(db, org_id=org_id, counselor_id=user.id, body=body)
         await db.commit()
     except Exception:
         await db.rollback()

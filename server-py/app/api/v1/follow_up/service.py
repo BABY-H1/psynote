@@ -229,10 +229,28 @@ async def update_follow_up_plan(
 
 async def list_follow_up_reviews(
     db: AsyncSession,
+    *,
+    org_id: str,
     care_episode_id: str,
 ) -> list[FollowUpReviewRow]:
-    """列出某 episode 的所有随访 review (镜像 service.ts:96-102)."""
+    """列出某 episode 的所有随访 review (镜像 service.ts:96-102).
+
+    **安全 (Phase 5 P0 Fix 2 加固, 2026-05-06)**: ``care_episode_id`` 来自
+    request, 必须先核验该 episode 属调用方 org, 否则任何 staff 都能拿别 org
+    的 episode_id 读 reviews (review 自身没 org_id 列, 通过 episode 反查)。
+    """
     episode_uuid = parse_uuid_or_raise(care_episode_id, field="careEpisodeId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+
+    # episode 归属校验
+    ep_q = (
+        select(CareEpisode.id)
+        .where(and_(CareEpisode.id == episode_uuid, CareEpisode.org_id == org_uuid))
+        .limit(1)
+    )
+    if (await db.execute(ep_q)).scalar_one_or_none() is None:
+        raise NotFoundError("CareEpisode", care_episode_id)
+
     q = (
         select(FollowUpReview)
         .where(FollowUpReview.care_episode_id == episode_uuid)
@@ -245,6 +263,7 @@ async def list_follow_up_reviews(
 async def create_follow_up_review(
     db: AsyncSession,
     *,
+    org_id: str,
     counselor_id: str,
     body: CreateFollowUpReviewRequest,
 ) -> FollowUpReviewRow:
@@ -257,10 +276,15 @@ async def create_follow_up_review(
          INSERT care_timeline (risk_change)
       3. INSERT care_timeline (follow_up_review)
       4. 若 decision == 'close' → UPDATE care_episodes status='closed' + closed_at
+
+    **安全 (Phase 5 P0 Fix 2 加固, 2026-05-06)**: ``body.care_episode_id`` 来自
+    request, 攻击者可能传别 org 的 episode_id。所有 ``select(CareEpisode)`` 必
+    须 ``org_id == 调用方 org`` 过滤, 防跨 org 篡改 episode 状态 / 风险等级。
     """
     plan_uuid = parse_uuid_or_raise(body.plan_id, field="planId")
     episode_uuid = parse_uuid_or_raise(body.care_episode_id, field="careEpisodeId")
     counselor_uuid = parse_uuid_or_raise(counselor_id, field="counselorId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     result_uuid: uuid.UUID | None = (
         parse_uuid_or_raise(body.result_id, field="resultId") if body.result_id else None
     )
@@ -282,8 +306,12 @@ async def create_follow_up_review(
 
     # 风险等级更新
     if body.risk_after and body.risk_after != body.risk_before:
-        # UPDATE care_episodes
-        ep_q = select(CareEpisode).where(CareEpisode.id == episode_uuid).limit(1)
+        # UPDATE care_episodes (org-scoped 防跨 org 篡改)
+        ep_q = (
+            select(CareEpisode)
+            .where(and_(CareEpisode.id == episode_uuid, CareEpisode.org_id == org_uuid))
+            .limit(1)
+        )
         episode = (await db.execute(ep_q)).scalar_one_or_none()
         if episode is not None:
             episode.current_risk = body.risk_after
@@ -313,9 +341,13 @@ async def create_follow_up_review(
     )
     db.add(review_event)
 
-    # 关闭 episode (与 Node service.ts:163-168)
+    # 关闭 episode (与 Node service.ts:163-168) — 同样 org-scoped
     if body.decision == "close":
-        ep_q2 = select(CareEpisode).where(CareEpisode.id == episode_uuid).limit(1)
+        ep_q2 = (
+            select(CareEpisode)
+            .where(and_(CareEpisode.id == episode_uuid, CareEpisode.org_id == org_uuid))
+            .limit(1)
+        )
         episode2 = (await db.execute(ep_q2)).scalar_one_or_none()
         if episode2 is not None:
             episode2.status = "closed"

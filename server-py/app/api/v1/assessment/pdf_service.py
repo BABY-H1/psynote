@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import Any
 
 from jinja2 import Environment, FileSystemLoader, select_autoescape
-from sqlalchemy import select
+from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models.assessment_reports import AssessmentReport
@@ -167,18 +167,30 @@ def _html_to_pdf_bytes(html: str) -> bytes:
 # ─── 公开 API (与 Phase 3 stub 接口 1:1 兼容) ────────────────────
 
 
-async def generate_result_pdf(db: AsyncSession, result_id: str) -> bytes:
+async def generate_result_pdf(db: AsyncSession, *, org_id: str, result_id: str) -> bytes:
     """生成单个 ``AssessmentResult`` 的 PDF bytes (Phase 4 新增, Phase 3 不存在)。
 
     用于 result_router 直接 download 单条结果 PDF — 与 report 不同, 不需要先
     POST /reports 生成报告记录。前端 / Node 当前没用此端点, 但接口先备好。
+
+    **安全 (Phase 5 P0 Fix 2 加固, 2026-05-06)**: 必须传 ``org_id``, SQL 强制
+    ``AssessmentResult.org_id == 调用方 org`` 过滤防跨 org PHI 提取。
     """
     try:
         rid = uuid.UUID(result_id)
     except (ValueError, TypeError) as exc:
         raise NotFoundError("AssessmentResult", result_id) from exc
 
-    q = select(AssessmentResult).where(AssessmentResult.id == rid).limit(1)
+    try:
+        oid = uuid.UUID(org_id)
+    except (ValueError, TypeError) as exc:
+        raise NotFoundError("AssessmentResult", result_id) from exc
+
+    q = (
+        select(AssessmentResult)
+        .where(and_(AssessmentResult.id == rid, AssessmentResult.org_id == oid))
+        .limit(1)
+    )
     result = (await db.execute(q)).scalar_one_or_none()
     if result is None:
         raise NotFoundError("AssessmentResult", result_id)
@@ -207,8 +219,12 @@ async def generate_result_pdf(db: AsyncSession, result_id: str) -> bytes:
     return _html_to_pdf_bytes(html)
 
 
-async def generate_report_pdf(db: AsyncSession, report_id: str) -> bytes:
+async def generate_report_pdf(db: AsyncSession, *, org_id: str, report_id: str) -> bytes:
     """生成单个 ``AssessmentReport`` 的 PDF bytes. Phase 4 真实装 (WeasyPrint)。
+
+    **安全 (Phase 5 P0 Fix 2 加固, 2026-05-06)**: 必须传 ``org_id``, SQL 强制
+    ``AssessmentReport.org_id == 调用方 org`` 过滤。Report 引用多份 PHI
+    (results / session_notes / dimensions), 跨 org 提取风险与 results 同等。
 
     Raises:
         NotFoundError: report_id 不存在 (与 Node 一致).
@@ -218,7 +234,16 @@ async def generate_report_pdf(db: AsyncSession, report_id: str) -> bytes:
     except (ValueError, TypeError) as exc:
         raise NotFoundError("AssessmentReport", report_id) from exc
 
-    q = select(AssessmentReport).where(AssessmentReport.id == rid).limit(1)
+    try:
+        oid = uuid.UUID(org_id)
+    except (ValueError, TypeError) as exc:
+        raise NotFoundError("AssessmentReport", report_id) from exc
+
+    q = (
+        select(AssessmentReport)
+        .where(and_(AssessmentReport.id == rid, AssessmentReport.org_id == oid))
+        .limit(1)
+    )
     report = (await db.execute(q)).scalar_one_or_none()
     if report is None:
         raise NotFoundError("AssessmentReport", report_id)
@@ -233,16 +258,19 @@ async def generate_report_pdf(db: AsyncSession, report_id: str) -> bytes:
     return _html_to_pdf_bytes(html)
 
 
-async def generate_batch_pdf_zip(db: AsyncSession, report_ids: list[str]) -> bytes:
+async def generate_batch_pdf_zip(db: AsyncSession, *, org_id: str, report_ids: list[str]) -> bytes:
     """生成多 report 的 ZIP bytes. Phase 4: 内部 generate_report_pdf 真实装。
 
     缺失的 report 跳过 (NotFoundError → continue), 不破整 zip — 与 Node 一致。
+
+    **安全 (Phase 5 P0 Fix 2 加固, 2026-05-06)**: 必须传 ``org_id`` 透传到
+    ``generate_report_pdf``, 跨 org 报告自然变成 NotFoundError 跳过, 不会被打包。
     """
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for idx, rid in enumerate(report_ids, start=1):
             try:
-                pdf_bytes = await generate_report_pdf(db, rid)
+                pdf_bytes = await generate_report_pdf(db, org_id=org_id, report_id=rid)
                 z.writestr(f"report_{idx}.pdf", pdf_bytes)
             except NotFoundError:
                 logger.warning("[pdf] skip missing report_id=%s", rid)
