@@ -65,3 +65,10 @@ jobs:
           JWT_SECRET: ci-jwt-secret-must-be-at-least-32-chars
           NODE_ENV: test
         run: uv run pytest -v
+      - name: Dependency audit (pip-audit, W1.7)
+        # W1.7 安全审计要求: 所有依赖无已知 CVE。任何新增 dep 引入漏洞立刻红, 提
+        # 醒升级或换包。--disable-pip 防 pip-audit 自己拉网解析时撞 GitHub API
+        # rate limit (CI 公共 IP 共享额度)。
+        run: |
+          uv export --frozen --no-emit-project > /tmp/requirements.txt
+          uv tool run --from pip-audit pip-audit -r /tmp/requirements.txt --disable-pip

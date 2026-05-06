@@ -99,12 +99,76 @@ def test_defaults_match_node_env_ts(base_env: pytest.MonkeyPatch) -> None:
     assert settings.SMTP_PORT == 587
 
 
+# ─── Phase 5 P1: KEY_ENCRYPTION_KEY production validation ────────
+
+
+def test_key_encryption_key_dev_default_in_development_ok(
+    base_env: pytest.MonkeyPatch,
+) -> None:
+    """development 默认值不报 — 本地开发 / unit test 用此默认值。"""
+    from app.core.config import _KEY_ENCRYPTION_KEY_DEV_DEFAULT, Settings
+
+    settings = Settings(_env_file=None)
+    assert settings.NODE_ENV == "development"
+    assert settings.KEY_ENCRYPTION_KEY == _KEY_ENCRYPTION_KEY_DEV_DEFAULT
+
+
+def test_key_encryption_key_dev_default_in_production_rejected(
+    base_env: pytest.MonkeyPatch,
+) -> None:
+    """production 必须改默认值 — Phase 5 P1 安全审计硬约束。
+
+    用 dev 默认会让所有 BYOK API key 用 git 仓库公开的密钥加密, 完全失效。
+    """
+    base_env.setenv("NODE_ENV", "production")
+    from app.core.config import Settings
+
+    with pytest.raises(ValidationError) as exc:
+        Settings(_env_file=None)
+    err = str(exc.value)
+    assert "KEY_ENCRYPTION_KEY" in err
+    assert "dev 默认值" in err or "default" in err.lower()
+
+
+def test_key_encryption_key_custom_in_production_accepted(
+    base_env: pytest.MonkeyPatch,
+) -> None:
+    """production + 自定义密钥 → ok"""
+    import base64
+    import secrets
+
+    base_env.setenv("NODE_ENV", "production")
+    custom = base64.b64encode(secrets.token_bytes(32)).decode()
+    base_env.setenv("KEY_ENCRYPTION_KEY", custom)
+    from app.core.config import Settings
+
+    settings = Settings(_env_file=None)
+    assert custom == settings.KEY_ENCRYPTION_KEY
+
+
+def test_key_encryption_key_dev_default_in_test_ok(
+    base_env: pytest.MonkeyPatch,
+) -> None:
+    """test 环境也允许默认 — pytest CI 不该被强迫提供生产密钥。"""
+    base_env.setenv("NODE_ENV", "test")
+    from app.core.config import Settings
+
+    settings = Settings(_env_file=None)
+    assert settings.NODE_ENV == "test"
+
+
 # ─── NODE_ENV enum ───────────────────────────────────────────────
 
 
 def test_node_env_enum_accepts_valid(base_env: pytest.MonkeyPatch) -> None:
     """env.ts: z.enum(['development', 'production', 'test'])"""
+    import base64
+    import secrets
+
     from app.core.config import Settings
+
+    # production 分支会触发 _validate_production_secrets, 必须给个非默认 KEY_ENCRYPTION_KEY
+    base_env.setenv("KEY_ENCRYPTION_KEY", base64.b64encode(secrets.token_bytes(32)).decode())
 
     for valid in ("development", "production", "test"):
         base_env.setenv("NODE_ENV", valid)

@@ -67,13 +67,34 @@ def test_hash_password_returns_bcrypt_format() -> None:
     assert hashed.startswith(("$2a$", "$2b$", "$2y$"))
 
 
-def test_hash_password_uses_cost_10() -> None:
-    """与 server/src/modules/auth/auth.routes.ts:178 的 bcrypt.hash(_, 10) 对齐"""
+def test_hash_password_uses_cost_12() -> None:
+    """Phase 5 P1 (2026-05-06) 升到 12 — Node 旧 $2b$10$ hash 仍能 verify, 新 hash
+    cost 升级到 12 (爆破成本 ×4)。原 Node 端 auth.routes.ts:178 是 bcrypt.hash(_, 10),
+    Phase 6 切流后 Node 不再写 hash, 此差异自然消化。
+    """
     from app.core.security import hash_password
 
     hashed = hash_password("anything")
     # 第二段是 cost factor
-    assert hashed.split("$")[2] == "10"
+    assert hashed.split("$")[2] == "12"
+
+
+def test_verify_legacy_node_hash_at_cost_10() -> None:
+    """Backward compat: Node 端历史用 bcrypt.hash(_, 10) 写入的 $2b$10$ hash, Python
+    端 verify 必须仍然通过 (bcrypt 标准 — cost 嵌在 hash 里, verify 自动读取)。
+
+    硬约束: Phase 6 切流前 dev DB 里同时存在 $2b$10$ (Node 写) 和 $2b$12$ (Python 写)
+    两种 cost 的 hash, 都必须能 verify。
+    """
+    import bcrypt
+
+    from app.core.security import verify_password
+
+    # 模拟 Node 端 bcryptjs.hashSync('legacy-pw', 10) 产物
+    legacy_hash = bcrypt.hashpw(b"legacy-pw", bcrypt.gensalt(rounds=10)).decode()
+    assert legacy_hash.split("$")[2] == "10"  # 确认是 cost-10
+    assert verify_password("legacy-pw", legacy_hash) is True
+    assert verify_password("wrong-pw", legacy_hash) is False
 
 
 def test_verify_password_correct() -> None:

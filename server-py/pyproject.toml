@@ -23,39 +23,33 @@ dependencies = [
     "uvicorn[standard]>=0.32.0",
     "python-multipart>=0.0.18",            # FastAPI UploadFile (替代 @fastify/multipart)
     "slowapi>=0.1.9",                       # 速率限制 (替代 @fastify/rate-limit)
-
     # Validation / config
     "pydantic>=2.10.0",                     # 替代 zod
     "pydantic-settings>=2.7.0",             # 替代 dotenv + zod env schema
-
     # Database
     "sqlalchemy[asyncio]>=2.0.36",          # ORM (替代 drizzle-orm) — async + Mapped[] 风格
     "asyncpg>=0.30.0",                      # async Postgres driver
     "alembic>=1.14.0",                      # migrations (替代 drizzle-kit)
     "psycopg[binary]>=3.2.0",               # 同步 driver (Alembic + 一些 utility 用)
-
     # Auth / crypto
     # 直接用 bcrypt 库 (不走 passlib) — passlib 1.7.4 读 bcrypt.__about__ 但 bcrypt
     # 4.0+ 删了这个属性, 导致 passlib 把 bcrypt backend 标 unavailable, 所有 hash/verify
     # 都 fail。passlib 1.8 还没 release, 等不起。bcrypt 直接 API 也更简单。
     "bcrypt>=4.2.0",                        # 替代 bcryptjs, 与之 hash 格式 1:1 兼容
     "pyjwt>=2.10.0",                        # JWT (替代 jsonwebtoken) — 需 algorithms=['HS256'] pin
-
     # Jobs / queue
     "celery[redis]>=5.4.0",                 # 替代 BullMQ
     "redis>=5.2.0",                         # async client (替代 ioredis)
-
     # PDF / Email
     "weasyprint>=63.0",                     # HTML → PDF (替代 pdfkit)
     "jinja2>=3.1.0",                        # PDF 模板渲染
     "aiosmtplib>=3.0.0",                    # async SMTP (替代 nodemailer)
     "email-validator>=2.2.0",
-
     # HTTP client (AI provider)
     "httpx>=0.28.0",                        # 替代 fetch wrapper
-
     # Logging
     "structlog>=24.4.0",
+    "filetype>=1.2.0",
 ]
 
 [dependency-groups]
@@ -125,7 +119,7 @@ warn_return_any = false
 
 [[tool.mypy.overrides]]
 # 第三方包没有 stubs 的不报
-module = ["weasyprint", "celery.*"]
+module = ["weasyprint", "celery.*", "filetype"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

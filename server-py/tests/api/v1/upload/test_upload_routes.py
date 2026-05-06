@@ -110,3 +110,75 @@ def test_upload_png_returns_201_and_writes_file(
     written = stored_files[0]
     assert written.suffix == ".png"
     assert written.read_bytes() == payload
+
+
+# ─── Phase 5 P1 安全: magic-byte 校验 ────────────────────────────
+
+
+def test_upload_fake_png_with_random_bytes_rejected_400(
+    authed_org_client: TestClient,
+) -> None:
+    """**安全核心** — 随机字节命名为 photo.png, magic-byte 校验必须 400 拒收。
+
+    模拟攻击: PHP webshell 改名 .png 上传, 服务器若静态 server 配错 (.png 走 PHP),
+    存盘后远程命中即 RCE。magic-byte 嗅探读不到 PNG signature → 拒绝。
+    """
+    # 完全随机内容, 不带任何 magic header
+    payload = b"this is just plain text, definitely not a PNG"
+    files = {"file": ("evil.png", payload, "image/png")}
+
+    response = authed_org_client.post(f"{_PREFIX}/", files=files)
+    assert response.status_code == 400
+    msg = response.json()["message"]
+    assert "does not match declared extension" in msg or "no magic signature" in msg
+
+
+def test_upload_jpeg_disguised_as_png_rejected_400(
+    authed_org_client: TestClient,
+) -> None:
+    """**安全核心** — 真 JPEG magic + .png 扩展, magic 检测出 image/jpeg ≠ image/png 拒收。"""
+    # 真 JPEG magic header (FF D8 FF E0 ... JFIF)
+    payload = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01" + b"x" * 256
+    files = {"file": ("disguised.png", payload, "image/png")}
+
+    response = authed_org_client.post(f"{_PREFIX}/", files=files)
+    assert response.status_code == 400
+    assert "does not match declared extension" in response.json()["message"]
+
+
+def test_upload_txt_skips_magic_check_201(
+    authed_org_client: TestClient,
+) -> None:
+    """``.txt`` / ``.md`` 没 magic header, 跳过 magic 校验, 任意字节内容都接受。"""
+    payload = b"This is just plain text content."
+    files = {"file": ("notes.txt", payload, "text/plain")}
+
+    response = authed_org_client.post(f"{_PREFIX}/", files=files)
+    assert response.status_code == 201
+    body = response.json()
+    assert body["fileType"] == "text"
+    assert body["fileSize"] == len(payload)
+
+
+def test_upload_real_jpeg_with_jpg_ext_accepted_201(
+    authed_org_client: TestClient,
+) -> None:
+    """合法路径: 真 JPEG magic + .jpg → 201。"""
+    payload = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01" + b"x" * 256
+    files = {"file": ("photo.jpg", payload, "image/jpeg")}
+
+    response = authed_org_client.post(f"{_PREFIX}/", files=files)
+    assert response.status_code == 201
+    assert response.json()["fileType"] == "image"
+
+
+def test_upload_real_pdf_with_pdf_ext_accepted_201(
+    authed_org_client: TestClient,
+) -> None:
+    """合法路径: 真 PDF magic (``%PDF-``) + .pdf → 201。"""
+    payload = b"%PDF-1.4\n" + b"x" * 256  # 简化 PDF: 仅 magic header + dummy
+    files = {"file": ("doc.pdf", payload, "application/pdf")}
+
+    response = authed_org_client.post(f"{_PREFIX}/", files=files)
+    assert response.status_code == 201
+    assert response.json()["fileType"] == "pdf"

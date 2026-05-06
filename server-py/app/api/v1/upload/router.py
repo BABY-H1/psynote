@@ -28,6 +28,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
+import filetype
 from fastapi import APIRouter, Depends, File, UploadFile, status
 from fastapi.responses import JSONResponse
 
@@ -68,6 +69,79 @@ def _detect_file_type(file_name: str) -> str | None:
         if ext in exts:
             return ftype
     return None
+
+
+# Phase 5 P1 (2026-05-06): magic-byte 与 ext 一致性校验白名单。
+# 扩展名能签出 magic bytes 的格式列在这里; 不在表里的 (txt/md/csv 等纯文本)
+# 不做 magic-byte 校验, 因为它们没有 magic header (filetype.guess 会返 None)。
+#
+# 用 set 是因为多个 magic-detected MIME 可能映射同一 ext (比如 .docx 实际是
+# zip container, magic 返 application/zip; 我们仍接受)。
+_MAGIC_EXPECTED: dict[str, frozenset[str]] = {
+    # image
+    ".jpg": frozenset({"image/jpeg"}),
+    ".jpeg": frozenset({"image/jpeg"}),
+    ".png": frozenset({"image/png"}),
+    ".gif": frozenset({"image/gif"}),
+    ".webp": frozenset({"image/webp"}),
+    # audio
+    ".mp3": frozenset({"audio/mpeg"}),
+    ".wav": frozenset({"audio/x-wav", "audio/wav"}),
+    ".m4a": frozenset({"audio/mp4", "audio/x-m4a"}),
+    ".ogg": frozenset({"audio/ogg", "video/ogg"}),  # ogg 容器可装音视频
+    ".webm": frozenset({"video/webm", "audio/webm"}),
+    # video
+    ".mp4": frozenset({"video/mp4"}),
+    ".mov": frozenset({"video/quicktime"}),
+    ".avi": frozenset({"video/x-msvideo"}),
+    ".mkv": frozenset({"video/x-matroska"}),
+    # pdf
+    ".pdf": frozenset({"application/pdf"}),
+    # office (docx/xlsx/pptx 都是 zip container)
+    ".docx": frozenset({"application/zip"}),
+    ".xlsx": frozenset({"application/zip"}),
+    ".pptx": frozenset({"application/zip"}),
+    # 旧 office (.doc/.xls/.ppt) 是 OLE compound — filetype 识别为 application/x-cfb
+    ".doc": frozenset({"application/x-cfb"}),
+    ".xls": frozenset({"application/x-cfb"}),
+    ".ppt": frozenset({"application/x-cfb"}),
+}
+
+
+def _verify_magic_matches_ext(content: bytes, file_name: str) -> None:
+    """**安全** — magic-byte 内容嗅探, 校验声明的扩展名与真实 file 类型一致。
+
+    Phase 5 P1 (2026-05-06) 安全审计补丁:
+      ext-only 校验能被"伪装" — 把 PHP webshell 命名为 ``evil.pdf`` 上传, 服务器
+      存盘后若静态 server (Nginx/Caddy) 配错把 .pdf 当 PHP 跑, 直接 RCE。
+      magic-byte 嗅探读文件头 8KB 找 file signature, 跟扩展名比对, 不一致拒收。
+
+    白名单外的扩展名 (.txt/.md — 没有 magic header) 跳过此校验, 走 ``_ALLOWED_TYPES``
+    与 size 上限即可。
+
+    Args:
+      content: 文件全字节 (已读到内存)
+      file_name: 原始文件名 (含扩展)
+
+    Raises:
+      ValidationError: magic 检测出非声明类型 (扩展骗人)
+    """
+    ext = Path(file_name).suffix.lower()
+    expected_mimes = _MAGIC_EXPECTED.get(ext)
+    if expected_mimes is None:
+        # 不在签出表 (txt/md/csv 等没有 magic header), 跳过此层校验
+        return
+
+    detected = filetype.guess(content)
+    if detected is None:
+        # 文件确实有声明的扩展, 但读不出 magic — 有可能是空文件 / 损坏 / 真伪装
+        raise ValidationError(
+            f"File content does not match declared extension {ext} (no magic signature detected)"
+        )
+    if detected.mime not in expected_mimes:
+        raise ValidationError(
+            f"File content type ({detected.mime}) does not match declared extension {ext}"
+        )
 
 
 def _upload_root() -> Path:
@@ -131,6 +205,9 @@ async def upload(
     max_bytes = _MAX_SIZES_MB[file_type] * 1024 * 1024
     if file_size > max_bytes:
         raise ValidationError(f"File too large (max {_MAX_SIZES_MB[file_type]}MB for {file_type})")
+
+    # Phase 5 P1 安全: magic-byte 必须匹配声明的扩展, 防"PHP webshell 伪装成 .pdf"
+    _verify_magic_matches_ext(contents, file.filename)
 
     ext = Path(file.filename).suffix
     stored_name = f"{uuid.uuid4()}{ext}"

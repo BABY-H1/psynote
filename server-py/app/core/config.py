@@ -23,8 +23,13 @@ import sys
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, ValidationError
+from pydantic import Field, ValidationError, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Phase 5 P1 (2026-05-06): KEY_ENCRYPTION_KEY 的 dev 占位值,production 启动期必须
+# 校验非此值,否则任何 BYOK 加密都用了"全员共享的开源默认密钥",安全完全失效。
+# 此常量与下方字段 default 必须 1:1 同步。
+_KEY_ENCRYPTION_KEY_DEV_DEFAULT = "cHN5bm90ZS1kZXYtbWFzdGVyLWtleS0zMi1ieXRlcyE="
 
 
 class Settings(BaseSettings):
@@ -63,8 +68,9 @@ class Settings(BaseSettings):
     # 32 bytes base64 编码; production 必须改默认值 (运维生成):
     #   python -c "import secrets, base64; print(base64.b64encode(secrets.token_bytes(32)).decode())"
     # dev 默认值 (32 bytes "psynote-dev-master-key-not-for-prod" base64) 仅供本地开发 / unit test。
-    # production 启动期硬约束在 app/lib/crypto.py 的 _load_master_key (强制非默认 + 长度校验)。
-    KEY_ENCRYPTION_KEY: str = "cHN5bm90ZS1kZXYtbWFzdGVyLWtleS0zMi1ieXRlcyE="
+    # production 启动期硬约束在下方 _validate_production_secrets (强制非默认值);
+    # 长度 + base64 校验在 app/lib/crypto.py 的 _load_master_key。
+    KEY_ENCRYPTION_KEY: str = _KEY_ENCRYPTION_KEY_DEV_DEFAULT
 
     # ─── SMTP (Phase 4 — aiosmtplib 真发邮件) ─────────────────────
     # Node 端 nodemailer 用同一组 env (SMTP_HOST/PORT/USER/PASS/FROM), Python
@@ -94,6 +100,28 @@ class Settings(BaseSettings):
     @property
     def effective_celery_backend(self) -> str:
         return self.CELERY_RESULT_BACKEND or self.effective_celery_broker
+
+    # ─── Phase 5 P1: production 启动期硬约束 ──────────────────────
+    @model_validator(mode="after")
+    def _validate_production_secrets(self) -> Settings:
+        """production 环境拒启用 dev 默认密钥。
+
+        触发条件: ``NODE_ENV == "production"`` 且 ``KEY_ENCRYPTION_KEY`` 仍是
+        仓库 commit 的 dev 占位值。生产用此默认值会让所有 org 的 BYOK API key
+        加密退化成"对全网公开" — 任何能 git clone 仓库的人都能解密 DB 里的密文。
+
+        与 W0.3 的 JWT_SECRET 校验同等级关键, 启动期硬失败比运行时偷偷继续更安全。
+        """
+        if (
+            self.NODE_ENV == "production"
+            and self.KEY_ENCRYPTION_KEY == _KEY_ENCRYPTION_KEY_DEV_DEFAULT
+        ):
+            raise ValueError(
+                "KEY_ENCRYPTION_KEY 是 dev 默认值, production 必须改 — "
+                '运维生成: python -c "import secrets, base64; '
+                'print(base64.b64encode(secrets.token_bytes(32)).decode())"'
+            )
+        return self
 
 
 @lru_cache

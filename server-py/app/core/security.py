@@ -30,9 +30,18 @@ import jwt as pyjwt
 
 from app.core.config import get_settings
 
-# bcrypt cost factor — 必须等于 Node 端 bcrypt.hash(_, 10) (auth.routes.ts:178)。
-# Phase X (W3.2 ticket) 会评估升到 12, 接受 250ms 登录延迟。
-BCRYPT_ROUNDS = 10
+# bcrypt cost factor.
+#
+# Phase 5 P1 (2026-05-06) 升到 12: rounds 是嵌在 hash 里的 ($2b$12$...), bcrypt
+# verify 时读 hash 自带的 rounds 值, 因此 Node 端旧 $2b$10$ hash 在 Python 这边
+# 仍能 verify, 反之亦然 — overlap 期不需要数据迁移。
+#
+# 12 vs 10 的安全收益: 单次 hash CPU 时间从 ~250ms → ~1s, 攻击者爆破成本提升 4×。
+# 我们登录路径只跑一次 verify, 用户感知 < 1s 在可接受区间。
+#
+# 注: rounds=12 对 dummy hash 启动期生成 (lazy singleton) 时间也 ×4, 但 _get_dummy_hash
+# 只在第一次走 timing-channel mitigation 路径时算, 不影响进程启动延迟。
+BCRYPT_ROUNDS = 12
 
 # JWT 签名算法 — 与 server/src/middleware/auth.ts:37 的 algorithms:['HS256'] 对齐
 JWT_ALGORITHM = "HS256"
@@ -101,7 +110,7 @@ def burn_password_verification_time(plain: str) -> None:
       - public counseling/eap register: 错密码分支也要补一次 (与 W0.4 的 verify_password
         一起, 让"用户存在但密码错" 与 "用户不存在但走 dummy" 耗时相近)。
 
-    复杂度: O(BCRYPT_ROUNDS) ≈ 250ms @ rounds=10。**不要在热路径循环里调用**。
+    复杂度: O(BCRYPT_ROUNDS) ≈ 1s @ rounds=12。**不要在热路径循环里调用**。
     """
     import contextlib
 
