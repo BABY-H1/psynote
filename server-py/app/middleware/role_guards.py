@@ -110,6 +110,30 @@ def reject_client(
     return org
 
 
+def require_org(
+    org: OrgContext | None,
+    *,
+    no_org_message: str = _DEFAULT_NO_ORG,
+) -> OrgContext:
+    """对所有角色 (含 client) 开放的端点上, 仅校验 ``/orgs/{org_id}`` 解析成功。
+
+    用在 client portal 类 endpoint, 不能用 :func:`reject_client` (因为 client 应允许)。
+    单纯把 ``OrgContext | None`` → ``OrgContext`` (mypy 友好), 缺 org 时 403。
+
+    曾分散于 ``content_block`` / ``enrollment_response`` 各自 ``_require_org_context``。
+
+    Args:
+        org: 当前请求的 OrgContext。
+        no_org_message: org 为 None 时的 ForbiddenError message。
+
+    Returns:
+        非 None 的 OrgContext。
+    """
+    if org is None:
+        raise ForbiddenError(no_org_message)
+    return org
+
+
 def require_role(
     org: OrgContext | None,
     *,

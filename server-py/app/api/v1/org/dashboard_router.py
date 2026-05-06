@@ -77,11 +77,15 @@ def _stats_subqueries(org_uuid: uuid.UUID) -> list[Select[tuple[int]]]:
             OrgMember.org_id == org_uuid,
             OrgMember.role == "client",
             OrgMember.status == "active",
-            text(
-                "NOT EXISTS (SELECT 1 FROM client_assignments ca "
-                "WHERE ca.org_id = org_members.org_id "
-                "AND ca.client_id = org_members.user_id)"
-            ),
+            ~select(1)
+            .select_from(ClientAssignment)
+            .where(
+                and_(
+                    ClientAssignment.org_id == OrgMember.org_id,
+                    ClientAssignment.client_id == OrgMember.user_id,
+                )
+            )
+            .exists(),
         )
     )
     group_q = select(func.count()).where(

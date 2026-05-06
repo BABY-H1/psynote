@@ -40,8 +40,8 @@ def test_get_public_instance_happy(
     inst = make_instance(  # type: ignore[operator]
         status="recruiting", capacity=10
     )
-    # instance lookup + (no scheme so no scheme query) + enrollments status[]
-    setup_db_results([inst, ["pending", "approved", "approved"]])
+    # instance lookup + (no scheme so no scheme query) + count tuple (approved, pending)
+    setup_db_results([inst, (2, 1)])
     r = client.get(f"/api/public/groups/{_INSTANCE_ID}")
     assert r.status_code == 200
     body = r.json()

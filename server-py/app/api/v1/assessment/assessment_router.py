@@ -24,7 +24,7 @@ from datetime import UTC, datetime
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
-from sqlalchemy import and_, asc, delete, desc, insert, or_, select
+from sqlalchemy import and_, asc, delete, desc, insert, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.assessment.schemas import (
@@ -154,7 +154,7 @@ async def get_assessment(
     dimension_name_map: dict[str, str] = {}
     if scale_ids:
         d_q = select(ScaleDimension.id, ScaleDimension.name).where(
-            or_(*[ScaleDimension.scale_id == sid for sid in scale_ids])
+            ScaleDimension.scale_id.in_(scale_ids)
         )
         dim_rows = (await db.execute(d_q)).all()
         for did, dname in dim_rows:

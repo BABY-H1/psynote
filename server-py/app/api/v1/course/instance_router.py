@@ -236,10 +236,14 @@ async def get_instance(
 
     inst, course_title, course_category = row
 
-    eq = select(CourseEnrollment).where(CourseEnrollment.instance_id == instance_uuid)
-    enrollments = list((await db.execute(eq)).scalars().all())
-    total = len(enrollments)
-    completed = sum(1 for e in enrollments if (e.status or "") == "completed")
+    # 单 query 聚合 (#2: 不再 hydrate 全表 enrollment 行只为数 2 个值)
+    cnt_q = select(
+        func.count().label("total"),
+        func.count().filter(CourseEnrollment.status == "completed").label("completed"),
+    ).where(CourseEnrollment.instance_id == instance_uuid)
+    cnt_row = (await db.execute(cnt_q)).first()
+    total = int(cnt_row[0]) if cnt_row else 0
+    completed = int(cnt_row[1]) if cnt_row else 0
 
     base = _instance_to_output(inst).model_dump(by_alias=False)
     return InstanceDetail(

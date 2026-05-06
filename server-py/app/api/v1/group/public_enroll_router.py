@@ -26,7 +26,7 @@ from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, status
 from fastapi.responses import JSONResponse
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.group.schemas import PublicApplyRequest, PublicCheckinRequest
@@ -39,16 +39,9 @@ from app.db.models.group_session_attendance import GroupSessionAttendance
 from app.db.models.group_session_records import GroupSessionRecord
 from app.db.models.org_members import OrgMember
 from app.db.models.users import User
+from app.lib.uuid_utils import parse_uuid_or_none
 
 router = APIRouter()
-
-
-def _parse_uuid_or_none(value: str) -> uuid.UUID | None:
-    """非法 UUID 不抛, 返 None — 公开端点用 404 形式提示 (与 Node 一致)."""
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError):
-        return None
 
 
 # ─── GET /:instance_id ──────────────────────────────────────────
@@ -63,7 +56,7 @@ async def get_public_instance(
 
     错误用 ``{error, message, ...}`` 形式 200 返回 (与 Node behaviorl 一致), 不抛 HTTP 4xx.
     """
-    inst_uuid = _parse_uuid_or_none(instance_id)
+    inst_uuid = parse_uuid_or_none(instance_id)
     if inst_uuid is None:
         return {"error": "not_found", "message": "未找到该团辅活动"}
 
@@ -105,10 +98,14 @@ async def get_public_instance(
                 "sessionCount": len(session_ids),
             }
 
-    enr_q = select(GroupEnrollment.status).where(GroupEnrollment.instance_id == inst_uuid)
-    statuses: list[str] = list((await db.execute(enr_q)).scalars().all())
-    approved_count = sum(1 for s in statuses if s == "approved")
-    pending_count = sum(1 for s in statuses if s == "pending")
+    # 单 query 聚合 (#4: 公开端点高 QPS, 不要 hydrate 全表 enrollment 行)
+    cnt_q = select(
+        func.count().filter(GroupEnrollment.status == "approved").label("approved"),
+        func.count().filter(GroupEnrollment.status == "pending").label("pending"),
+    ).where(GroupEnrollment.instance_id == inst_uuid)
+    cnt_row = (await db.execute(cnt_q)).first()
+    approved_count = int(cnt_row[0]) if cnt_row else 0
+    pending_count = int(cnt_row[1]) if cnt_row else 0
 
     return {
         "id": str(inst.id),
@@ -146,7 +143,7 @@ async def apply_public_enroll(
     if not body.name:
         return JSONResponse(status_code=400, content={"error": "请填写姓名"})
 
-    inst_uuid = _parse_uuid_or_none(instance_id)
+    inst_uuid = parse_uuid_or_none(instance_id)
     if inst_uuid is None:
         return JSONResponse(status_code=404, content={"error": "未找到该团辅活动"})
 
@@ -272,8 +269,8 @@ async def get_public_checkin_page(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> dict[str, Any]:
     """签到页信息. 镜像 public-enroll.routes.ts:236-288."""
-    inst_uuid = _parse_uuid_or_none(instance_id)
-    sess_uuid = _parse_uuid_or_none(session_id)
+    inst_uuid = parse_uuid_or_none(instance_id)
+    sess_uuid = parse_uuid_or_none(session_id)
     if inst_uuid is None or sess_uuid is None:
         return {"error": "not_found", "message": "未找到该活动"}
 
@@ -352,9 +349,9 @@ async def post_public_checkin(
     if not body.enrollment_id:
         return JSONResponse(status_code=400, content={"error": "缺少成员信息"})
 
-    inst_uuid = _parse_uuid_or_none(instance_id)
-    sess_uuid = _parse_uuid_or_none(session_id)
-    enr_uuid = _parse_uuid_or_none(body.enrollment_id)
+    inst_uuid = parse_uuid_or_none(instance_id)
+    sess_uuid = parse_uuid_or_none(session_id)
+    enr_uuid = parse_uuid_or_none(body.enrollment_id)
     if inst_uuid is None or sess_uuid is None:
         return JSONResponse(status_code=404, content={"error": "未找到该活动场次"})
     if enr_uuid is None:

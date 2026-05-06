@@ -27,17 +27,9 @@ from app.lib.errors import NotFoundError
 from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.org_context import OrgContext, get_org_context
 from app.middleware.role_guards import reject_client
-from app.shared.tier import TIER_FEATURES
+from app.shared.tier import TIER_FEATURES, TIER_LABELS
 
 router = APIRouter()
-
-
-# tier label 镜像 packages/shared/src/types/tier.ts TIER_LABELS
-_TIER_LABELS: dict[str, str] = {
-    "starter": "入门版",
-    "growth": "团队版",
-    "flagship": "旗舰版",
-}
 
 
 def _reject_client(org: OrgContext | None) -> None:
@@ -71,7 +63,7 @@ async def get_subscription(
     return SubscriptionInfo(
         tier=tier,
         plan=plan_row[0],
-        label=_TIER_LABELS.get(tier, tier),
+        label=TIER_LABELS.get(tier, tier),
         features=list(features),
         license=LicenseInfoResponse(
             status=org.license.status,

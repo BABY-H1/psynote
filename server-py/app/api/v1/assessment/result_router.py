@@ -65,7 +65,7 @@ from app.db.models.scale_dimensions import ScaleDimension
 from app.db.models.scale_items import ScaleItem
 from app.db.models.scales import Scale
 from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
-from app.lib.uuid_utils import parse_uuid_or_raise
+from app.lib.uuid_utils import parse_uuid_or_none, parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.data_scope import DataScope, get_data_scope
@@ -93,15 +93,6 @@ _RISK_PRIORITY = {
 
 
 # ─── 工具 ────────────────────────────────────────────────────────
-
-
-def _try_parse_uuid(value: str | None) -> uuid.UUID | None:
-    if not value:
-        return None
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError):
-        return None
 
 
 def _orm_to_row(r: AssessmentResult) -> ResultRow:
@@ -225,7 +216,7 @@ async def list_results(
         ds = r.dimension_scores or {}
         if isinstance(ds, dict):
             all_dim_keys.update(ds.keys())
-    dim_uuids = [d for d in (_try_parse_uuid(k) for k in all_dim_keys) if d is not None]
+    dim_uuids = [d for d in (parse_uuid_or_none(k) for k in all_dim_keys) if d is not None]
 
     dim_name_map: dict[str, str] = {}
     rule_rows: list[DimensionRule] = []
@@ -410,6 +401,9 @@ async def submit_result(
         resource_id=str(result.id),
         ip_address=request.client.host if request.client else None,
     )
+    # #12: audit 与 result 是 must-persist; triage 是 nice-to-have. 这里独立 commit
+    # 让 audit 一定落盘 — 之前与 triage commit 共用一次, triage 抛错时 audit 也丢了。
+    await db.commit()
 
     # 触发 triage automation (与 Node fire-and-forget 等价, 但放当前 transaction 内)
     if result.risk_level:
@@ -424,6 +418,8 @@ async def submit_result(
             )
             await db.commit()
         except Exception:
+            # triage 失败 rollback 当前 txn 防 dangling state; 上面 audit 已落盘不受影响
+            await db.rollback()
             logger.exception("[submit_result] triage automation failed (non-blocking)")
 
     return _orm_to_row(result)
@@ -687,8 +683,8 @@ async def _score_and_save(
         org_id=org_id,
         assessment_id=aid,
         user_id=target_user_id,
-        care_episode_id=_try_parse_uuid(body.care_episode_id),
-        batch_id=_try_parse_uuid(body.batch_id),
+        care_episode_id=parse_uuid_or_none(body.care_episode_id),
+        batch_id=parse_uuid_or_none(body.batch_id),
         demographic_data=body.demographic_data or {},
         answers=body.answers,
         dimension_scores=dimension_scores,

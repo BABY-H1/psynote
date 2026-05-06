@@ -47,22 +47,12 @@ from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
-from app.middleware.role_guards import reject_client, require_role
+from app.middleware.role_guards import reject_client, require_admin, require_admin_or_counselor
 
 router = APIRouter()
 
 
 # ─── Utility ─────────────────────────────────────────────────────
-
-
-def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
-    """``requireRole('org_admin')`` 等价 (与 org/router.py 同 helper)."""
-    require_role(org, roles=("org_admin", *allow_roles))
-
-
-def _reject_client(org: OrgContext | None) -> None:
-    """``rejectClient``: legacy role 'client' 拒绝."""
-    reject_client(org)
 
 
 def _scheme_session_to_row(s: GroupSchemeSession) -> SchemeSessionRow:
@@ -183,7 +173,7 @@ async def list_schemes(
 
     可见性: public OR (orgId == 当前 org AND organization) OR (createdBy == 当前 user AND personal).
     """
-    _reject_client(org)
+    reject_client(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
@@ -221,7 +211,7 @@ async def get_scheme(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SchemeRow:
     """单条 scheme + sessions. 镜像 scheme.service.ts:42-58."""
-    _reject_client(org)
+    reject_client(org)
     s_uuid = parse_uuid_or_raise(scheme_id, field="schemeId")
 
     q = select(GroupScheme).where(GroupScheme.id == s_uuid).limit(1)
@@ -246,7 +236,7 @@ async def create_scheme(
 
     Transactional: scheme + 子 sessions 一起 commit, 失败 rollback.
     """
-    _require_org_admin(org, allow_roles=("counselor",))
+    require_admin_or_counselor(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
@@ -314,7 +304,7 @@ async def update_scheme(
 
     Transactional: scheme update + delete 旧 sessions + insert 新 sessions 一起 commit.
     """
-    _require_org_admin(org, allow_roles=("counselor",))
+    require_admin_or_counselor(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     s_uuid = parse_uuid_or_raise(scheme_id, field="schemeId")
 
@@ -366,7 +356,7 @@ async def delete_scheme(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     """删除 scheme (org_admin only). 镜像 scheme.service.ts:187-195."""
-    _require_org_admin(org)
+    require_admin(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     s_uuid = parse_uuid_or_raise(scheme_id, field="schemeId")
 

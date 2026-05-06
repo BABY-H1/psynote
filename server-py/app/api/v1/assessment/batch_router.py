@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, Request, status
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.assessment.schemas import (
@@ -94,19 +94,21 @@ async def get_batch(
     if b is None:
         raise NotFoundError("AssessmentBatch", batch_id)
 
-    # 实时聚合 results.batch_id (含 risk distribution)
-    r_q = select(AssessmentResult).where(AssessmentResult.batch_id == bid)
-    results = list((await db.execute(r_q)).scalars().all())
-
-    risk_distribution: dict[str, int] = {}
-    for r in results:
-        level = r.risk_level or "unknown"
-        risk_distribution[level] = risk_distribution.get(level, 0) + 1
+    # P0.4: SQL 端 GROUP BY risk_level + 单查总数 — 不再 hydrate 全表 results.
+    risk_q = (
+        select(AssessmentResult.risk_level, func.count())
+        .where(AssessmentResult.batch_id == bid)
+        .group_by(AssessmentResult.risk_level)
+    )
+    risk_distribution: dict[str, int] = {
+        (level or "unknown"): int(count) for level, count in (await db.execute(risk_q)).all()
+    }
+    completed = sum(risk_distribution.values())
 
     base_stats: dict[str, Any] = dict(b.stats or {})
     stats: dict[str, Any] = {
         "total": base_stats.get("total", 0),
-        "completed": len(results),
+        "completed": completed,
         "riskDistribution": risk_distribution,
     }
 

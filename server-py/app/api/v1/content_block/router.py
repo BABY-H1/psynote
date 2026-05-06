@@ -50,39 +50,9 @@ from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client, require_org
 
 router = APIRouter()
-
-
-# ─── 辅助: 角色守门 (镜像 middleware/rbac.ts requireRole) ──────────
-
-
-def _require_staff_role(user: AuthUser, org: OrgContext | None) -> None:
-    """
-    org_admin / counselor / system_admin 才允许写操作。
-
-    与 Node ``requireRole('org_admin', 'counselor')`` 一致 — Phase 1.4 的
-    ``require_action`` 走 PHI 决策器太重, 内容块写操作只要简单 role 校验。
-    """
-    if user.is_system_admin:
-        return
-    if org is None or org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError(
-            "This action requires one of the following roles: org_admin, counselor"
-        )
-
-
-def _require_org_context(org: OrgContext | None, user: AuthUser) -> OrgContext:
-    """非 sysadm 必须有 org context (orgContextGuard 等价)。"""
-    if org is not None:
-        return org
-    if user.is_system_admin:
-        # sysadm 不会有 org context (path 没解析或 orgs 表查不到), 但写路径
-        # 必须有 orgId 作 audit/scope 的载体. 路由层只在路径里有 org_id 时
-        # 才会进来 — 所以理论上 sysadm 也能拿到 OrgContext (sysadm 合成 org_admin).
-        # 真正没 OrgContext 的 sysadm 调用 = 配置异常, fail closed.
-        raise ForbiddenError("org_context_required")
-    raise ForbiddenError("org_context_required")
 
 
 # ─── 辅助: parent 校验 (镜像 service.ts:42-80) ─────────────────────
@@ -209,7 +179,7 @@ async def list_blocks(
     if not parent_id:
         raise ValidationError("parentId is required")
 
-    org_ctx = _require_org_context(org, user)
+    org_ctx = require_org(org)
     is_client = (org_ctx.role == "client") if org is not None else False
 
     if parent_type == "course":
@@ -304,8 +274,7 @@ async def create_block(
 
     visibility 默认: course → 'participant', group → 'both' (与 Node 一致)。
     """
-    org_ctx = _require_org_context(org, user)
-    _require_staff_role(user, org)
+    org_ctx = reject_client(org, user=user)
 
     # 默认 visibility (镜像 service.ts:140)
     visibility = body.visibility or ("participant" if body.parent_type == "course" else "both")
@@ -385,8 +354,7 @@ async def update_block(
 
     parent_type 必须通过 query 传 — 因为同 block_id 可能落 course 或 group 两表之一。
     """
-    org_ctx = _require_org_context(org, user)
-    _require_staff_role(user, org)
+    org_ctx = reject_client(org, user=user)
 
     if parent_type not in ("course", "group"):
         raise ValidationError("parentType query param must be course or group")
@@ -458,8 +426,7 @@ async def delete_block(
     parent_type: Annotated[str | None, Query(alias="parentType")] = None,
 ) -> None:
     """删除内容块。need org_admin / counselor / system_admin + parent_type query。"""
-    org_ctx = _require_org_context(org, user)
-    _require_staff_role(user, org)
+    org_ctx = reject_client(org, user=user)
 
     if parent_type not in ("course", "group"):
         raise ValidationError("parentType query param must be course or group")
@@ -517,8 +484,7 @@ async def reorder_blocks(
     每行用 (block_id + parent_id) 双条件 update, 防意外打到别 parent 的同 id 块
     (镜像 service.ts:264-268 / 277-281 的 and(eq id, eq parent))。
     """
-    org_ctx = _require_org_context(org, user)
-    _require_staff_role(user, org)
+    org_ctx = reject_client(org, user=user)
 
     if body.parent_type == "course":
         await _assert_course_chapter_in_org(db, body.parent_id, org_ctx.org_id)

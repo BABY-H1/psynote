@@ -48,16 +48,12 @@ from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
-from app.middleware.role_guards import require_role
+from app.middleware.role_guards import require_admin_or_counselor
 
 router = APIRouter()
 
 
 # ─── Utility ─────────────────────────────────────────────────────
-
-
-def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
-    require_role(org, roles=("org_admin", *allow_roles))
 
 
 def _enrollment_to_row(e: GroupEnrollment) -> EnrollmentRow:
@@ -262,7 +258,7 @@ async def enroll_batch(
 
     每条单独 try/except — 单条失败不打断其它. 与 Node 一致.
     """
-    _require_org_admin(org, allow_roles=("counselor",))
+    require_admin_or_counselor(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
@@ -412,7 +408,7 @@ async def update_enrollment_status(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> EnrollmentRow:
     """审批状态 (admin / counselor). 镜像 enrollment.routes.ts:84-101 + service.ts:139-180."""
-    _require_org_admin(org, allow_roles=("counselor",))
+    require_admin_or_counselor(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     enr_uuid = parse_uuid_or_raise(enrollment_id, field="enrollmentId")
 

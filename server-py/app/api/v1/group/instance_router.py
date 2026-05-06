@@ -52,21 +52,13 @@ from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
-from app.middleware.role_guards import reject_client, require_role
+from app.middleware.role_guards import reject_client, require_admin, require_admin_or_counselor
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 # ─── Utility ─────────────────────────────────────────────────────
-
-
-def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
-    require_role(org, roles=("org_admin", *allow_roles))
-
-
-def _reject_client(org: OrgContext | None) -> None:
-    reject_client(org)
 
 
 def _instance_to_row(inst: GroupInstance) -> InstanceRow:
@@ -109,7 +101,7 @@ async def list_instances(
     若 leader 是 counselor 且 ``full_practice_access=False``, 限缩到本人 (含 supervisees).
     Phase 3 注: dataScope 限缩用 OrgContext.is_supervisor + supervisee_user_ids 推导.
     """
-    _reject_client(org)
+    reject_client(org)
     assert org is not None
 
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
@@ -144,7 +136,7 @@ async def get_instance(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> InstanceDetail:
     """详情 + enrollments. 镜像 instance.service.ts:20-47."""
-    _reject_client(org)
+    reject_client(org)
     inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     inst_q = select(GroupInstance).where(GroupInstance.id == inst_uuid).limit(1)
@@ -193,7 +185,7 @@ async def create_instance(
 
     Transactional: instance + (若 scheme_id) 自动派生 session records 一起 commit.
     """
-    _require_org_admin(org, allow_roles=("counselor",))
+    require_admin_or_counselor(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
@@ -282,7 +274,7 @@ async def update_instance(
 
     若状态切到 ended/archived: best-effort 派生 follow-up plans (按 assessment_config.followUp).
     """
-    _require_org_admin(org, allow_roles=("counselor",))
+    require_admin_or_counselor(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
@@ -333,7 +325,7 @@ async def delete_instance(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> None:
     """删除 instance (org_admin only). 镜像 instance.service.ts:213-221."""
-    _require_org_admin(org)
+    require_admin(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
@@ -390,13 +382,11 @@ async def _create_follow_up_plans_for_instance(db: AsyncSession, instance: Group
         due = now + timedelta(days=delay_days)
 
         for enr in enrollments:
-            # follow-up plan 需 care_episode_id; 没有则跳
-            if enr.care_episode_id and assessments_arr:
+            # P2.6 flatten: follow-up plan 需 care_episode_id + assessments; 否则只跳 plan, 通知仍发
+            should_create_plan = bool(enr.care_episode_id) and bool(assessments_arr)
+            counselor_id = instance.leader_id or instance.created_by
+            if should_create_plan and counselor_id is not None:
                 try:
-                    counselor_id = instance.leader_id or instance.created_by
-                    if counselor_id is None:
-                        # 无 counselor_id 时跳过 (与 Node 一致, ! 断言失败也会落到 catch)
-                        raise ValueError("missing counselor_id")
                     plan = FollowUpPlan(
                         org_id=instance.org_id,
                         care_episode_id=enr.care_episode_id,

@@ -59,6 +59,7 @@ from app.lib.errors import ForbiddenError, NotFoundError, ValidationError
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
+from app.middleware.role_guards import reject_client, require_org
 
 router = APIRouter()
 client_router = APIRouter()
@@ -212,39 +213,6 @@ def _top_severity(flags: list[dict[str, Any]]) -> SafetySeverity | None:
 
 
 # ────────────────────────────────────────────────────────────────
-# Role guards
-# ────────────────────────────────────────────────────────────────
-
-
-def _require_org_context(org: OrgContext | None, user: AuthUser) -> OrgContext:
-    """
-    路由声明了 ``{org_id}`` path 参, 应解析出 OrgContext; 没解析到 = 配置异常,
-    fail closed (镜像 content_block 同名 helper)。
-    """
-    if org is not None:
-        return org
-    # sysadm 没 OrgContext 走到这通常是路径无 org_id; 这两个 router 都挂在
-    # /api/orgs/{org_id} 下, 理论上 sysadm 也能合成 org_admin 视角.
-    if user.is_system_admin:
-        raise ForbiddenError("org_context_required")
-    raise ForbiddenError("org_context_required")
-
-
-def _require_staff_role(user: AuthUser, org: OrgContext | None) -> None:
-    """
-    pending-safety + review 端点 — Node ``requireRole('org_admin', 'counselor')``
-    的等价。sysadm 跳过, 其他角色必须 ∈ {org_admin, counselor}, 与 content_block
-    同名 helper 一致。
-    """
-    if user.is_system_admin:
-        return
-    if org is None or org.role not in ("org_admin", "counselor"):
-        raise ForbiddenError(
-            "This action requires one of the following roles: org_admin, counselor"
-        )
-
-
-# ────────────────────────────────────────────────────────────────
 # Service helpers (inline, 镜像 response.service.ts:30-227)
 # ────────────────────────────────────────────────────────────────
 
@@ -375,7 +343,7 @@ async def list_responses_for_enrollment(
 
     Counselor / org_admin 不做 ownership 限制 (要看全班学员)。
     """
-    org_ctx = _require_org_context(org, user)
+    org_ctx = require_org(org)
 
     if enrollment_type not in ("course", "group"):
         raise ValidationError("enrollmentType must be course or group")
@@ -428,8 +396,7 @@ async def list_pending_safety_flags(
 
     org_admin / counselor only。
     """
-    org_ctx = _require_org_context(org, user)
-    _require_staff_role(user, org)
+    org_ctx = reject_client(org, user=user)
 
     try:
         org_uuid = uuid.UUID(org_ctx.org_id)
@@ -447,7 +414,7 @@ async def list_pending_safety_flags(
             EnrollmentBlockResponse.response,
             EnrollmentBlockResponse.safety_flags,
             EnrollmentBlockResponse.completed_at,
-            CourseEnrollment.user_id,
+            CourseEnrollment.user_id.label("user_id"),
         )
         .join(
             CourseEnrollment,
@@ -462,9 +429,7 @@ async def list_pending_safety_flags(
                 CourseInstance.org_id == org_uuid,
             )
         )
-        .order_by(desc(EnrollmentBlockResponse.completed_at))
     )
-    course_rows = (await db.execute(course_q)).all()
 
     # group 分支 (镜像 service.ts:282-297)
     group_q = (
@@ -477,7 +442,7 @@ async def list_pending_safety_flags(
             EnrollmentBlockResponse.response,
             EnrollmentBlockResponse.safety_flags,
             EnrollmentBlockResponse.completed_at,
-            GroupEnrollment.user_id,
+            GroupEnrollment.user_id.label("user_id"),
         )
         .join(
             GroupEnrollment,
@@ -492,12 +457,15 @@ async def list_pending_safety_flags(
                 GroupInstance.org_id == org_uuid,
             )
         )
-        .order_by(desc(EnrollmentBlockResponse.completed_at))
     )
-    group_rows = (await db.execute(group_q)).all()
+
+    # #7/P1.7: UNION ALL 单 query 替代两次串行 SELECT;
+    # SQL 端 ORDER BY 保证 course/group 跨源按 completed_at 全局降序 (而非"先 course 后 group")。
+    union_q = course_q.union_all(group_q).order_by(desc(EnrollmentBlockResponse.completed_at))
+    rows = (await db.execute(union_q)).all()
 
     out: list[PendingSafetyRow] = []
-    for r in [*course_rows, *group_rows]:
+    for r in rows:
         out.append(
             PendingSafetyRow(
                 id=str(r[0]),
@@ -530,8 +498,7 @@ async def mark_response_reviewed(
 
     org_admin / counselor only。
     """
-    org_ctx = _require_org_context(org, user)
-    _require_staff_role(user, org)
+    org_ctx = reject_client(org, user=user)
 
     try:
         response_uuid = uuid.UUID(response_id)
@@ -586,7 +553,7 @@ async def submit_response(
     critical / warning 命中时返 ``crisis`` payload (危机热线), 让门户立刻弹提示。
     """
     # 不需要 staff role / 不需要 reject_client (本路由就是给 client portal 用的)
-    _require_org_context(org, user)
+    org = require_org(org)
 
     # ownership: 只有 enrollment 主人才能为它提响应
     await _assert_enrollment_owned_by_user(db, body.enrollment_id, body.enrollment_type, user.id)

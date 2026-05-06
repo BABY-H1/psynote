@@ -28,4 +28,22 @@ def parse_uuid_or_raise(value: str, *, field: str = "id") -> uuid.UUID:
         raise ValidationError(f"{field} 不是合法 UUID") from exc
 
 
-__all__ = ["parse_uuid_or_raise"]
+def parse_uuid_or_none(value: object) -> uuid.UUID | None:
+    """宽松解析 ``str | None | 其它`` → ``uuid.UUID | None``, 不合法直接返 None。
+
+    用在"可选 UUID 输入"场景 (例如可选 query param / 旧记录里残留的脏数据), 不抛异常。
+    需要硬校验 (path param 必填) 用 :func:`parse_uuid_or_raise`。
+
+    曾分散于 result_router / triage_automation_service / report_router 等 3+ 处, 现统一。
+    """
+    if isinstance(value, uuid.UUID):
+        return value
+    if not isinstance(value, str):
+        return None
+    try:
+        return uuid.UUID(value)
+    except (ValueError, TypeError):
+        return None
+
+
+__all__ = ["parse_uuid_or_none", "parse_uuid_or_raise"]

@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
-from sqlalchemy import and_, asc, select
+from sqlalchemy import and_, asc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.group.schemas import (
@@ -52,20 +52,12 @@ from app.lib.uuid_utils import parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
-from app.middleware.role_guards import reject_client, require_role
+from app.middleware.role_guards import reject_client, require_admin_or_counselor
 
 router = APIRouter()
 
 
 # ─── Utility ─────────────────────────────────────────────────────
-
-
-def _require_org_admin(org: OrgContext | None, *, allow_roles: tuple[str, ...] = ()) -> None:
-    require_role(org, roles=("org_admin", *allow_roles))
-
-
-def _reject_client(org: OrgContext | None) -> None:
-    reject_client(org)
 
 
 def _record_to_row(rec: GroupSessionRecord) -> SessionRecordRow:
@@ -94,7 +86,7 @@ async def list_session_records(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> list[SessionRecordListItem]:
     """列表 records + 出勤计数. 镜像 session.service.ts:10-40."""
-    _reject_client(org)
+    reject_client(org)
     inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     rec_q = (
@@ -106,19 +98,23 @@ async def list_session_records(
     if not records:
         return []
 
-    # 拉所有出勤行, Python 端汇总 (与 Node SQL filter aggregate 等价, 但更易测)
+    # SQL 端 GROUP BY 聚合 (#5: 不再 hydrate 全表 attendance 行只为数 2 个值)
     rec_ids = [r.id for r in records]
-    att_q = select(GroupSessionAttendance).where(
-        GroupSessionAttendance.session_record_id.in_(rec_ids)
+    agg_q = (
+        select(
+            GroupSessionAttendance.session_record_id,
+            func.count().label("total"),
+            func.count()
+            .filter(GroupSessionAttendance.status.in_(("present", "late")))
+            .label("present"),
+        )
+        .where(GroupSessionAttendance.session_record_id.in_(rec_ids))
+        .group_by(GroupSessionAttendance.session_record_id)
     )
-    all_att = list((await db.execute(att_q)).scalars().all())
-
-    counts: dict[uuid.UUID, dict[str, int]] = {}
-    for a in all_att:
-        c = counts.setdefault(a.session_record_id, {"present": 0, "total": 0})
-        c["total"] += 1
-        if a.status in ("present", "late"):
-            c["present"] += 1
+    counts: dict[uuid.UUID, dict[str, int]] = {
+        sid: {"total": int(total), "present": int(present)}
+        for sid, total, present in (await db.execute(agg_q)).all()
+    }
 
     out: list[SessionRecordListItem] = []
     for r in records:
@@ -141,7 +137,7 @@ async def get_session_record(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SessionRecordDetail:
     """单条 record + 出勤名单. 镜像 session.service.ts:42-72."""
-    _reject_client(org)
+    reject_client(org)
     sess_uuid = parse_uuid_or_raise(session_id, field="sessionId")
 
     rec_q = select(GroupSessionRecord).where(GroupSessionRecord.id == sess_uuid).limit(1)
@@ -199,7 +195,7 @@ async def init_session_records(
       - instance 存在, instance.scheme_id 不为空
       - records 必须为空 (重复 init 抛 ValidationError)
     """
-    _require_org_admin(org, allow_roles=("counselor",))
+    require_admin_or_counselor(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
@@ -268,7 +264,7 @@ async def create_session_record(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SessionRecordRow:
     """ad-hoc 单条 record (org_admin / counselor). 镜像 session.service.ts:121-136."""
-    _require_org_admin(org, allow_roles=("counselor",))
+    require_admin_or_counselor(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
@@ -306,7 +302,7 @@ async def update_session_record(
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> SessionRecordRow:
     """更新 session record. 镜像 session.service.ts:138-155."""
-    _require_org_admin(org, allow_roles=("counselor",))
+    require_admin_or_counselor(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     sess_uuid = parse_uuid_or_raise(session_id, field="sessionId")
 
@@ -351,7 +347,7 @@ async def record_attendance(
 
     每条 (session_record, enrollment) 唯一: 已存在则 update status / note, 否则 insert.
     """
-    _require_org_admin(org, allow_roles=("counselor",))
+    require_admin_or_counselor(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     sess_uuid = parse_uuid_or_raise(session_id, field="sessionId")
 
@@ -438,7 +434,7 @@ async def attendance_summary(
 
     镜像 session.service.ts:199-240. 仅 status='completed' 的 records 计入.
     """
-    _reject_client(org)
+    reject_client(org)
     inst_uuid = parse_uuid_or_raise(instance_id, field="instanceId")
 
     rec_q = select(GroupSessionRecord.id).where(
@@ -451,18 +447,19 @@ async def attendance_summary(
     if not rec_ids:
         return {}
 
-    att_q = select(GroupSessionAttendance.enrollment_id, GroupSessionAttendance.status).where(
-        GroupSessionAttendance.session_record_id.in_(rec_ids)
+    # SQL 端 GROUP BY 聚合 (#6: 不再加载 (enrollment_id, status) 全部对再 Python loop)
+    agg_q = (
+        select(
+            GroupSessionAttendance.enrollment_id,
+            func.count().label("total"),
+            func.count()
+            .filter(GroupSessionAttendance.status.in_(("present", "late")))
+            .label("present"),
+        )
+        .where(GroupSessionAttendance.session_record_id.in_(rec_ids))
+        .group_by(GroupSessionAttendance.enrollment_id)
     )
-    att_rows = (await db.execute(att_q)).all()
-
-    summary: dict[str, dict[str, int]] = {}
-    for row in att_rows:
-        enr_id = row[0]
-        st = row[1]
-        key = str(enr_id)
-        s = summary.setdefault(key, {"present": 0, "total": 0})
-        s["total"] += 1
-        if st in ("present", "late"):
-            s["present"] += 1
-    return summary
+    return {
+        str(enr_id): {"total": int(total), "present": int(present)}
+        for enr_id, total, present in (await db.execute(agg_q)).all()
+    }

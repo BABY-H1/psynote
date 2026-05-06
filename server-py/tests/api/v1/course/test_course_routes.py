@@ -62,11 +62,12 @@ def test_list_courses_happy(
 def test_list_courses_search_filter(
     admin_org_client: TestClient,
     setup_db_results: SetupDbResults,
-    make_course: object,
 ) -> None:
-    """search 不匹配时被过滤掉."""
-    c = make_course(title="正念课")  # type: ignore[operator]
-    setup_db_results([[c]])
+    """search 由 SQL 端 ILIKE 过滤 (#1: 不再 hydrate 全表后 Python 过滤).
+
+    mock 模拟 ``WHERE title ILIKE %不匹配%`` 在 DB 端没有命中, 返空列表.
+    """
+    setup_db_results([[]])
     r = admin_org_client.get(f"/api/orgs/{_ORG_ID}/courses/?search=不匹配")
     assert r.status_code == 200
     assert r.json() == []

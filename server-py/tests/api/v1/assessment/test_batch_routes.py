@@ -46,11 +46,9 @@ def test_get_batch_happy_with_stats(
     make_batch: object,
     make_result: object,
 ) -> None:
-    """详情含实时 stats: 2 results, 1 level_2 + 1 level_3."""
+    """详情含实时 stats: 2 results, 1 level_2 + 1 level_3 (P0.4: SQL GROUP BY 聚合)."""
     b = make_batch()  # type: ignore[operator]
-    r1 = make_result(risk_level="level_2")  # type: ignore[operator]
-    r2 = make_result(risk_level="level_3")  # type: ignore[operator]
-    setup_db_results([b, [r1, r2]])
+    setup_db_results([b, [("level_2", 1), ("level_3", 1)]])
     r = staff_client.get(f"/api/orgs/{_ORG_ID}/assessment-batches/{_BID}")
     assert r.status_code == 200
     body = r.json()

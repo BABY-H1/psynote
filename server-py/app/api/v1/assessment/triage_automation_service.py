@@ -36,6 +36,7 @@ from app.db.models.client_assignments import ClientAssignment
 from app.db.models.notifications import Notification
 from app.db.models.org_members import OrgMember
 from app.db.models.organizations import Organization
+from app.lib.uuid_utils import parse_uuid_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -113,8 +114,8 @@ async def _dispatch_notifications(
     except (ValueError, TypeError):
         return
 
-    result_uuid = _try_parse_uuid(result_id)
-    user_uuid = _try_parse_uuid(user_id) if user_id else None
+    result_uuid = parse_uuid_or_none(result_id)
+    user_uuid = parse_uuid_or_none(user_id) if user_id else None
 
     label = _LEVEL_LABELS.get(risk_level, risk_level)
 
@@ -190,7 +191,7 @@ async def _create_crisis_candidate(
     except (ValueError, TypeError):
         return
 
-    result_uuid = _try_parse_uuid(result_id)
+    result_uuid = parse_uuid_or_none(result_id)
 
     # 查 org settings → orgType (用于 message 文案)
     org_q = select(Organization.settings).where(Organization.id == org_uuid).limit(1)
@@ -216,16 +217,6 @@ async def _create_crisis_candidate(
         )
     )
     await db.flush()
-
-
-def _try_parse_uuid(value: str | None) -> uuid.UUID | None:
-    """str → UUID; 失败返 None (用于 polymorphic ref_id 等可空字段)."""
-    if value is None:
-        return None
-    try:
-        return uuid.UUID(value)
-    except (ValueError, TypeError):
-        return None
 
 
 __all__ = ["auto_triage_and_notify"]

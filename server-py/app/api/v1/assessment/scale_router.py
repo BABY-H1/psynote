@@ -169,9 +169,7 @@ async def get_scale(
 
     rules: list[DimensionRule] = []
     if dim_ids:
-        r_q = select(DimensionRule).where(
-            or_(*[DimensionRule.dimension_id == did for did in dim_ids])
-        )
+        r_q = select(DimensionRule).where(DimensionRule.dimension_id.in_(dim_ids))
         rules = list((await db.execute(r_q)).scalars().all())
 
     i_q = select(ScaleItem).where(ScaleItem.scale_id == sid).order_by(asc(ScaleItem.sort_order))

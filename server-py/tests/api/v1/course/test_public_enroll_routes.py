@@ -40,9 +40,11 @@ def test_get_public_info_happy(
     inst = make_instance(  # type: ignore[operator]
         publish_mode="public", status="active", capacity=30
     )
-    course = make_course(title="正念课", course_id=inst.course_id)  # type: ignore[operator]
-    course.description = "课程介绍"
-    setup_db_results([inst, course, ["approved", "auto_approved", "pending"]])
+    # 课程信息 #3 优化后 select(title, description) 直接返 tuple, 不再 hydrate 整行
+    course_row = ("正念课", "课程介绍")
+    # 报名计数 #3 优化后 SQL 一次聚合返 (approved, pending)
+    cnt_row = (2, 1)  # 2 approved + 1 pending = 与原 ["approved","auto_approved","pending"] 等价
+    setup_db_results([inst, course_row, cnt_row])
 
     r = client.get(f"/api/public/courses/{_INSTANCE_ID}")
     assert r.status_code == 200

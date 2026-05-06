@@ -30,11 +30,10 @@ def test_list_session_records_happy_with_attendance_count(
     make_session_record: object,
     make_attendance: object,
 ) -> None:
-    """records + 每条出勤计数."""
+    """records + 每条出勤计数 (#5: GROUP BY 聚合 (sid, total, present) tuple)."""
     rec = make_session_record(session_number=1)  # type: ignore[operator]
-    att1 = make_attendance(status="present", session_record_id=rec.id)  # type: ignore[operator]
-    att2 = make_attendance(status="absent", session_record_id=rec.id)  # type: ignore[operator]
-    setup_db_results([[rec], [att1, att2]])
+    # 出勤聚合: rec.id 下 1 present + 1 absent → total=2 / present=1
+    setup_db_results([[rec], [(rec.id, 2, 1)]])
 
     r = admin_org_client.get(f"/api/orgs/{_ORG_ID}/group/instances/{_INSTANCE_ID}/sessions")
     assert r.status_code == 200
@@ -298,7 +297,9 @@ def test_attendance_summary_only_completed_counted(
     rec_id = uuid_mod.UUID("00000000-0000-0000-0000-000000000777")
     enr_a = uuid_mod.UUID("00000000-0000-0000-0000-000000000888")
     enr_b = uuid_mod.UUID("00000000-0000-0000-0000-000000000999")
-    setup_db_results([[rec_id], [(enr_a, "present"), (enr_b, "absent")]])
+    # #6: SQL GROUP BY 直接返 (enrollment_id, total, present);
+    # enr_a 1 present → total=1/present=1; enr_b 1 absent → total=1/present=0
+    setup_db_results([[rec_id], [(enr_a, 1, 1), (enr_b, 1, 0)]])
 
     r = admin_org_client.get(
         f"/api/orgs/{_ORG_ID}/group/instances/{_INSTANCE_ID}/attendance-summary"

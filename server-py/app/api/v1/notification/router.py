@@ -145,20 +145,30 @@ async def mark_as_read(
     user: Annotated[AuthUser, Depends(get_current_user)],
     org: Annotated[OrgContext | None, Depends(get_org_context)],
 ) -> NotificationResponse:
-    """标记某条通知已读, 返回更新后的整行。"""
+    """标记某条通知已读, 返回更新后的整行。
+
+    所有权: 只允许通知 ``user_id`` 与 caller 一致的本人 (sysadm 跳过 — 已被
+    ``_reject_client`` 短路)。任何其它人按 404 处理 (anti-enumeration, 不暴露
+    "通知存在但不属于你")。
+    """
     _reject_client(org, user)
 
     try:
         notif_uuid = uuid.UUID(notification_id)
+        user_uuid = uuid.UUID(user.id)
     except (ValueError, TypeError) as exc:
         raise NotFoundError("Notification", notification_id) from exc
 
-    q = select(Notification).where(Notification.id == notif_uuid).limit(1)
+    q = (
+        select(Notification)
+        .where(and_(Notification.id == notif_uuid, Notification.user_id == user_uuid))
+        .limit(1)
+    )
     notif = (await db.execute(q)).scalar_one_or_none()
     if notif is None:
         raise NotFoundError("Notification", notification_id)
 
     notif.is_read = True
     await db.commit()
-    await db.refresh(notif)
+    # 注: 不调 db.refresh(notif) — 提交后 ORM in-memory state 已是最新值, 再读一次浪费一次 RTT.
     return _notification_to_response(notif)

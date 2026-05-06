@@ -34,7 +34,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
-from sqlalchemy import and_, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.course.schemas import (
@@ -94,18 +94,20 @@ async def get_public_course_info(
     if (instance.publish_mode or "") != "public":
         raise ForbiddenError("该课程不接受公开报名")
 
-    # 取 course title + description
-    cq = select(Course).where(Course.id == instance.course_id).limit(1)
-    course = (await db.execute(cq)).scalar_one_or_none()
+    # 取 course title + description (#3: 仅取 2 列, 别 hydrate 整行)
+    cq = select(Course.title, Course.description).where(Course.id == instance.course_id).limit(1)
+    course_row = (await db.execute(cq)).first()
 
-    # 报名计数
-    enroll_q = select(CourseEnrollment.approval_status).where(
-        CourseEnrollment.instance_id == instance_uuid
-    )
-    enrollment_rows = list((await db.execute(enroll_q)).scalars().all())
-
-    approved_count = sum(1 for s in enrollment_rows if s in ("approved", "auto_approved"))
-    pending_count = sum(1 for s in enrollment_rows if s == "pending")
+    # 报名计数 — 单 query 聚合 (#3: 公开端点高 QPS, 不要 hydrate 全表)
+    cnt_q = select(
+        func.count()
+        .filter(CourseEnrollment.approval_status.in_(("approved", "auto_approved")))
+        .label("approved"),
+        func.count().filter(CourseEnrollment.approval_status == "pending").label("pending"),
+    ).where(CourseEnrollment.instance_id == instance_uuid)
+    cnt_row = (await db.execute(cnt_q)).first()
+    approved_count = int(cnt_row[0]) if cnt_row else 0
+    pending_count = int(cnt_row[1]) if cnt_row else 0
 
     spots_left: int | None = None
     if instance.capacity is not None:
@@ -115,8 +117,8 @@ async def get_public_course_info(
         id=str(instance.id),
         title=instance.title,
         description=instance.description,
-        course_title=course.title if course else None,
-        course_description=course.description if course else None,
+        course_title=course_row[0] if course_row else None,
+        course_description=course_row[1] if course_row else None,
         capacity=instance.capacity,
         approved_count=approved_count,
         pending_count=pending_count,

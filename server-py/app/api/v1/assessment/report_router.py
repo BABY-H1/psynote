@@ -25,7 +25,6 @@ from __future__ import annotations
 import math
 import uuid
 from typing import Annotated, Any
-from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy import and_, asc, desc, or_, select
@@ -52,7 +51,7 @@ from app.db.models.group_instances import GroupInstance
 from app.db.models.scale_dimensions import ScaleDimension
 from app.db.models.users import User
 from app.lib.errors import NotFoundError, ValidationError
-from app.lib.uuid_utils import parse_uuid_or_raise
+from app.lib.uuid_utils import parse_uuid_or_none, parse_uuid_or_raise
 from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
@@ -64,9 +63,6 @@ from app.middleware.role_guards import (
 )
 
 router = APIRouter()
-
-
-_UUID_REGEX_LEN = 36  # 8-4-4-4-12 hex
 
 
 def _orm_to_row(r: AssessmentReport) -> ReportRow:
@@ -287,7 +283,7 @@ async def _generate_individual_single_report(
         raise NotFoundError("AssessmentResult", result_id)
 
     dim_scores: dict[str, float] = {k: float(v) for k, v in (result.dimension_scores or {}).items()}
-    dim_ids = [_try_parse_uuid(k) for k in dim_scores]
+    dim_ids = [parse_uuid_or_none(k) for k in dim_scores]
     dim_uuids = [d for d in dim_ids if d is not None]
 
     dims: list[ScaleDimension] = []
@@ -371,7 +367,7 @@ async def _generate_group_single_report(
     dim_ids = list(all_dim_scores.keys())
     dim_name_map: dict[str, str] = {}
     if dim_ids:
-        dim_uuids = [d for d in (_try_parse_uuid(x) for x in dim_ids) if d is not None]
+        dim_uuids = [d for d in (parse_uuid_or_none(x) for x in dim_ids) if d is not None]
         if dim_uuids:
             d_q = select(ScaleDimension.id, ScaleDimension.name).where(
                 or_(*[ScaleDimension.id == d for d in dim_uuids])
@@ -453,7 +449,7 @@ async def _generate_trend_report(
 
     dim_name_map: dict[str, str] = {}
     if all_dim_ids:
-        dim_uuids = [d for d in (_try_parse_uuid(x) for x in all_dim_ids) if d is not None]
+        dim_uuids = [d for d in (parse_uuid_or_none(x) for x in all_dim_ids) if d is not None]
         if dim_uuids:
             d_q = select(ScaleDimension.id, ScaleDimension.name).where(
                 or_(*[ScaleDimension.id == d for d in dim_uuids])
@@ -691,16 +687,6 @@ async def _generate_group_longitudinal_report(
     db.add(report)
     await db.commit()
     return report
-
-
-def _try_parse_uuid(value: Any) -> UUID | None:
-    """str → UUID; 失败返 None (用于 Drizzle JSONB key 是否合法 UUID 的容错)."""
-    if not isinstance(value, str) or len(value) != _UUID_REGEX_LEN:
-        return None
-    try:
-        return UUID(value)
-    except (ValueError, TypeError):
-        return None
 
 
 __all__ = ["router"]

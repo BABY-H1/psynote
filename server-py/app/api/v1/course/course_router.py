@@ -93,6 +93,33 @@ def _reject_client(org: OrgContext | None) -> OrgContext:
     return reject_client(org, client_message="来访者请通过客户端门户访问")
 
 
+async def _assert_not_already_enrolled(
+    db: AsyncSession,
+    *,
+    course_uuid: uuid.UUID,
+    user_uuid: uuid.UUID,
+    error_message: str,
+) -> None:
+    """同 course × user 已存在 enrollment → ConflictError。
+
+    P0.3: enroll_self 与 assign_to_client 共用同款 dup-check, 提取去重。
+    error_message 走 i18n: 'User is already enrolled in this course' 或
+    'Client is already enrolled in this course' (语义同, 主语不同)。
+    """
+    dup_q = (
+        select(CourseEnrollment.id)
+        .where(
+            and_(
+                CourseEnrollment.course_id == course_uuid,
+                CourseEnrollment.user_id == user_uuid,
+            )
+        )
+        .limit(1)
+    )
+    if (await db.execute(dup_q)).scalar_one_or_none() is not None:
+        raise ConflictError(error_message)
+
+
 async def _assert_course_owned_by_org(db: AsyncSession, course_id: uuid.UUID, org_id: str) -> None:
     """``assertLibraryItemOwnedByOrg`` 等价 — 只允许操作本机构的 course (或平台级)。
 
@@ -215,39 +242,34 @@ async def list_courses(
     _reject_client(org)
     org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
-    q = (
-        select(Course)
-        .where(
-            or_(
-                Course.org_id == org_uuid,
-                and_(Course.org_id.is_(None), Course.is_public.is_(True)),
-            )
-        )
-        .order_by(desc(Course.updated_at))
-    )
-    rows = list((await db.execute(q)).scalars().all())
-
     is_template_bool: bool | None = None
     if is_template == "true":
         is_template_bool = True
     elif is_template == "false":
         is_template_bool = False
 
-    # JS-侧过滤 (与 Node 一致, Drizzle 不支持复杂动态 chaining)
-    out: list[CourseSummary] = []
-    for c in rows:
-        if status_filter and c.status != status_filter:
-            continue
-        if course_type and c.course_type != course_type:
-            continue
-        if is_template_bool is not None and bool(c.is_template) != is_template_bool:
-            continue
-        if search:
-            s = search.lower()
-            if s not in c.title.lower() and s not in (c.description or "").lower():
-                continue
-        out.append(_course_to_summary(c))
-    return out
+    # P0.5/#1: filter 全部 push 到 SQL (Drizzle 限制不再适用; SQLAlchemy 动态 chaining OK)
+    conditions: list[Any] = [
+        or_(
+            Course.org_id == org_uuid,
+            and_(Course.org_id.is_(None), Course.is_public.is_(True)),
+        )
+    ]
+    if status_filter:
+        conditions.append(Course.status == status_filter)
+    if course_type:
+        conditions.append(Course.course_type == course_type)
+    if is_template_bool is not None:
+        conditions.append(Course.is_template.is_(is_template_bool))
+    if search:
+        like = f"%{search}%"
+        conditions.append(
+            or_(Course.title.ilike(like), Course.description.ilike(like)),
+        )
+
+    q = select(Course).where(and_(*conditions)).order_by(desc(Course.updated_at))
+    rows = list((await db.execute(q)).scalars().all())
+    return [_course_to_summary(c) for c in rows]
 
 
 @router.get("/template-tags", response_model=list[TemplateTagOutput])
@@ -893,18 +915,12 @@ async def enroll_self(
     course_uuid = parse_uuid_or_raise(course_id, field="courseId")
     user_uuid = parse_uuid_or_raise(user.id, field="userId")
 
-    dup_q = (
-        select(CourseEnrollment)
-        .where(
-            and_(
-                CourseEnrollment.course_id == course_uuid,
-                CourseEnrollment.user_id == user_uuid,
-            )
-        )
-        .limit(1)
+    await _assert_not_already_enrolled(
+        db,
+        course_uuid=course_uuid,
+        user_uuid=user_uuid,
+        error_message="User is already enrolled in this course",
     )
-    if (await db.execute(dup_q)).scalar_one_or_none() is not None:
-        raise ConflictError("User is already enrolled in this course")
 
     care_uuid: uuid.UUID | None = None
     if body.care_episode_id:
@@ -951,18 +967,12 @@ async def assign_to_client(
     user_uuid = parse_uuid_or_raise(user.id, field="userId")
     client_uuid = parse_uuid_or_raise(body.client_user_id, field="clientUserId")
 
-    dup_q = (
-        select(CourseEnrollment)
-        .where(
-            and_(
-                CourseEnrollment.course_id == course_uuid,
-                CourseEnrollment.user_id == client_uuid,
-            )
-        )
-        .limit(1)
+    await _assert_not_already_enrolled(
+        db,
+        course_uuid=course_uuid,
+        user_uuid=client_uuid,
+        error_message="Client is already enrolled in this course",
     )
-    if (await db.execute(dup_q)).scalar_one_or_none() is not None:
-        raise ConflictError("Client is already enrolled in this course")
 
     care_uuid: uuid.UUID | None = None
     if body.care_episode_id:

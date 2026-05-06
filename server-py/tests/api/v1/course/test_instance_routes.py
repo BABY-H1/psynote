@@ -74,10 +74,9 @@ def test_get_instance_happy(
     make_enrollment: object,
 ) -> None:
     inst = make_instance(title="X")  # type: ignore[operator]
-    e1 = make_enrollment(status="enrolled")  # type: ignore[operator]
-    e2 = make_enrollment(status="completed")  # type: ignore[operator]
-    # detail join: row tuple (instance, course_title, course_category)
-    setup_db_results([(inst, "课程标题", "心理"), [e1, e2]])
+    # detail join: row tuple (instance, course_title, course_category);
+    # 之后单 query 聚合 count 直接返 (total=2, completed=1)。
+    setup_db_results([(inst, "课程标题", "心理"), (2, 1)])
     r = admin_org_client.get(f"/api/orgs/{_ORG_ID}/course-instances/{_INSTANCE_ID}")
     assert r.status_code == 200
     body = r.json()

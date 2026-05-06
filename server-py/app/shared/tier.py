@@ -33,6 +33,15 @@ Feature = Literal[
 ]
 FEATURES: tuple[Feature, ...] = get_args(Feature)
 
+# UI 标签 (镜像 packages/shared/src/types/tier.ts TIER_LABELS)。仅作显示用 —
+# 业务逻辑用 OrgTier 字面量, 不要依赖中文 label。
+TIER_LABELS: dict[OrgTier, str] = {
+    "starter": "入门版",
+    "growth": "团队版",
+    "flagship": "旗舰版",
+}
+
+
 # starter ⊂ growth ⊂ flagship 严格递增 (test_tier 验证此性质)
 TIER_FEATURES: dict[OrgTier, frozenset[Feature]] = {
     "starter": frozenset({"core", "audit_log", "referral_export"}),

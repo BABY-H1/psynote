@@ -40,17 +40,9 @@ from app.middleware.audit import record_audit
 from app.middleware.auth import AuthUser, get_current_user
 from app.middleware.org_context import OrgContext, get_org_context
 from app.middleware.role_guards import require_admin
-from app.shared.tier import TIER_FEATURES
+from app.shared.tier import TIER_FEATURES, TIER_LABELS
 
 router = APIRouter()
-
-
-# tier label 镜像 packages/shared/src/types/tier.ts TIER_LABELS (与 subscription_router 同表)
-_TIER_LABELS: dict[str, str] = {
-    "starter": "入门版",
-    "growth": "团队版",
-    "flagship": "旗舰版",
-}
 
 
 def _require_org_admin(org: OrgContext | None) -> None:
@@ -107,7 +99,7 @@ async def activate_license(
     return LicenseActivateResponse(
         success=True,
         tier=tier,
-        label=_TIER_LABELS.get(tier, tier),
+        label=TIER_LABELS.get(tier, tier),
         features=list(features),
         max_seats=org.license.max_seats,
         expires_at=org.license.expires_at,
