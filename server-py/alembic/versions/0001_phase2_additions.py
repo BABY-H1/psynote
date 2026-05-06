@@ -24,8 +24,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects.postgresql import JSONB, UUID  # noqa: F401 — kept for autogenerate compat
+
+from alembic import op
 
 # revision identifiers, used by Alembic.
 revision: str = "0001_phase2_additions"
