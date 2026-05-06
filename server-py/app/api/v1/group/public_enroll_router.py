@@ -173,20 +173,24 @@ async def apply_public_enroll(
             return JSONResponse(status_code=400, content={"error": "报名已满, 暂无空位"})
 
     try:
-        # 找 / 建 user
+        # 找 / 建 user — Phase 5 P0 fix (Fix 5): 公开报名查询优先级 phone > email,
+        # 防止 email squat 攻击.
         user_id: uuid.UUID
-        if body.email:
+        existing_user = None
+        if body.phone:
+            u_q = select(User).where(User.phone == body.phone).limit(1)
+            existing_user = (await db.execute(u_q)).scalar_one_or_none()
+        if existing_user is None and body.email:
             u_q = select(User).where(User.email == body.email).limit(1)
             existing_user = (await db.execute(u_q)).scalar_one_or_none()
-            if existing_user is not None:
-                user_id = existing_user.id
-            else:
-                new_user = User(email=body.email, name=body.name)
-                db.add(new_user)
-                await db.flush()
-                user_id = new_user.id
+
+        if existing_user is not None:
+            user_id = existing_user.id
         else:
-            new_user = User(name=body.name)
+            # Phase 5 P0 fix (Fix 5): 公开报名建 User 时**不占 email UNIQUE**
+            # → email=None (匿名 user). 受害者后续走 counseling-public / eap-public
+            # 真注册时按 phone 查到这个匿名 user 并 claim.
+            new_user = User(name=body.name, email=None, phone=body.phone)
             db.add(new_user)
             await db.flush()
             user_id = new_user.id

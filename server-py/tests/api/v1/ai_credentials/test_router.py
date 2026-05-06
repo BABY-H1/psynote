@@ -144,7 +144,8 @@ def test_create_counselor_403(
 ) -> None:
     r = counselor_org_client.post(
         f"/api/orgs/{_ORG_ID}/ai-credentials/",
-        json={"baseUrl": "x", "model": "y", "apiKey": "z"},
+        # 用合法 URL (Phase 5 P0 SSRF 校验通过), 让请求达到 role 检查再被拒
+        json={"baseUrl": "https://api.openai.com/v1", "model": "y", "apiKey": "z"},
     )
     assert r.status_code == 403
 

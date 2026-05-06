@@ -10,7 +10,7 @@ Tests for app/middleware/audit.py — record_audit (generic audit utility).
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -146,15 +146,83 @@ async def test_db_error_does_not_propagate(
     )
 
 
-# ─── _write_audit_log 占位 ───────────────────────────────────
+# ─── _write_audit_log 真插 audit_logs (Phase 5 P0 fix) ────────
 
 
 @pytest.mark.asyncio
-async def test_write_audit_log_stub_is_noop_phase_1_7(
+async def test_write_audit_log_inserts_orm_row(
     base_env: pytest.MonkeyPatch,
 ) -> None:
-    """Phase 1.7 阶段 _write_audit_log 是 no-op (Phase 2 ORM 后真插)"""
+    """真插 AuditLog: db.add 收到模型实例, db.flush 被 await。"""
+    import uuid
+
+    from app.db.models.audit_logs import AuditLog
     from app.middleware.audit import _write_audit_log
 
-    result = await _write_audit_log(AsyncMock(), {"any": "dict"})
-    assert result is None
+    db = AsyncMock()
+    db.flush = AsyncMock()
+    db.add = MagicMock()
+
+    org_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    resource_id = str(uuid.uuid4())
+    diff = {"name": {"old": "A", "new": "B"}}
+
+    await _write_audit_log(
+        db,
+        {
+            "org_id": org_id,
+            "user_id": user_id,
+            "action": "course.update",
+            "resource": "courses",
+            "resource_id": resource_id,
+            "changes": diff,
+            "ip_address": "10.0.0.1",
+        },
+    )
+
+    assert db.add.call_count == 1
+    record = db.add.call_args[0][0]
+    assert isinstance(record, AuditLog)
+    assert str(record.org_id) == org_id
+    assert str(record.user_id) == user_id
+    assert record.action == "course.update"
+    assert record.resource == "courses"
+    assert str(record.resource_id) == resource_id
+    assert record.changes == diff
+    assert record.ip_address == "10.0.0.1"
+
+    db.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_write_audit_log_allows_null_org_user(
+    base_env: pytest.MonkeyPatch,
+) -> None:
+    """org_id / user_id 都允许 None (system / cron 操作)。"""
+    from app.db.models.audit_logs import AuditLog
+    from app.middleware.audit import _write_audit_log
+
+    db = AsyncMock()
+    db.flush = AsyncMock()
+    db.add = MagicMock()
+
+    await _write_audit_log(
+        db,
+        {
+            "org_id": None,
+            "user_id": None,
+            "action": "system.maintenance",
+            "resource": "system",
+            "resource_id": None,
+            "changes": None,
+            "ip_address": None,
+        },
+    )
+
+    record = db.add.call_args[0][0]
+    assert isinstance(record, AuditLog)
+    assert record.org_id is None
+    assert record.user_id is None
+    assert record.resource_id is None
+    db.flush.assert_awaited_once()

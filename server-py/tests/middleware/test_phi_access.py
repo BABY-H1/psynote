@@ -11,7 +11,7 @@ log entry, 验证字段组装正确 + 错误吞掉。
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -151,19 +151,104 @@ async def test_db_error_does_not_propagate(
     )
 
 
-# ─── _write_phi_log 占位 (Phase 2 ORM 后填实) ───────────────────
+# ─── _write_phi_log 真插 phi_access_logs (Phase 5 P0 fix) ───────
 
 
 @pytest.mark.asyncio
-async def test_write_phi_log_stub_is_noop_phase_1_7(
+async def test_write_phi_log_inserts_orm_row(
     base_env: pytest.MonkeyPatch,
 ) -> None:
-    """Phase 1.7 阶段 _write_phi_log 是 no-op (Phase 2 ORM 后真插)"""
+    """真插 PHIAccessLog: db.add 收到模型实例, db.flush 被 await。"""
+    import uuid
+
+    from app.db.models.phi_access_logs import PHIAccessLog
     from app.middleware.phi_access import _write_phi_log
 
-    # 应静默返回 None, 不抛异常
-    result = await _write_phi_log(AsyncMock(), {"any": "dict"})
-    assert result is None
+    db = AsyncMock()
+    db.flush = AsyncMock()
+    db.add = MagicMock()  # add 是 sync 方法但 AsyncMock 也能记录调用
+
+    org_id = str(uuid.uuid4())
+    user_id = str(uuid.uuid4())
+    client_id = str(uuid.uuid4())
+    resource_id = str(uuid.uuid4())
+
+    await _write_phi_log(
+        db,
+        {
+            "org_id": org_id,
+            "user_id": user_id,
+            "client_id": client_id,
+            "resource": "session_notes",
+            "resource_id": resource_id,
+            "action": "view",
+            "reason": None,
+            "data_class": "phi_full",
+            "actor_role_snapshot": "counselor",
+            "ip_address": "10.0.0.1",
+            "user_agent": "UA-test",
+        },
+    )
+
+    # 1) db.add 收到 PHIAccessLog 实例
+    assert db.add.call_count == 1
+    record = db.add.call_args[0][0]
+    assert isinstance(record, PHIAccessLog)
+    assert str(record.org_id) == org_id
+    assert str(record.user_id) == user_id
+    assert str(record.client_id) == client_id
+    assert record.resource == "session_notes"
+    assert str(record.resource_id) == resource_id
+    assert record.action == "view"
+    assert record.data_class == "phi_full"
+    assert record.actor_role_snapshot == "counselor"
+    assert record.ip_address == "10.0.0.1"
+    assert record.user_agent == "UA-test"
+
+    # 2) flush 被 await (不 commit, 由外层 transaction 决定)
+    db.flush.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_write_phi_log_raises_on_missing_org(
+    base_env: pytest.MonkeyPatch,
+) -> None:
+    """org_id 缺失 → ValueError (上层 record_phi_access 会 swallow)。"""
+    from app.middleware.phi_access import _write_phi_log
+
+    db = AsyncMock()
+    with pytest.raises(ValueError, match="missing org_id"):
+        await _write_phi_log(
+            db,
+            {
+                "org_id": "",
+                "user_id": "00000000-0000-0000-0000-000000000001",
+                "client_id": "00000000-0000-0000-0000-000000000002",
+                "resource": "x",
+                "action": "view",
+            },
+        )
+
+
+@pytest.mark.asyncio
+async def test_record_phi_access_swallows_missing_org_via_dummy_writer(
+    base_env: pytest.MonkeyPatch,
+) -> None:
+    """real _write_phi_log 在 org_id 空时 raise; record_phi_access 必须吞掉不传播。"""
+    from app.middleware.phi_access import record_phi_access
+
+    db = AsyncMock()
+    db.flush = AsyncMock()
+    db.add = MagicMock()
+    # 不应抛
+    await record_phi_access(
+        db=db,
+        org_id="",  # 触发 ValueError("missing org_id"), 上层吞掉
+        user_id="00000000-0000-0000-0000-000000000001",
+        client_id="00000000-0000-0000-0000-000000000002",
+        resource="x",
+        action="view",
+    )
 
 
 # ─── log entry 是否被传给 helper (而不是位置参) ────────────────

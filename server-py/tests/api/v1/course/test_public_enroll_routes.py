@@ -160,6 +160,11 @@ def test_apply_new_email_password_hash_must_be_null(
         f"password_hash 必须为 None, 实际 = {new_user.password_hash!r}; "
         "历史 W0.4 audit bug 写的是 randomUUID(), 不能再回去!"
     )
+    # Phase 5 P0 fix (Fix 5): 公开报名不占 email UNIQUE — 受害者真注册时撞约束
+    assert new_user.email is None, (
+        f"email 必须为 None, 实际 = {new_user.email!r}; "
+        "Fix 5: 公开报名建匿名 user 防 email squat (受害者后续走 phone 真注册时 claim)"
+    )
 
 
 def test_apply_existing_user_no_user_insert(

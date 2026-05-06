@@ -30,7 +30,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -51,6 +51,7 @@ from app.db.models.org_members import OrgMember
 from app.db.models.organizations import Organization
 from app.db.models.users import User
 from app.lib.errors import NotFoundError, UnauthorizedError, ValidationError
+from app.middleware.rate_limit import limiter
 
 router = APIRouter()
 
@@ -111,7 +112,9 @@ async def get_org_info(
     response_model=CounselingPublicRegisterResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("5/minute")  # Phase 5 P0 fix (Fix 8): 防灌水/枚举
 async def register_client(
+    request: Request,  # slowapi 装饰器需要从 request 取 IP 做 key
     org_slug: str,
     body: CounselingPublicRegisterRequest,
     db: Annotated[AsyncSession, Depends(get_db)],

@@ -128,8 +128,17 @@ async def get_conversation(
     """
     _require_org(org)
     conv_uuid = parse_uuid_or_raise(conversation_id, field="conversationId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
-    q = select(AIConversation).where(AIConversation.id == conv_uuid).limit(1)
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权读
+    q = (
+        select(AIConversation)
+        .where(
+            AIConversation.id == conv_uuid,
+            AIConversation.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     conv = (await db.execute(q)).scalar_one_or_none()
     if conv is None:
         raise NotFoundError("AiConversation", conversation_id)
@@ -213,8 +222,17 @@ async def update_conversation(
     """
     _require_admin_or_counselor(org)
     conv_uuid = parse_uuid_or_raise(conversation_id, field="conversationId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
-    q = select(AIConversation).where(AIConversation.id == conv_uuid).limit(1)
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+    q = (
+        select(AIConversation)
+        .where(
+            AIConversation.id == conv_uuid,
+            AIConversation.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     conv = (await db.execute(q)).scalar_one_or_none()
     if conv is None:
         raise NotFoundError("AiConversation", conversation_id)
@@ -244,13 +262,27 @@ async def delete_conversation(
     """``DELETE /{id}`` (admin/counselor). 镜像 routes.ts:88-93 + service.ts:98-104."""
     _require_admin_or_counselor(org)
     conv_uuid = parse_uuid_or_raise(conversation_id, field="conversationId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
-    q = select(AIConversation).where(AIConversation.id == conv_uuid).limit(1)
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权删
+    q = (
+        select(AIConversation)
+        .where(
+            AIConversation.id == conv_uuid,
+            AIConversation.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     conv = (await db.execute(q)).scalar_one_or_none()
     if conv is None:
         raise NotFoundError("AiConversation", conversation_id)
 
-    await db.execute(delete(AIConversation).where(AIConversation.id == conv_uuid))
+    await db.execute(
+        delete(AIConversation).where(
+            AIConversation.id == conv_uuid,
+            AIConversation.org_id == org_uuid,
+        )
+    )
     await db.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

@@ -163,8 +163,17 @@ async def get_session_note(
     """
     _require_org(org)
     note_uuid = parse_uuid_or_raise(note_id, field="noteId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
-    q = select(SessionNote).where(SessionNote.id == note_uuid).limit(1)
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权读
+    q = (
+        select(SessionNote)
+        .where(
+            SessionNote.id == note_uuid,
+            SessionNote.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     note = (await db.execute(q)).scalar_one_or_none()
     if note is None:
         raise NotFoundError("SessionNote", note_id)
@@ -299,8 +308,17 @@ async def update_session_note(
     """
     _require_admin_or_counselor(org)
     note_uuid = parse_uuid_or_raise(note_id, field="noteId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
-    q = select(SessionNote).where(SessionNote.id == note_uuid).limit(1)
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+    q = (
+        select(SessionNote)
+        .where(
+            SessionNote.id == note_uuid,
+            SessionNote.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     note = (await db.execute(q)).scalar_one_or_none()
     if note is None:
         raise NotFoundError("SessionNote", note_id)

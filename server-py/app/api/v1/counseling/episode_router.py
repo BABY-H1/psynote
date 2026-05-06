@@ -264,11 +264,13 @@ async def get_episode(
     """
     _require_org(org)
     episode_uuid = parse_uuid_or_raise(episode_id, field="episodeId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权读
     q = (
         select(CareEpisode, User.name, User.email)
         .join(User, User.id == CareEpisode.client_id, isouter=True)
-        .where(CareEpisode.id == episode_uuid)
+        .where(CareEpisode.id == episode_uuid, CareEpisode.org_id == org_uuid)
         .limit(1)
     )
     row = (await db.execute(q)).first()
@@ -353,9 +355,15 @@ async def get_enriched_timeline(
     """
     _require_org(org)
     episode_uuid = parse_uuid_or_raise(episode_id, field="episodeId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     # 校验 episode 存在 (Node service.ts:233-238 — 不存在返 [])
-    epq = select(CareEpisode.id).where(CareEpisode.id == episode_uuid).limit(1)
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权读
+    epq = (
+        select(CareEpisode.id)
+        .where(CareEpisode.id == episode_uuid, CareEpisode.org_id == org_uuid)
+        .limit(1)
+    )
     if (await db.execute(epq)).first() is None:
         return []
 
@@ -481,8 +489,14 @@ async def update_episode(
     """``PATCH /{episode_id}`` 部分更新 (admin/counselor only). 镜像 service.ts:114-132。"""
     _require_admin_or_counselor(org)
     episode_uuid = parse_uuid_or_raise(episode_id, field="episodeId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
-    q = select(CareEpisode).where(CareEpisode.id == episode_uuid).limit(1)
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+    q = (
+        select(CareEpisode)
+        .where(CareEpisode.id == episode_uuid, CareEpisode.org_id == org_uuid)
+        .limit(1)
+    )
     episode = (await db.execute(q)).scalar_one_or_none()
     if episode is None:
         raise NotFoundError("CareEpisode", episode_id)
@@ -528,9 +542,15 @@ async def confirm_triage(
     _require_admin_or_counselor(org)
     episode_uuid = parse_uuid_or_raise(episode_id, field="episodeId")
     user_uuid = parse_uuid_or_raise(user.id, field="userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     try:
-        q = select(CareEpisode).where(CareEpisode.id == episode_uuid).limit(1)
+        # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+        q = (
+            select(CareEpisode)
+            .where(CareEpisode.id == episode_uuid, CareEpisode.org_id == org_uuid)
+            .limit(1)
+        )
         episode = (await db.execute(q)).scalar_one_or_none()
         if episode is None:
             raise NotFoundError("CareEpisode", episode_id)
@@ -590,10 +610,16 @@ async def close_episode(
     _require_admin_or_counselor(org)
     episode_uuid = parse_uuid_or_raise(episode_id, field="episodeId")
     user_uuid = parse_uuid_or_raise(user.id, field="userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
     reason = body.reason if body else None
 
     try:
-        q = select(CareEpisode).where(CareEpisode.id == episode_uuid).limit(1)
+        # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+        q = (
+            select(CareEpisode)
+            .where(CareEpisode.id == episode_uuid, CareEpisode.org_id == org_uuid)
+            .limit(1)
+        )
         episode = (await db.execute(q)).scalar_one_or_none()
         if episode is None:
             raise NotFoundError("CareEpisode", episode_id)
@@ -647,9 +673,15 @@ async def reopen_episode(
     _require_admin_or_counselor(org)
     episode_uuid = parse_uuid_or_raise(episode_id, field="episodeId")
     user_uuid = parse_uuid_or_raise(user.id, field="userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     try:
-        q = select(CareEpisode).where(CareEpisode.id == episode_uuid).limit(1)
+        # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+        q = (
+            select(CareEpisode)
+            .where(CareEpisode.id == episode_uuid, CareEpisode.org_id == org_uuid)
+            .limit(1)
+        )
         episode = (await db.execute(q)).scalar_one_or_none()
         if episode is None:
             raise NotFoundError("CareEpisode", episode_id)

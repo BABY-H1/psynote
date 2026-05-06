@@ -274,11 +274,14 @@ def test_bind_happy_creates_guardian_with_real_phone(
     token_row = make_token_row(token=_TOKEN)  # type: ignore[operator]
     student_user_id = uuid.UUID("00000000-0000-0000-0000-000000000003")
     matches = [(student_user_id, "张三", "S001", "13800001234")]  # 老师录的末4位 1234 ✓
-    # token preview + matches + (existing relationship 检查 None — 新建)
+    # Fix 6: 新增 existing_guardian_q 查询 (按 phone+is_guardian) → None (无现有 guardian)
+    # FIFO: token preview + matches + existing_guardian (None, 新建路径) +
+    # (existing relationship 检查 None — 建新关系)
     setup_db_results(
         [
             (token_row, "1班", "高一", "测试学校"),
             matches,
+            None,  # Fix 6: 现有 guardian 查询 → None, 走 path B (新建账户)
             None,  # 关系不存在 → 建新
         ]
     )
@@ -325,3 +328,66 @@ def test_bind_happy_creates_guardian_with_real_phone(
 
     # silence unused
     _ = _make_org()
+
+
+def test_bind_reuses_existing_guardian_no_duplicate_user(
+    client: TestClient,
+    setup_db_results: SetupDbResults,
+    mock_db: AsyncMock,
+    make_token_row: object,
+) -> None:
+    """Phase 5 P0 fix (Fix 6): 同 token + 同 phone 多次 POST → 不重建 guardian.
+
+    场景: 第二次 POST (token 重放), 受害者已有 guardian user (前次 POST 建).
+    期望: 不在 db.add() 创建新 User. 复用 existing guardian.
+    """
+    from app.db.models.users import User
+
+    token_row = make_token_row(token=_TOKEN)  # type: ignore[operator]
+    student_user_id = uuid.UUID("00000000-0000-0000-0000-000000000003")
+    matches = [(student_user_id, "张三", "S001", "13800001234")]
+
+    # 模拟 existing guardian (前次 POST 建的)
+    existing_guardian = User()
+    existing_guardian.id = uuid.UUID("00000000-0000-0000-0000-000000000abc")
+    existing_guardian.phone = "13800001234"
+    existing_guardian.email = None
+    existing_guardian.name = "张父"
+    existing_guardian.password_hash = "real-bcrypt"
+    existing_guardian.is_guardian_account = True
+    existing_guardian.is_system_admin = False
+
+    # FIFO: token + matches + existing_guardian (找到!) + member_check (None) + relationship (None)
+    setup_db_results(
+        [
+            (token_row, "1班", "高一", "测试学校"),
+            matches,
+            existing_guardian,  # Fix 6: 找到现有 guardian, 走 path A (复用)
+            None,  # org_member 不存在 → 补建
+            None,  # 关系不存在 → 建新 ClientRelationship
+        ]
+    )
+    r = client.post(
+        f"/api/public/parent-bind/{_TOKEN}",
+        json={
+            "studentName": "张三",
+            "studentNumber": "S001",
+            "phoneLast4": "1234",
+            "relation": "father",
+            "myName": "张父",
+            "password": "abcdef",
+            "phone": "13800001234",
+        },
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert "accessToken" in body
+    # token 用 existing guardian 的 id 签 (复用)
+    assert body["user"]["id"] == "00000000-0000-0000-0000-000000000abc"
+
+    # ⭐ Fix 6 关键 invariant: db.add 不应包含新 User 实例 (复用现有)
+    user_inserts = [c.args[0] for c in mock_db.add.call_args_list if isinstance(c.args[0], User)]
+    assert len(user_inserts) == 0, (
+        f"Fix 6: 不应建新 guardian user (实际建了 {len(user_inserts)} 个); "
+        "现有 guardian 应被复用以防 token 重放产生数据冗余"
+    )

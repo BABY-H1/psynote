@@ -7,11 +7,55 @@
 from __future__ import annotations
 
 from datetime import datetime
+from ipaddress import ip_address
 from typing import Literal
+from urllib.parse import urlparse
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
 from app.api.v1._schema_base import CamelModel
+
+
+def _validate_safe_url(value: str) -> str:
+    """Phase 5 P0 fix (SSRF 防御): 校验 base_url 不指向内网 / 非 HTTPS scheme。
+
+    威胁: 攻击者 (拿到 org_admin token) 创建 AI credential 用 ``base_url=
+    http://169.254.169.254`` (云元数据) 或 ``http://internal-redis:6379`` 让
+    服务器 POST 到内网。Decrypted API key 也会被当 Bearer 发去攻击者域。
+
+    规则:
+      1. scheme 必须是 https (dev 例外: NODE_ENV=development 时允许 http)
+      2. host 不能是 RFC1918 私有 IP / loopback / link-local
+      3. host 必须有 (URL 必须含 host)
+    域名形式 (e.g. api.openai.com) 放行 (依赖 DNS 解析时不再二次校验, 这是 trade-off)。
+    """
+    parsed = urlparse(value)
+    if not parsed.hostname:
+        raise ValueError("base_url must include a host")
+
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    is_dev = settings.NODE_ENV != "production"
+
+    if parsed.scheme not in ("https", "http"):
+        raise ValueError(f"base_url scheme must be https (or http in dev), got {parsed.scheme!r}")
+    if parsed.scheme == "http" and not is_dev:
+        raise ValueError("base_url must use https in production")
+
+    # IP 校验: 是 IP 就拒绝内网/loopback; 是域名就放行
+    try:
+        ip = ip_address(parsed.hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_multicast:
+            raise ValueError(
+                f"base_url IP {parsed.hostname} not allowed (private/loopback/link-local/multicast)"
+            )
+    except ValueError as exc:
+        # ip_address raises ValueError on hostname (not IP) — 放行域名
+        if "not allowed" in str(exc):
+            raise
+    return value
+
 
 # ── 输入 ─────────────────────────────────────────────────────────
 
@@ -31,6 +75,11 @@ class AICredentialCreateRequest(CamelModel):
     is_default: bool = False
     label: str | None = None
 
+    @field_validator("base_url")
+    @classmethod
+    def _check_base_url(cls, v: str) -> str:
+        return _validate_safe_url(v)
+
 
 class AICredentialUpdateRequest(CamelModel):
     """部分更新 — 不允许改 scope / scope_id。``api_key`` 可空 (仅改 model / label / 重置 default)."""
@@ -41,6 +90,13 @@ class AICredentialUpdateRequest(CamelModel):
     data_residency: Literal["cn", "global"] | None = None
     is_default: bool | None = None
     label: str | None = None
+
+    @field_validator("base_url")
+    @classmethod
+    def _check_base_url(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        return _validate_safe_url(v)
 
 
 class AICredentialTestRequest(CamelModel):

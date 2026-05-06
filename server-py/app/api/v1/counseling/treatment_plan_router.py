@@ -125,7 +125,16 @@ async def get_plan(
     """``GET /{plan_id}`` 详情 (镜像 routes.ts:23-26 + service.ts:19-28)."""
     _require_org(org)
     plan_uuid = parse_uuid_or_raise(plan_id, field="planId")
-    q = select(TreatmentPlan).where(TreatmentPlan.id == plan_uuid).limit(1)
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权读
+    q = (
+        select(TreatmentPlan)
+        .where(
+            TreatmentPlan.id == plan_uuid,
+            TreatmentPlan.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     plan = (await db.execute(q)).scalar_one_or_none()
     if plan is None:
         raise NotFoundError("TreatmentPlan", plan_id)
@@ -217,8 +226,17 @@ async def update_plan(
     """``PATCH /{plan_id}`` (admin/counselor). 镜像 service.ts:77-98."""
     _require_admin_or_counselor(org)
     plan_uuid = parse_uuid_or_raise(plan_id, field="planId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
-    q = select(TreatmentPlan).where(TreatmentPlan.id == plan_uuid).limit(1)
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+    q = (
+        select(TreatmentPlan)
+        .where(
+            TreatmentPlan.id == plan_uuid,
+            TreatmentPlan.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     plan = (await db.execute(q)).scalar_one_or_none()
     if plan is None:
         raise NotFoundError("TreatmentPlan", plan_id)
@@ -261,8 +279,17 @@ async def update_goal_status(
     """
     _require_admin_or_counselor(org)
     plan_uuid = parse_uuid_or_raise(plan_id, field="planId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
-    q = select(TreatmentPlan).where(TreatmentPlan.id == plan_uuid).limit(1)
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+    q = (
+        select(TreatmentPlan)
+        .where(
+            TreatmentPlan.id == plan_uuid,
+            TreatmentPlan.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     plan = (await db.execute(q)).scalar_one_or_none()
     if plan is None:
         raise NotFoundError("TreatmentPlan", plan_id)

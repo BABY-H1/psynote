@@ -51,11 +51,23 @@ Phase 1.7 阶段: ``_write_audit_log`` 是 no-op 占位 (Phase 2 ORM 后填 INSE
 from __future__ import annotations
 
 import logging
+import uuid as _uuid
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.models.audit_logs import AuditLog
+
 logger = logging.getLogger(__name__)
+
+
+def _coerce_uuid(value: Any) -> _uuid.UUID | None:
+    """str/UUID → uuid.UUID; None → None。镜像 phi_access._coerce_uuid 行为。"""
+    if value is None or value == "":
+        return None
+    if isinstance(value, _uuid.UUID):
+        return value
+    return _uuid.UUID(str(value))
 
 
 async def record_audit(
@@ -108,15 +120,19 @@ async def record_audit(
 
 async def _write_audit_log(db: AsyncSession, log_entry: dict[str, Any]) -> None:
     """
-    Phase 2 实装::
+    Phase 5 P0 fix: 真插 ``audit_logs`` 表。
 
-        from app.db.models.audit_logs import AuditLog
-        record = AuditLog(**log_entry)
-        db.add(record)
-        await db.flush()  # 不 commit — 让外层 transaction 决定边界
-
-    Phase 1.7 阶段 no-op — audit_logs 表的 SQLAlchemy 模型在 Phase 2 建。
-    函数签名稳定, 路由层提前接 record_audit 不会 break。
+    ``await db.flush()`` 不 commit — 由外层 handler / get_db 决定边界。
+    org_id / user_id / resource_id 容错 None。
     """
-    _ = (db, log_entry)
-    return None
+    record = AuditLog(
+        org_id=_coerce_uuid(log_entry.get("org_id")),
+        user_id=_coerce_uuid(log_entry.get("user_id")),
+        action=log_entry["action"],
+        resource=log_entry["resource"],
+        resource_id=_coerce_uuid(log_entry.get("resource_id")),
+        changes=log_entry.get("changes"),
+        ip_address=log_entry.get("ip_address"),
+    )
+    db.add(record)
+    await db.flush()

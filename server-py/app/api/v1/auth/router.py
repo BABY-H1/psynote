@@ -25,7 +25,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, BackgroundTasks, Depends, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, status
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,6 +43,7 @@ from app.api.v1.auth.schemas import (
 from app.core.config import get_settings
 from app.core.database import get_db
 from app.core.security import (
+    burn_password_verification_time,
     create_access_token,
     create_refresh_token,
     decode_token,
@@ -54,6 +55,7 @@ from app.db.models.users import User
 from app.lib.errors import ValidationError
 from app.lib.mailer import send_password_reset_email
 from app.middleware.auth import AuthUser, get_current_user
+from app.middleware.rate_limit import limiter
 
 router = APIRouter()
 
@@ -102,7 +104,9 @@ async def register_deprecated() -> dict[str, str]:
 
 
 @router.post("/login", response_model=LoginResponse)
+@limiter.limit("5/minute")  # Phase 5 P0 fix (Fix 8): 防暴破
 async def login(
+    request: Request,  # slowapi 装饰器需要从 request 取 IP 做 key
     body: LoginRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> LoginResponse:
@@ -127,6 +131,9 @@ async def login(
 
     # password_hash IS NULL / "" → fail-closed (W0.x)
     if user is None or not user.password_hash:
+        # Phase 5 P0 fix (Fix 7): 用户不存在 / hash 空也跑一次 dummy bcrypt
+        # 让耗时 ≈ "用户存在但密码错" 路径, 防 timing-channel 邮箱/手机号枚举.
+        burn_password_verification_time(body.password)
         raise ValidationError("账号或密码错误")
 
     if not verify_password(body.password, user.password_hash):
@@ -244,7 +251,9 @@ async def change_password(
 
 
 @router.post("/forgot-password", response_model=OkResponse)
+@limiter.limit("3/minute")  # Phase 5 P0 fix (Fix 8): 防邮箱枚举 + 邮件灌水
 async def forgot_password(
+    request: Request,  # slowapi 装饰器需要从 request 取 IP 做 key
     body: ForgotPasswordRequest,
     background_tasks: BackgroundTasks,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -259,6 +268,9 @@ async def forgot_password(
 
     if user is None:
         # 防枚举: 静默 200
+        # Phase 5 P0 fix (Fix 7): 跑一次 dummy bcrypt 让响应耗时 ≈ 已知邮箱路径
+        # (那条路径会做 hash + DB insert; 这里至少补 hash 时间, 防 timing-channel).
+        burn_password_verification_time(body.email or "dummy")
         return OkResponse()
 
     plain_token = _generate_reset_token()
@@ -280,7 +292,9 @@ async def forgot_password(
 
 
 @router.post("/reset-password", response_model=OkResponse)
+@limiter.limit("5/minute")  # Phase 5 P0 fix (Fix 8): 防 token 枚举/暴破
 async def reset_password(
+    request: Request,  # slowapi 装饰器需要从 request 取 IP 做 key
     body: ResetPasswordRequest,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> OkResponse:

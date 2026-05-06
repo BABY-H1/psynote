@@ -32,7 +32,7 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import and_, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -57,6 +57,7 @@ from app.db.models.users import User
 from app.lib.errors import NotFoundError, ValidationError
 from app.lib.phone_utils import is_valid_cn_phone
 from app.lib.uuid_utils import parse_uuid_or_raise
+from app.middleware.rate_limit import limiter
 
 router = APIRouter()
 
@@ -116,7 +117,9 @@ async def get_token_preview(
 
 
 @router.post("/{token}", status_code=status.HTTP_201_CREATED)
+@limiter.limit("10/minute")  # Phase 5 P0 fix (Fix 8): 防 token 重放/暴破
 async def bind_parent(
+    request: Request,  # slowapi 装饰器需要从 request 取 IP 做 key
     token: str,
     body: ParentBindBody,
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -201,36 +204,81 @@ async def bind_parent(
 
     child_user_id: uuid.UUID = student_user_id
 
+    # ── Phase 5 P0 fix (Fix 6): token replay protection ────────────
+    # 同 token + 同 phone 多次 POST → 不应每次建 guardian user (数据冗余 + 之前
+    # 的 token + relationship 也会被重复挂). 流程:
+    #   1. 按 phone 找已有 guardian user (is_guardian_account=True)
+    #   2. 如果有: 检查 (org_id, holder=guardian, child) 关系是否已存在
+    #      - 已存在 → 复用关系 (token 重放安全)
+    #      - 不存在 → 用现有 guardian + 新建关系 (复用 user account)
+    #   3. 如果没 guardian user → 新建 (常规路径, 与之前一致)
+    existing_guardian_q = (
+        select(User)
+        .where(
+            and_(
+                User.phone == parent_phone_full,
+                User.is_guardian_account == True,  # noqa: E712 — SQLAlchemy 不支持 'is True'
+            )
+        )
+        .limit(1)
+    )
+    existing_guardian = (await db.execute(existing_guardian_q)).scalar_one_or_none()
+
     # ── Transactional: guardian user + org_member + relationship ──
     guardian_user: User
     relationship_row: ClientRelationship
     try:
-        # Phase 5 (2026-05-04): 废合成 email, 用真手机号建 guardian user.
-        # 之前 ``g_{token_hex(6)}@guardian.internal`` 让家长无法用邮箱登录, 也违反
-        # phone-first 原则. 现在: phone=家长填的真手机号, email=None (Phase 7+ 短信
-        # 验证后, phone_verified=true).
-        guardian_user = User(
-            phone=parent_phone_full,
-            email=None,
-            name=my_name,
-            password_hash=hash_password(password),
-            is_guardian_account=True,
-            is_system_admin=False,  # 显式 False — server_default 在 flush 才生效
-        )
-        db.add(guardian_user)
-        await db.flush()
+        if existing_guardian is not None:
+            # Fix 6 path A: 复用 guardian user, 不再新建 (避免同手机号 N 个账号).
+            guardian_user = existing_guardian
+            # 不动 password / name (不让重放 token 改 guardian 信息).
 
-        # 加入 org as 'client' (Node 端写 client; principal_class 由 Phase 接入后派生)
-        member = OrgMember(
-            org_id=org_id,
-            user_id=guardian_user.id,
-            role="client",
-            status="active",
-        )
-        db.add(member)
-        await db.flush()
+            # 检查 org_member 是否已存在 (复用账户但可能首次进此 org)
+            mq = (
+                select(OrgMember.id)
+                .where(
+                    and_(
+                        OrgMember.org_id == org_id,
+                        OrgMember.user_id == guardian_user.id,
+                    )
+                )
+                .limit(1)
+            )
+            existing_member = (await db.execute(mq)).scalar_one_or_none()
+            if existing_member is None:
+                member = OrgMember(
+                    org_id=org_id,
+                    user_id=guardian_user.id,
+                    role="client",
+                    status="active",
+                )
+                db.add(member)
+                await db.flush()
+        else:
+            # Fix 6 path B: 没现有 guardian → 常规建账户 (Phase 5 原行为).
+            # phone=家长填的真手机号, email=None (Phase 7+ 短信验证后 phone_verified=true).
+            guardian_user = User(
+                phone=parent_phone_full,
+                email=None,
+                name=my_name,
+                password_hash=hash_password(password),
+                is_guardian_account=True,
+                is_system_admin=False,  # 显式 False — server_default 在 flush 才生效
+            )
+            db.add(guardian_user)
+            await db.flush()
 
-        # 检查关系是否已存在 (defensive — 新建 user 不应碰 unique, 但加防呆)
+            # 加入 org as 'client'
+            member = OrgMember(
+                org_id=org_id,
+                user_id=guardian_user.id,
+                role="client",
+                status="active",
+            )
+            db.add(member)
+            await db.flush()
+
+        # 检查关系是否已存在 (Fix 6: 同 child 不重复建)
         ex_q = (
             select(ClientRelationship)
             .where(

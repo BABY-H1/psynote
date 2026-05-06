@@ -150,7 +150,16 @@ async def get_appointment(
     """``GET /{appointment_id}`` 详情。"""
     _require_org(org)
     appt_uuid = parse_uuid_or_raise(appointment_id, field="appointmentId")
-    q = select(Appointment).where(Appointment.id == appt_uuid).limit(1)
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权读
+    q = (
+        select(Appointment)
+        .where(
+            Appointment.id == appt_uuid,
+            Appointment.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     appt = (await db.execute(q)).scalar_one_or_none()
     if appt is None:
         raise NotFoundError("Appointment", appointment_id)
@@ -253,9 +262,15 @@ async def update_appointment_status(
     _require_admin_or_counselor(org)
     appt_uuid = parse_uuid_or_raise(appointment_id, field="appointmentId")
     user_uuid = parse_uuid_or_raise(user.id, field="userId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
 
     try:
-        q = select(Appointment).where(Appointment.id == appt_uuid).limit(1)
+        # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+        q = (
+            select(Appointment)
+            .where(Appointment.id == appt_uuid, Appointment.org_id == org_uuid)
+            .limit(1)
+        )
         appt = (await db.execute(q)).scalar_one_or_none()
         if appt is None:
             raise NotFoundError("Appointment", appointment_id)

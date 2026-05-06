@@ -45,6 +45,7 @@ from app.db.models.organizations import Organization
 from app.db.models.users import User
 from app.lib.errors import NotFoundError, UnauthorizedError, ValidationError
 from app.middleware.audit import record_audit
+from app.middleware.rate_limit import limiter
 from app.shared.tier import has_feature, plan_to_tier
 
 router = APIRouter()
@@ -109,10 +110,11 @@ async def get_eap_org_info(
     response_model=PublicRegisterResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.limit("5/minute")  # Phase 5 P0 fix (Fix 8): 防灌水/枚举
 async def register_employee(
+    request: Request,  # slowapi 装饰器需要从 request 取 IP 做 key (已存在, 不动)
     org_slug: str,
     body: PublicRegisterRequest,
-    request: Request,
     db: Annotated[AsyncSession, Depends(get_db)],
 ) -> PublicRegisterResponse:
     """员工自助注册 — transactional. 镜像 eap-public.routes.ts:79-198.

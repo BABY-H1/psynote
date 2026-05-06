@@ -1,5 +1,4 @@
-"""
-JWT (HS256) + bcrypt 工具。
+"""JWT (HS256) + bcrypt 工具。
 
 镜像 server/src/middleware/auth.ts + server/src/modules/auth/auth.routes.ts。
 
@@ -71,6 +70,44 @@ def verify_password(plain: str, hashed: str) -> bool:
     except (ValueError, TypeError):
         # 'Invalid salt' / 类型错 / 编码异常 → 视作不匹配
         return False
+
+
+# ─── Timing channel mitigation (Phase 5 P0 Fix 7) ────────────────
+
+# 启动期一次性生成 dummy hash, 用于"用户不存在/无密码"路径消耗 bcrypt CPU 时间。
+# 这个 hash 永远不会被作为 truth 使用 — 我们只关心 checkpw 调用本身的耗时。
+#
+# 注: 不能用 module-level eager init (gensalt 是 250ms 启动延迟); 用 lazy singleton。
+_DUMMY_PASSWORD_HASH: bytes | None = None
+
+
+def _get_dummy_hash() -> bytes:
+    """Lazy init dummy hash — 第一次调用时生成, 之后复用 (节约启动期 250ms)。"""
+    global _DUMMY_PASSWORD_HASH
+    if _DUMMY_PASSWORD_HASH is None:
+        _DUMMY_PASSWORD_HASH = bcrypt.hashpw(b"dummy", bcrypt.gensalt(rounds=BCRYPT_ROUNDS))
+    return _DUMMY_PASSWORD_HASH
+
+
+def burn_password_verification_time(plain: str) -> None:
+    """**安全** — 仅消耗 bcrypt CPU 时间, 让"用户不存在"路径耗时 ≈ "用户存在"路径。
+
+    Phase 5 P0 fix (Fix 7): 防 timing-channel 邮箱/手机号枚举。
+
+    场景:
+      - login: 用户不存在 / password_hash 为空时调用此函数, 不返回任何信息。
+      - forgot-password: 邮箱不存在时调用, 让 200 响应耗时与已知邮箱一致 (BackgroundTasks
+        的 email send 已经是异步, 唯一同步差就是 hash 校验本身)。
+      - public counseling/eap register: 错密码分支也要补一次 (与 W0.4 的 verify_password
+        一起, 让"用户存在但密码错" 与 "用户不存在但走 dummy" 耗时相近)。
+
+    复杂度: O(BCRYPT_ROUNDS) ≈ 250ms @ rounds=10。**不要在热路径循环里调用**。
+    """
+    import contextlib
+
+    with contextlib.suppress(ValueError, TypeError):
+        # 编码 / 格式异常都 swallow — 此函数纯副作用, 不抛
+        bcrypt.checkpw(plain.encode("utf-8"), _get_dummy_hash())
 
 
 # ─── JWT ────────────────────────────────────────────────────────

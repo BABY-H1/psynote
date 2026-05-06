@@ -519,10 +519,14 @@ class PublicCourseInfo(CamelModel):
 
 
 class PublicEnrollApplyRequest(CamelModel):
-    """``POST /api/public/courses/{instanceId}/apply`` body. 镜像 routes.ts:78-82."""
+    """``POST /api/public/courses/{instanceId}/apply`` body. 镜像 routes.ts:78-82.
+
+    Phase 5 P0 fix (Fix 5): email 改成 Optional. 公开报名走 phone 优先查询 +
+    创建匿名 User (email=None) 防 email squat. 旧客户端仍能传 email (lookup 兼容)。
+    """
 
     name: str = Field(min_length=1)
-    email: EmailStr
+    email: EmailStr | None = None
     phone: str | None = None
 
 

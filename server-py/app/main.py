@@ -20,6 +20,9 @@ from importlib.metadata import PackageNotFoundError, version
 from typing import Any
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 # Phase 3 Tier 4 imports (admin / ai / ai_credentials + 9 后台模块)
 from app.api.v1.admin import dashboard_router as admin_dashboard_router
@@ -148,6 +151,7 @@ from app.api.v1.user import router as user_router
 from app.api.v1.workflow import router as workflow_router
 from app.core.config import get_settings
 from app.middleware.error_handler import register_error_handlers
+from app.middleware.rate_limit import limiter
 
 
 @lru_cache(maxsize=1)
@@ -185,6 +189,31 @@ def create_app() -> FastAPI:
     # Phase 1.7: AppError / RequestValidationError / 未知异常的统一映射
     # → JSON {error, message} 格式, 与 Node 端 error-handler.ts 对齐
     register_error_handlers(fastapi_app)
+
+    # Phase 5 P0 fix (Fix 8, 2026-05-04 安全审计): slowapi rate limit.
+    # 防 login 暴破 / forgot-password 邮箱枚举 / 公开注册灌水 / parent-bind token 重放。
+    # 装饰器在各 router 端点上 (5-10/minute), 这里只挂全局 default 兜底 + exception handler。
+    #
+    # slowapi handler 签名 (Request, RateLimitExceeded) 比 Starlette 期望的
+    # (Request, Exception) 更窄, mypy 标 incompatible — 实际 RateLimitExceeded 是
+    # Exception 子类, 跨库类型 narrow 是行业惯例 (FastAPI / slowapi).
+    fastapi_app.state.limiter = limiter
+    fastapi_app.add_exception_handler(
+        RateLimitExceeded,
+        _rate_limit_exceeded_handler,  # type: ignore[arg-type]
+    )
+
+    # Phase 5 P0 fix (2026-05-04 安全审计): 加 CORS middleware. Phase 6 切流到 Python 时
+    # 前端 (CLIENT_URL) 跨域到后端必坏 — 必须显式白名单允许. allow_origins=["*"] 严禁
+    # 与 allow_credentials=True 共用 (浏览器会拒). production 由 Caddy 收口, dev 用此中间件。
+    fastapi_app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[settings.CLIENT_URL] if settings.CLIENT_URL else [],
+        allow_credentials=True,
+        allow_methods=["GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS"],
+        allow_headers=["*"],
+        expose_headers=["X-Request-ID"],
+    )
 
     # ─── Phase 3 routers ─────────────────────────────────────
     # 路径前缀 /api/auth 与 Node 一致, Caddy /api/* → app-py 切流时 0 改动。

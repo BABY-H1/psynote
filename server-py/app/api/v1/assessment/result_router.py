@@ -340,7 +340,16 @@ async def get_result(
         raise ForbiddenError("org_context_required")
 
     rid = parse_uuid_or_raise(result_id, field="resultId")
-    q = select(AssessmentResult).where(AssessmentResult.id == rid).limit(1)
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权读
+    q = (
+        select(AssessmentResult)
+        .where(
+            AssessmentResult.id == rid,
+            AssessmentResult.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     r = (await db.execute(q)).scalar_one_or_none()
     if r is None:
         raise NotFoundError("AssessmentResult", result_id)
@@ -433,9 +442,17 @@ async def delete_result(
     _require_org_admin(org)
 
     rid = parse_uuid_or_raise(result_id, field="resultId")
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权删
     q = (
         select(AssessmentResult)
-        .where(and_(AssessmentResult.id == rid, AssessmentResult.deleted_at.is_(None)))
+        .where(
+            and_(
+                AssessmentResult.id == rid,
+                AssessmentResult.org_id == org_uuid,
+                AssessmentResult.deleted_at.is_(None),
+            )
+        )
         .limit(1)
     )
     r = (await db.execute(q)).scalar_one_or_none()
@@ -471,7 +488,16 @@ async def set_client_visible(
     _require_admin_or_counselor(org)
 
     rid = parse_uuid_or_raise(result_id, field="resultId")
-    q = select(AssessmentResult).where(AssessmentResult.id == rid).limit(1)
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+    q = (
+        select(AssessmentResult)
+        .where(
+            AssessmentResult.id == rid,
+            AssessmentResult.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     r = (await db.execute(q)).scalar_one_or_none()
     if r is None:
         raise NotFoundError("AssessmentResult", result_id)
@@ -506,7 +532,16 @@ async def set_recommendations(
     _require_admin_or_counselor(org)
 
     rid = parse_uuid_or_raise(result_id, field="resultId")
-    q = select(AssessmentResult).where(AssessmentResult.id == rid).limit(1)
+    org_uuid = parse_uuid_or_raise(org_id, field="orgId")
+    # Phase 5 P0 fix (Fix 2): 详情按 (id, org_id) 双 filter, 防止跨组织 PHI 越权写
+    q = (
+        select(AssessmentResult)
+        .where(
+            AssessmentResult.id == rid,
+            AssessmentResult.org_id == org_uuid,
+        )
+        .limit(1)
+    )
     r = (await db.execute(q)).scalar_one_or_none()
     if r is None:
         raise NotFoundError("AssessmentResult", result_id)
