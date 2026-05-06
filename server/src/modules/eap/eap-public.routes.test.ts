@@ -1,6 +1,16 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
+
+// bcryptjs.compare 有两个重载 (Promise<boolean> 版 + callback 返 void 版),
+// compareMock 在重载解析时撞到 void 那条 → mockResolvedValue(true)
+// 报 TS2345 (boolean → void)。锁定到 Promise<boolean> 重载消歧。
+const compareMock = bcrypt.compare as unknown as MockedFunction<
+  (s: string, hash: string) => Promise<boolean>
+>;
+const hashMock = bcrypt.hash as unknown as MockedFunction<
+  (s: string, salt: number | string) => Promise<string>
+>;
 
 /**
  * EAP Public Routes —— 企业 EAP 员工自助注册
@@ -91,8 +101,8 @@ beforeEach(() => {
   dbResults.length = 0;
   dbInserts.length = 0;
   dbUpdates.length = 0;
-  vi.mocked(bcrypt.compare).mockReset();
-  vi.mocked(bcrypt.hash).mockClear();
+  compareMock.mockReset();
+  hashMock.mockClear();
 });
 
 function eapOrg() {
@@ -121,13 +131,13 @@ describe('POST /:orgSlug/register (EAP)', () => {
     const body = res.json();
     expect(body.status).toBe('registered');
     expect(body.isNewUser).toBe(true);
-    expect(vi.mocked(bcrypt.compare)).not.toHaveBeenCalled();
+    expect(compareMock).not.toHaveBeenCalled();
   });
 
   // ─── W0.4 安全修复：已存在用户必须验密码 ────────────────────────
 
   it('已存在用户(有 passwordHash) + 密码正确 + 未加入 → 201', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(true);
+    compareMock.mockResolvedValue(true);
     const app = await buildApp();
     dbResults.push([eapOrg()]);
     dbResults.push([{ id: 'user-e', email: 'e@a.com', passwordHash: 'real-hash' }]);
@@ -140,11 +150,11 @@ describe('POST /:orgSlug/register (EAP)', () => {
     });
     expect(res.statusCode).toBe(201);
     expect(res.json().isNewUser).toBe(false);
-    expect(vi.mocked(bcrypt.compare)).toHaveBeenCalledWith('secret123', 'real-hash');
+    expect(compareMock).toHaveBeenCalledWith('secret123', 'real-hash');
   });
 
   it('已存在用户(有 passwordHash) + 密码错误 → 401, 不附加成员关系', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(false);
+    compareMock.mockResolvedValue(false);
     const app = await buildApp();
     dbResults.push([eapOrg()]);
     dbResults.push([{ id: 'user-e', email: 'e@a.com', passwordHash: 'real-hash' }]);
@@ -171,13 +181,13 @@ describe('POST /:orgSlug/register (EAP)', () => {
       payload: { email: 'c@a.com', password: 'newsecret', name: '员工' },
     });
     expect(res.statusCode).toBe(201);
-    expect(vi.mocked(bcrypt.hash)).toHaveBeenCalledWith('newsecret', 10);
+    expect(hashMock).toHaveBeenCalledWith('newsecret', 10);
     expect(dbUpdates.find((u) => u.table === 'users')).toBeDefined();
-    expect(vi.mocked(bcrypt.compare)).not.toHaveBeenCalled();
+    expect(compareMock).not.toHaveBeenCalled();
   });
 
   it('已存在用户 + 已是成员 + 密码错误 → 401', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(false);
+    compareMock.mockResolvedValue(false);
     const app = await buildApp();
     dbResults.push([eapOrg()]);
     dbResults.push([{ id: 'user-e', email: 'e@a.com', passwordHash: 'real-hash' }]);
@@ -193,7 +203,7 @@ describe('POST /:orgSlug/register (EAP)', () => {
   // ─── W2.10 — Email enumeration mitigation ───────────────────────
 
   it('已存在用户 + 已是成员 + 密码正确 → 201 registered (W2.10: 与"加入"分支响应一致)', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(true);
+    compareMock.mockResolvedValue(true);
     const app = await buildApp();
     dbResults.push([eapOrg()]);
     dbResults.push([{ id: 'user-e', email: 'e@a.com', passwordHash: 'real-hash' }]);

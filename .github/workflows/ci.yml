@@ -3,9 +3,9 @@ name: CI
 # Node 端 (server/client/packages) CI。Python 端 (server-py/) 走独立 workflow
 # python.yml, 路径互斥: 改 server-py/ 不触发本 workflow, 反之亦然。
 #
-# typecheck 当前因 PR #1 合并遗留的 @psynote/client-portal 工程问题持续 fail —
-# Node 在 FastAPI 迁移期 (Option C, 2026-05-03 起) 冻结, 这块红保留作为提醒,
-# 不阻塞 server-py/ 主线。
+# Node 代码在 FastAPI 迁移期 (Option C, 2026-05-03 起) 进入冻结, 仅接受 critical
+# bug fix。Phase 5 (Week 15-16) 重做 W0 安全审计时需要 Node 端绿作行为对比基线,
+# 因此本 workflow 必须保持可绿状态 — 任何冻结期 Node 端修改都要确保 typecheck 过。
 
 on:
   push:

@@ -1,6 +1,16 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
 import Fastify, { type FastifyInstance } from 'fastify';
 import bcrypt from 'bcryptjs';
+
+// bcryptjs.compare 有两个重载 (Promise<boolean> 版 + callback 返 void 版),
+// compareMock 在重载解析时撞到 void 那条 → mockResolvedValue(true)
+// 报 TS2345 (boolean → void)。锁定到 Promise<boolean> 重载消歧。
+const compareMock = bcrypt.compare as unknown as MockedFunction<
+  (s: string, hash: string) => Promise<boolean>
+>;
+const hashMock = bcrypt.hash as unknown as MockedFunction<
+  (s: string, salt: number | string) => Promise<string>
+>;
 
 /**
  * Counseling Public Routes —— 咨询中心来访者自助注册
@@ -79,8 +89,8 @@ beforeEach(() => {
   dbResults.length = 0;
   dbInserts.length = 0;
   dbUpdates.length = 0;
-  vi.mocked(bcrypt.compare).mockReset();
-  vi.mocked(bcrypt.hash).mockClear();
+  compareMock.mockReset();
+  hashMock.mockClear();
 });
 
 function counselingOrg() {
@@ -140,13 +150,13 @@ describe('POST /:orgSlug/register', () => {
     expect(body.accessToken).toBeTypeOf('string');
     expect(body.refreshToken).toBeTypeOf('string');
     // bcrypt.compare 不应被调用 (新用户)
-    expect(vi.mocked(bcrypt.compare)).not.toHaveBeenCalled();
+    expect(compareMock).not.toHaveBeenCalled();
   });
 
   // ─── W0.4 安全修复：已存在用户必须验密码 ────────────────────────
 
   it('已存在用户(有 passwordHash) + 密码正确 + 未加入该 org → 201 + 加入', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(true);
+    compareMock.mockResolvedValue(true);
     const app = await buildApp();
     dbResults.push([counselingOrg()]);
     dbResults.push([{ id: 'user-existing', email: 'e@x.com', isSystemAdmin: false, passwordHash: 'real-hash' }]);
@@ -161,11 +171,11 @@ describe('POST /:orgSlug/register', () => {
     const body = res.json();
     expect(body.status).toBe('registered');
     expect(body.isNewUser).toBe(false);
-    expect(vi.mocked(bcrypt.compare)).toHaveBeenCalledWith('secret123', 'real-hash');
+    expect(compareMock).toHaveBeenCalledWith('secret123', 'real-hash');
   });
 
   it('已存在用户(有 passwordHash) + 密码错误 → 401, 不发 token (防接管)', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(false);
+    compareMock.mockResolvedValue(false);
     const app = await buildApp();
     dbResults.push([counselingOrg()]);
     dbResults.push([{ id: 'user-existing', email: 'e@x.com', isSystemAdmin: false, passwordHash: 'real-hash' }]);
@@ -199,14 +209,14 @@ describe('POST /:orgSlug/register', () => {
     expect(res.statusCode).toBe(201);
     expect(res.json().status).toBe('registered');
     // 应触发 hash + update users.passwordHash
-    expect(vi.mocked(bcrypt.hash)).toHaveBeenCalledWith('newsecret', 10);
+    expect(hashMock).toHaveBeenCalledWith('newsecret', 10);
     expect(dbUpdates.find((u) => u.table === 'users')).toBeDefined();
     // bcrypt.compare 不应被调用 (无 passwordHash → 走 claim 不走验证)
-    expect(vi.mocked(bcrypt.compare)).not.toHaveBeenCalled();
+    expect(compareMock).not.toHaveBeenCalled();
   });
 
   it('已存在用户 + 已是该 org 成员 + 密码正确 → 201 registered + tokens (W2.10: 与"加入"分支响应一致, 不泄露 org membership)', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(true);
+    compareMock.mockResolvedValue(true);
     const app = await buildApp();
     dbResults.push([counselingOrg()]);
     dbResults.push([{ id: 'user-1', email: 'e@x.com', isSystemAdmin: false, passwordHash: 'real-hash' }]);
@@ -225,7 +235,7 @@ describe('POST /:orgSlug/register', () => {
   });
 
   it('已存在用户 + 已是该 org 成员 + 密码错误 → 401 (防接管现有成员账户)', async () => {
-    vi.mocked(bcrypt.compare).mockResolvedValue(false);
+    compareMock.mockResolvedValue(false);
     const app = await buildApp();
     dbResults.push([counselingOrg()]);
     dbResults.push([{ id: 'user-1', email: 'e@x.com', isSystemAdmin: false, passwordHash: 'real-hash' }]);

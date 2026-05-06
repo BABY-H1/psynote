@@ -1,12 +1,14 @@
 name: Python CI
 
 # 独立 workflow 让 server-py/ (FastAPI 迁移目标) 跟 Node 端 ci.yml 解耦:
-#   - 改 server-py/ 不会触发 Node typecheck/vitest/e2e
-#     (后者持续 fail 是 PR #1 合并遗留的 @psynote/client-portal 工程问题, Node 在
-#     冻结期不修也不阻塞)
-#   - 改 Node 端 (server/client/packages) 不会触发 Python CI
-#     (Python 不依赖 Node 代码, 跑了也是浪费 CI 时间)
+#   - 改 server-py/ 不会触发 Node typecheck/vitest/e2e (Python 不依赖 Node 代码,
+#     跑 Node 工具链也是浪费 CI 时间)
+#   - 改 Node 端 (server/client/packages) 不会触发 Python CI (同上, 反向)
 #   - 混合 commit 两个 workflow 都触发, 各自跑各自的
+#
+# 历史: 2026-05-03 ~ 05-06 Node CI 持续红 (TS2345 in counseling/eap-public test
+# bcrypt mock typing) 是 W0.4 安全修复 commit c60f318 漏的; 已在本 workflow 改
+# 动同 commit 修复, 不是 PR #1 client-portal 问题。
 
 on:
   push:
